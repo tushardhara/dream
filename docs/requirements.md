@@ -306,3 +306,15 @@ validity and cross-model transfer NOT TESTED; complete original HWS falsifier an
 registry traceability remain UNVERIFIED. No production defaults or owner adequacy
 thresholds are changed. Engineering integration still requires exact-SHA review
 and passing complete checks.
+
+## #17 demo and separate study protocol
+
+ADR0016, docs/backend-demo.md and docs/study-protocol.md map the 24-person,
+eight-overlapping-group, 48-directed-edge sparse reference demo; actual fake
+multi-seed run/replay/export/recovery measurements; and the evaluator-owned fixed
+30-real-day reservation/report protocol. Existing runtime/cognitive/receipt caps
+are retained. Engineering acceptance, synthetic behavioral evidence and human
+validity are separate fields. A real 30-day run, live independent frontier-model
+transfer, real-human validity and unavailable complete HWS falsifiers are NOT
+TESTED/NOT RUN. The backend console contract and UI backlog are owner-review
+material only; no UI entry, deployment, model-weight update or main merge occurs.

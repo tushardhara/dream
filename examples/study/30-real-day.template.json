@@ -1,0 +1,16 @@
+{
+  "version": "study-protocol.v1",
+  "scope": {"owner": "synthetic-evaluator", "namespace": "owner-chosen-study", "id": "owner-chosen-fixed-study-id"},
+  "start_utc": null,
+  "real_days": 30,
+  "seed": 11,
+  "candidate_variant": "stateful",
+  "frozen_baseline_hash": "REPLACE_WITH_VERIFIED_BASELINE_SHA256",
+  "candidate_version": "reference-experiment.v1",
+  "providers": [
+    {"id": "primary-control", "kind": "fake", "version": "reference-experiment.v1", "artifact_sha256": "sha256:REPLACE_WITH_LOCAL_GENERATOR_IMAGE_DIGEST"},
+    {"id": "second-control", "kind": "fake", "version": "reference-experiment.v1", "artifact_sha256": "sha256:REPLACE_WITH_LOCAL_GENERATOR_IMAGE_DIGEST"}
+  ],
+  "daily_prediction_quota": 24,
+  "total_prediction_quota": 720
+}

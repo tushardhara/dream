@@ -177,3 +177,12 @@ Private source documents, personal data, credentials, and unapproved provider tr
 **Understand the person. Preserve the perspective. Study the possibilities.**
 
 </div>
+
+Run `make demo-check` for the bounded synthetic backend demo: 24 fictional adults,
+eight overlapping groups, 48 directed relationships, two recorded/fake seeds and a
+12-model-month simulated horizon, with replay, own-view export and restart checks.
+The printed `bin/demo-run-<id>/acceptance.json` records actual timing and limitations.
+See [backend demo](docs/backend-demo.md), [separately gated 30-real-day study
+protocol](docs/study-protocol.md) and [backend console handoff](docs/research-console-contract.md).
+No real 30-day study, live/paid provider, deployment, UI or human-validity result is
+claimed by this command.

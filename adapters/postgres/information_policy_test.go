@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"testing"
 	"time"
@@ -116,10 +118,14 @@ func TestInformationPolicyIntegration(t *testing.T) {
 	if _, d, err := views.Propose(ctx, permit, []core.ID{"own"}, "b", core.Disclose, graph.SyntheticSelfDisclosure); err != nil || d.Allowed {
 		t.Fatal("revoked source reauthorized", d, err)
 	}
-	if count(t, admin, `SELECT count(*) FROM dream.events e JOIN dream.private_payloads p ON (e.actor,e.namespace,e.id)=(p.actor,p.namespace,p.event_id) WHERE e.envelope->>'type'='policy.audit.v1' AND (convert_from(p.payload,'UTF8')::jsonb->>'text')::jsonb->'decision'->>'Action'='WAIT'`) == 0 {
+	auditHash := sha256.Sum256([]byte(permit.Binding()))
+	auditNamespace := "audit:" + hex.EncodeToString(auditHash[:])
+	// CASE guards JSON decoding: SQL may reorder WHERE predicates, and other
+	// event types in this shared disposable cluster carry non-JSON text.
+	if count(t, admin, `SELECT count(*) FROM dream.events e JOIN dream.private_payloads p ON (e.actor,e.namespace,e.id)=(p.actor,p.namespace,p.event_id) WHERE CASE WHEN e.actor='policy-service' AND e.namespace=$1 AND e.envelope->>'type'='policy.audit.v1' THEN (convert_from(p.payload,'UTF8')::jsonb->>'text')::jsonb->'decision'->>'Action'='WAIT' ELSE false END`, auditNamespace) == 0 {
 		t.Fatal("policy denial not durably audited")
 	}
-	if count(t, admin, `SELECT count(*) FROM dream.events e JOIN dream.private_payloads p ON (e.actor,e.namespace,e.id)=(p.actor,p.namespace,p.event_id) WHERE e.envelope->>'type'='policy.audit.v1' AND convert_from(p.payload,'UTF8') LIKE '%felt supported%'`) != 0 {
+	if count(t, admin, `SELECT count(*) FROM dream.events e JOIN dream.private_payloads p ON (e.actor,e.namespace,e.id)=(p.actor,p.namespace,p.event_id) WHERE e.actor='policy-service' AND e.namespace=$1 AND e.envelope->>'type'='policy.audit.v1' AND convert_from(p.payload,'UTF8') LIKE '%felt supported%'`, auditNamespace) != 0 {
 		t.Fatal("audit copied private source text")
 	}
 
