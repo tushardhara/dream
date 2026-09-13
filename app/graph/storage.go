@@ -93,9 +93,13 @@ func (c AppendCommand) Digest() ([32]byte, error) {
 	if err != nil {
 		return [32]byte{}, err
 	}
-	if err = json.Unmarshal(canonical, &c.Event); err != nil {
+	// A value copy of c still aliases metadata slices/pointers. Decode into a
+	// fresh value so normalization never writes into the caller's event.
+	var normalized core.Event
+	if err = json.Unmarshal(canonical, &normalized); err != nil {
 		return [32]byte{}, err
 	}
+	c.Event = normalized
 	raw, err := json.Marshal(c)
 	if err != nil {
 		return [32]byte{}, err
