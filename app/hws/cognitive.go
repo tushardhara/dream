@@ -217,7 +217,10 @@ func (h CognitiveHandler) Transition(current rt.State, input rt.Input, clock rt.
 	if len(frame.ModelHash) != 64 {
 		return rt.Output{}, fmt.Errorf("recorded cognition required")
 	}
-	s.Resources = current.Available
+	s.Resources, err = rt.SpendableResources(current)
+	if err != nil {
+		return rt.Output{}, err
+	}
 	if current.Data == "" {
 		c.Commitments = append([]behavior.Commitment{}, s.Commitments...)
 		if c.validate() != nil {
