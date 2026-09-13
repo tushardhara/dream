@@ -7,7 +7,7 @@ generate:
 
 generated-check: generate
 migration-check:
-	@python3 scripts/artifact-check.py migrations
+	@python3 scripts/postgres-check.py
 fmt:
 	@"$$(go env GOROOT)/bin/gofmt" -w $$(git ls-files --cached --others --exclude-standard '*.go')
 fmt-check:

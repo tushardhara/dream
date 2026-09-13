@@ -154,9 +154,9 @@ Bootstrap #2 is integrated into `backend-integration`. The project does not yet 
 
 ### Getting started and verification
 
-Install Git, Make, Python 3, Go 1.27.1 and a C compiler, then run `make verify` from the repository root.
+Install Git, Make, Python 3, Go 1.27.1, a C compiler and Docker, then run `make verify` from the repository root.
 
-All three commands (`hws`, `hws-api`, `hws-worker`) are explicit scaffolds: they show help and otherwise fail. They open no listeners, call no providers and make no database connections. Verification covers formatting, lint, tests, race checks, builds and help paths. Generation and migration checks report N/A until their inputs and validation exist.
+All three commands (`hws`, `hws-api`, `hws-worker`) are explicit scaffolds: they show help and otherwise fail. They open no listeners, call no providers and make no database connections. Verification covers formatting, lint, tests, race checks, builds and help paths. Generation reports N/A until schemas exist. Migration checks now provision disposable PostgreSQL 18.6 and exercise transactions, temporal projections, grants, purge and backup/restore.
 
 See [Contributing](CONTRIBUTING.md), [architecture](docs/adr/0001-backend-boundaries.md), [requirements and gaps](docs/requirements.md), [pinned tools](docs/toolchain.md), and [agent workflow](docs/agent-workflow.md).
 
