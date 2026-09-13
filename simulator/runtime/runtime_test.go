@@ -287,4 +287,28 @@ func TestActionCannotConsumeCommittedFutureReservation(t *testing.T) {
 	if _, _, _, e = Apply(s, Command{Kind: "step"}, consumptionHandler{uses: []Consumption{{Resource: "hours", Units: 1}}}); e == nil {
 		t.Fatal("permanent action spend stole committed future capacity")
 	}
+	// A smaller existing reservation still permits genuinely spare capacity.
+	sc.Future[1].Units = 1
+	g, e = sc.Genesis(Capabilities())
+	if e != nil {
+		t.Fatal(e)
+	}
+	s, e = New(g, s.Budget)
+	if e != nil {
+		t.Fatal(e)
+	}
+	s.Status = "running"
+	next, _, _, e := Apply(s, Command{Kind: "step"}, consumptionHandler{uses: []Consumption{{Resource: "hours", Units: 1}}})
+	if e != nil {
+		t.Fatal("spare capacity denied", e)
+	}
+	for next.Status == "running" {
+		next, _, _, e = Apply(next, Command{Kind: "step"}, fake{})
+		if e != nil {
+			t.Fatal("remaining schedule became impossible", e)
+		}
+	}
+	if next.Available["hours"] != 1 {
+		t.Fatal("reservation release resurrected spent capacity")
+	}
 }
