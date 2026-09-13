@@ -238,3 +238,16 @@ actor/namespace/class mappings and FORCE RLS; runtime checkpoints stay writer-on
 Trusted host composition is not network authentication (#14), and models/actions
 remain #10/#11. See ADR-0009 for byte/count limits, attribution assumptions, old
 snapshots/delivered-data limitations and complete requirement-to-test mapping.
+
+## Issue #10 model gateway evidence
+
+ADR-0010 maps typed cognition proposals, version/observer/provenance validation,
+policy-approved context, offline fake/recorded adapters and mocked Responses HTTP
+conformance to executable tests. Migration 004 persists per-run reservations,
+fenced attempts and purgeable request/result artifacts before canonical application.
+Crash/retry, concurrency, cancellation, stale-source and permit-revocation negatives
+cover the first provider consumer; no network callback holds a transaction. Recorded
+replay preserves bytes with no fallback; fresh generation is explicitly stochastic.
+Live provider choice, credentials/prices and paid runs remain owner-configured and
+NOT RUN. #11 owns actions and sizing; #14 owns network authentication. Existing
+scientific/source gaps and privacy limitations are not waived by this engineering gate.

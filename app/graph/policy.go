@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -89,7 +90,15 @@ type SafeContextItem struct {
 	Parents, Supporting, Contradicting []core.ID
 	Text                               string
 }
-type SafeContext struct{ items []SafeContextItem }
+type SafeContext struct {
+	items    []SafeContextItem
+	revision [32]byte
+	knownAt  core.LogicalTime
+}
+
+// Revision and KnownAt bind trusted durable consumers to this validated snapshot.
+func (s SafeContext) Revision() string          { return hex.EncodeToString(s.revision[:]) }
+func (s SafeContext) KnownAt() core.LogicalTime { return s.knownAt }
 
 func (s SafeContext) Items() []SafeContextItem {
 	out := append([]SafeContextItem{}, s.items...)
@@ -185,7 +194,7 @@ func (p *PolicyService) evaluate(ctx context.Context, proposal ContextProposal) 
 		return SafeContext{}, [32]byte{}, policyDeny("authority_unavailable", -1), ErrPolicyEvidence
 	}
 	snapshot := sha256.Sum256(raw)
-	safe := SafeContext{items: []SafeContextItem{}}
+	safe := SafeContext{items: []SafeContextItem{}, revision: snapshot, knownAt: proposal.Query.KnownAt}
 	total := 0
 	for ordinal, id := range proposal.Sources {
 		e, exists := idx.byID[id]
@@ -397,4 +406,17 @@ func (a AbstractionAssessment) Decision() (PolicyDecision, error) {
 		return policyDeny("attribution_unknown", -1), nil
 	}
 	return policyDeny("research_only_not_privacy_proof", -1), nil
+}
+
+// RevalidateInternal pins a cognition consumer to own-recipient derive authority;
+// a disclosure/export capability cannot be silently repurposed as model context.
+func (p *PolicyService) RevalidateInternal(ctx context.Context, approved ApprovedContext, binding, actor core.ID) (SafeContext, PolicyDecision, error) {
+	if approved.proposal.Mode != InternalContext || approved.proposal.Operation != core.Derive || approved.proposal.Query.Actor != actor || approved.proposal.Recipient != actor {
+		d := policyDeny("internal_use_mismatch", -1)
+		if err := p.record(ctx, binding, "revalidate", d); err != nil {
+			return SafeContext{}, policyDeny("audit_unavailable", -1), err
+		}
+		return SafeContext{}, d, nil
+	}
+	return p.Revalidate(ctx, approved, binding)
 }

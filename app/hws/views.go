@@ -390,3 +390,17 @@ func (v *ViewService) External(ctx context.Context, permit ViewPermit, sources [
 	}
 	return ExternalAgentView{safe.Items()}, nil
 }
+
+// ModelContext is available only to trusted orchestration with an actor permit.
+// Models never receive the permit, raw runtime reader or unfiltered snapshot.
+func (v *ViewService) ModelContext(ctx context.Context, permit ViewPermit, approved graph.ApprovedContext, scope Scope, principal core.ID) (graph.SafeContext, error) {
+	g, err := v.grant(permit)
+	if err != nil || g.Kind != ActorViewKind || g.Purpose != "simulation" || g.Realm.Scope != scope || g.Realm.Principal != principal || g.Caller != principal {
+		return graph.SafeContext{}, ErrViewDenied
+	}
+	safe, d, err := v.policy.RevalidateInternal(ctx, approved, permit.binding, principal)
+	if err != nil || !d.Allowed {
+		return graph.SafeContext{}, ErrViewDenied
+	}
+	return safe, nil
+}

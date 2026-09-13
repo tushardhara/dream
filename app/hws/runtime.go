@@ -76,7 +76,26 @@ type Operation struct {
 	Digest  string
 	Receipt Receipt
 }
+type ModelUse struct {
+	Key  core.ID `json:"key"`
+	Hash string  `json:"hash"`
+}
+
+func RuntimeCommandDigest(c rt.Command, model *ModelUse) (string, error) {
+	if model == nil {
+		return CommandDigest(c)
+	}
+	if c.Validate() != nil || c.Kind != "step" || model.Key.Validate() != nil || len(model.Hash) != 64 {
+		return "", ErrModel
+	}
+	return ModelDigest(struct {
+		Command rt.Command
+		Model   *ModelUse
+	}{c, model})
+}
+
 type Commit struct {
+	Model             *ModelUse
 	CheckDeadlineOnly bool
 	Scope             Scope
 	Lease             Lease
@@ -100,9 +119,11 @@ type RuntimeStore interface {
 // lease/deadline checks are authoritative; this clock avoids needless work.
 type OperationalClock interface{ Now() time.Time }
 type Runtime struct {
-	Store   RuntimeStore
-	Clock   OperationalClock
-	Handler rt.Handler
+	BeforeCommit func(context.Context) error
+	Store        RuntimeStore
+	Clock        OperationalClock
+	Handler      rt.Handler
+	Model        *ModelUse
 }
 
 func CommandDigest(c rt.Command) (string, error) {
@@ -127,7 +148,7 @@ func (r Runtime) Execute(ctx context.Context, scope Scope, lease Lease, key core
 	if err := key.Validate(); err != nil {
 		return Receipt{}, err
 	}
-	digest, err := CommandDigest(c)
+	digest, err := RuntimeCommandDigest(c, r.Model)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -164,7 +185,12 @@ func (r Runtime) Execute(ctx context.Context, scope Scope, lease Lease, key core
 	if err = ctx.Err(); err != nil {
 		return Receipt{}, err
 	}
-	commit := Commit{CheckDeadlineOnly: checkDeadlineOnly, Scope: scope, Lease: lease, Key: key, Command: c, Expected: snap.Revision, State: next, Transition: tr, Done: done}
+	if r.BeforeCommit != nil {
+		if err = r.BeforeCommit(ctx); err != nil {
+			return Receipt{}, err
+		}
+	}
+	commit := Commit{Model: r.Model, CheckDeadlineOnly: checkDeadlineOnly, Scope: scope, Lease: lease, Key: key, Command: c, Expected: snap.Revision, State: next, Transition: tr, Done: done}
 	receipt, err := r.Store.CommitRun(ctx, commit)
 	if errors.Is(err, ErrDeadline) {
 		return r.Store.CommitRun(ctx, commit)

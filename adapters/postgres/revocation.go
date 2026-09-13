@@ -32,17 +32,31 @@ func (s *Store) Revoke(ctx context.Context, c graph.AppendCommand, root core.ID)
 	if err != nil {
 		return result, err
 	}
-	// Pending injected input is restricted too; purge operation requests for
-	// revoked runs alongside checkpoints so restart cannot resurrect them.
-	if _, err = tx.Exec(ctx, `DELETE FROM dream.runtime_operations o USING dream.runtime_heads h,dream.tombstones t WHERE (o.actor,o.namespace,o.run)=(h.actor,h.namespace,h.run) AND (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id) AND o.actor=$1 AND o.namespace=$2`, c.Actor, c.Namespace); err != nil {
+
+	// Model artifacts have ordinary same-scope source lineage. Applications link
+	// that lineage to simulator checkpoints without widening source read rights.
+	if _, err = tx.Exec(ctx, `WITH RECURSIVE affected(actor,namespace,id) AS (
+ SELECT a.actor,a.namespace,a.event_id FROM dream.model_applications a JOIN dream.model_requests r USING(actor,namespace,run,key) JOIN dream.tombstones t ON (r.principal,r.memory_namespace,r.event_id)=(t.actor,t.namespace,t.event_id)
+ UNION SELECT l.actor,l.namespace,l.child FROM dream.lineage l JOIN affected a ON (l.actor,l.namespace,l.parent)=(a.actor,a.namespace,a.id)
+ ) INSERT INTO dream.tombstones SELECT actor,namespace,id,clock_timestamp() FROM affected ON CONFLICT DO NOTHING`); err != nil {
 		return result, err
 	}
-	for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "projections"} {
-		if _, err = tx.Exec(ctx, `DELETE FROM dream.`+table+` p USING dream.tombstones t WHERE(p.actor,p.namespace,p.event_id)=(t.actor,t.namespace,t.event_id) AND t.actor=$1 AND t.namespace=$2`, c.Actor, c.Namespace); err != nil {
+	// Revoking a run also destroys every attempt payload, not only its newest head.
+	if _, err = tx.Exec(ctx, `INSERT INTO dream.tombstones SELECT e.actor,e.namespace,e.id,clock_timestamp() FROM dream.model_requests r JOIN dream.runtime_heads h USING(actor,namespace,run) JOIN dream.tombstones t ON (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id) JOIN dream.events latest ON (r.principal,r.memory_namespace,r.event_id)=(latest.actor,latest.namespace,latest.id) JOIN dream.events e ON (e.actor,e.namespace,e.stream)=(latest.actor,latest.namespace,latest.stream) ON CONFLICT DO NOTHING`); err != nil {
+		return result, err
+	}
+
+	// Pending injected input is restricted too; purge operation requests for
+	// revoked runs alongside checkpoints so restart cannot resurrect them.
+	if _, err = tx.Exec(ctx, `DELETE FROM dream.runtime_operations o USING dream.runtime_heads h,dream.tombstones t WHERE (o.actor,o.namespace,o.run)=(h.actor,h.namespace,h.run) AND (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id)`); err != nil {
+		return result, err
+	}
+	for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "model_payloads", "projections"} {
+		if _, err = tx.Exec(ctx, `DELETE FROM dream.`+table+` p USING dream.tombstones t WHERE(p.actor,p.namespace,p.event_id)=(t.actor,t.namespace,t.event_id)`); err != nil {
 			return result, err
 		}
 	}
-	if _, err = tx.Exec(ctx, `UPDATE dream.artifact_refs a SET invalidated=true WHERE actor=$1 AND namespace=$2 AND EXISTS(SELECT 1 FROM dream.artifact_sources src JOIN dream.tombstones t USING(actor,namespace,event_id) WHERE(src.actor,src.namespace,src.artifact_id)=(a.actor,a.namespace,a.id))`, c.Actor, c.Namespace); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE dream.artifact_refs a SET invalidated=true WHERE EXISTS(SELECT 1 FROM dream.artifact_sources src JOIN dream.tombstones t USING(actor,namespace,event_id) WHERE(src.actor,src.namespace,src.artifact_id)=(a.actor,a.namespace,a.id))`); err != nil {
 		return result, err
 	}
 	return result, tx.Commit(ctx)

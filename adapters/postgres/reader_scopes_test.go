@@ -92,7 +92,7 @@ func TestScopedReaderIntegration(t *testing.T) {
 		}
 	})
 	t.Run("ForcedOwnerIsolationAndRuntimeDenied", func(t *testing.T) {
-		for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "reader_scopes"} {
+		for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "reader_scopes", "model_payloads"} {
 			if n := count(t, admin, `SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='dream' AND c.relname=$1 AND c.relrowsecurity AND c.relforcerowsecurity`, table); n != 1 {
 				t.Fatal("RLS not enabled and forced", table)
 			}
@@ -109,6 +109,9 @@ func TestScopedReaderIntegration(t *testing.T) {
 			t.Fatal("table owner bypassed FORCE RLS", n)
 		}
 		for _, db := range []*pgxpool.Pool{reader, owner} {
+			if _, err = db.Exec(ctx, `SELECT * FROM dream.model_payloads`); err == nil {
+				t.Fatal("reader obtained model artifacts")
+			}
 			if _, err = db.Exec(ctx, `SELECT * FROM dream.runtime_payloads`); err == nil {
 				t.Fatal("unprivileged runtime read")
 			}
@@ -137,7 +140,7 @@ func TestScopedReaderIntegration(t *testing.T) {
 		if err = Migrate(ctx, old); err != nil {
 			t.Fatal(err)
 		}
-		if count(t, old, `SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3)`) != 3 || count(t, old, `SELECT count(*) FROM dream.private_payloads WHERE namespace='reader-upgrade'`) != 1 {
+		if count(t, old, `SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3,4)`) != 4 || count(t, old, `SELECT count(*) FROM dream.private_payloads WHERE namespace='reader-upgrade'`) != 1 {
 			t.Fatal("v2 upgrade lost ledger/payload")
 		}
 	})

@@ -47,7 +47,7 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 		if err = tx.QueryRow(ctx, "SELECT count(*),coalesce(max(version),0) FROM dream.schema_versions").Scan(&count, &version); err != nil {
 			return err
 		}
-		if !(count == version && version >= 1 && version <= 3) {
+		if !(count == version && version >= 1 && version <= 4) {
 			return fmt.Errorf("unsupported database schema")
 		}
 		if version == 1 {
@@ -60,6 +60,11 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 				return err
 			}
 		}
+		if version < 4 {
+			if _, err = tx.Exec(ctx, migrations.Models); err != nil {
+				return err
+			}
+		}
 	} else {
 		if _, err = tx.Exec(ctx, migrations.Initial); err != nil {
 			return err
@@ -68,6 +73,9 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 			return err
 		}
 		if _, err = tx.Exec(ctx, migrations.ReaderScopes); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, migrations.Models); err != nil {
 			return err
 		}
 	}
