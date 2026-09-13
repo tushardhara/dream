@@ -39,6 +39,7 @@ func normalize(m *Metadata) {
 		m.Rights.Grants = []Grant{}
 	}
 	sortGrants(m.Rights.Grants)
+	// Replace IEEE negative zero with positive zero for one canonical encoding.
 	if m.Confidence == 0 {
 		m.Confidence = 0
 	}
@@ -243,4 +244,22 @@ func withoutRecorded(raw json.RawMessage) (json.RawMessage, error) {
 		return json.Marshal(a)
 	}
 	return raw, nil
+}
+
+// CanonicalEvent normalizes a validated standalone event envelope. It does not
+// resolve lineage: persistence must check referenced events using trusted state.
+func CanonicalEvent(e Event) ([]byte, error) {
+	if err := e.Validate(); err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(e)
+	if err != nil {
+		return nil, err
+	}
+	var c Event
+	if err = json.Unmarshal(raw, &c); err != nil {
+		return nil, err
+	}
+	normalize(&c.Meta)
+	return json.Marshal(c)
 }
