@@ -107,6 +107,10 @@ func (s MemoryService) RetrieveCached(ctx context.Context, q MemoryQuery, cache 
 }
 
 func (x *MemoryIndex) selectMemory(q MemoryQuery) []memoryPick {
+	return x.selectMatchingMemory(q, nil)
+}
+
+func (x *MemoryIndex) selectMatchingMemory(q MemoryQuery, match func(MemoryRecord) bool) []memoryPick {
 	superseded := map[core.ID]bool{}
 	materialChanged := map[core.ID]bool{}
 	for _, e := range x.entries {
@@ -188,6 +192,9 @@ func (x *MemoryIndex) selectMemory(q MemoryQuery) []memoryPick {
 	picks := []memoryPick{}
 	for _, e := range x.entries {
 		if !sameSubject(e.Event.Subject, q.Subject) || !eligible(e.Event.Meta.ID) {
+			continue
+		}
+		if match != nil && !match(e.record()) {
 			continue
 		}
 		c := *e.Content
