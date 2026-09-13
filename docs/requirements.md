@@ -196,3 +196,16 @@ Proceeding with the explicitly scoped subset follows the existing epic missing-s
 policy and Claude's clarification on issue #7 (comment 5651532761). This does not
 satisfy or erase the complete-registry source gap. Registry/model additions require
 new versions and explicit migration; unknown initialization parameters fail closed.
+
+## Issue #8 temporal memory evidence
+
+Reusable memory/claim/open-loop/intent services live in `app/graph`, backed by the
+existing generic PostgreSQL journal. ADR-0007 maps temporal contradiction/disclosure,
+evidence/permission, supersession/expiry, cache/revocation, bounded ranking and
+incremental/rebuild acceptance to focused tests and real-PG integration subtests.
+Synthetic actual-vs-believed comparison remains in `simulator/belief`; emotional
+residue remains the #7 dynamics implementation. No LLM, world or vector service is
+required by retrieval. The unchanged payload cap and explicit per-scope record
+budget are small-fixture limits, not long-horizon scale claims; #11/#15 carry that
+integration work. Full source traceability and later #12 policy/#14 credentials
+remain separate gates, not fabricated passes.
