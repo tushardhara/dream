@@ -14,7 +14,7 @@ Persistent people. Private worlds. Relationships that change.
 
 ## Why Dream?
 
-The name is inspired by **Dream of the Endless**, also known as Morpheus, from DC's *The Sandman*: a character associated with dreams and stories. [Meet the Endless →](https://www.dc.com/blog/2013/10/01/meet-the-endless)
+The name is inspired by **Dream of the Endless**, also known as Morpheus, from DC's *The Sandman*: a character associated with dreams and stories.
 
 For this project, the connection is the space between a person's inner world and the world other people see: hopes, memories, fears, interpretations, and all the things left unsaid.
 
@@ -79,8 +79,10 @@ flowchart TD
   HWS --> Sim["Synthetic world engine"]
   Graph --> Core["Human World Core"]
   Sim --> Core
-  Eval["Independent evaluator"] -.-> HWS
+  Eval["Independent evaluator"] --> HWS
 ```
+
+Interfaces are declared by their consumers; adapters implement them, and `cmd` composes the concrete implementations.
 
 A future application must be able to use the core without creating a simulation world, importing a branch type, or gaining access to simulator-only hidden state.
 
@@ -148,7 +150,15 @@ Production relationship advice, real-user interventions, matching, and autonomou
 
 **Early development.** This README describes the target design, not a completed feature set.
 
-There is no validated end-to-end quickstart in this version. Setup and verification instructions will be added as the bootstrap and backend components land; the project does not yet claim a runnable research release.
+Bootstrap #2 is integrated into `backend-integration`. The project does not yet claim a runnable research release or an end-to-end simulator quickstart.
+
+### Getting started and verification
+
+Install Git, Make, Python 3, Go 1.27.1 and a C compiler, then run `make verify` from the repository root.
+
+All three commands (`hws`, `hws-api`, `hws-worker`) are explicit scaffolds: they show help and otherwise fail. They open no listeners, call no providers and make no database connections. Verification covers formatting, lint, tests, race checks, builds and help paths. Generation and migration checks report N/A until their inputs and validation exist.
+
+See [Contributing](CONTRIBUTING.md), [architecture](docs/adr/0001-backend-boundaries.md), [requirements and gaps](docs/requirements.md), [pinned tools](docs/toolchain.md), and [agent workflow](docs/agent-workflow.md).
 
 Current development follows the [revision-3 workflow](https://github.com/tushardhara/dream/issues/1):
 
