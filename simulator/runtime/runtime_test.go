@@ -268,3 +268,23 @@ func TestActionConsumptionAtomicAndBounded(t *testing.T) {
 		t.Fatal("utterance spent resource", e)
 	}
 }
+
+func TestActionCannotConsumeCommittedFutureReservation(t *testing.T) {
+	s := initial(t)
+	var sc scenario.Scenario
+	_ = json.Unmarshal(s.Genesis.Payload, &sc)
+	sc.Public.Resources = []scenario.Resource{{ID: "hours", Capacity: 2, Available: 2}}
+	sc.Future = []scenario.Scheduled{{ID: "now", At: 10, Actor: "a", Kind: "observation", Text: "request"}, {ID: "reserved", At: 20, Until: 30, Actor: "b", Kind: "reservation", Text: "committed allocation", Resource: "hours", Units: 2}}
+	g, e := sc.Genesis(Capabilities())
+	if e != nil {
+		t.Fatal(e)
+	}
+	s, e = New(g, s.Budget)
+	if e != nil {
+		t.Fatal(e)
+	}
+	s.Status = "running"
+	if _, _, _, e = Apply(s, Command{Kind: "step"}, consumptionHandler{uses: []Consumption{{Resource: "hours", Units: 1}}}); e == nil {
+		t.Fatal("permanent action spend stole committed future capacity")
+	}
+}

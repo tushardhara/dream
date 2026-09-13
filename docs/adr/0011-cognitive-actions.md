@@ -120,3 +120,9 @@ fixtures and deterministic fake/recorded data. No live API, actual provider pric
 paid run, deployment, 30-day study or real-human validity check has been run.
 Scientific thresholds and independent evaluation remain #16; source traceability
 limitations remain visible and are not converted into an engineering PASS.
+
+Permanent resource consumption also preserves the minimum capacity needed by
+already queued reservation/release intervals. `SpendableResources` supplies the
+executor's affordability ceiling without exposing future event text to cognition;
+the runtime independently rechecks it. The red/green regression
+TestActionCannotConsumeCommittedFutureReservation pins this temporal constraint.
