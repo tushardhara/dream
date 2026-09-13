@@ -146,3 +146,19 @@ See ADR-0003 for backup/WAL limits, internal trusted-scope requirements and defe
 upcasters for future schemas. No complete #12 privacy gate or #13 snapshot engine
 is claimed. Earlier N/A migration statements describe bootstrap history only;
 current make verify runs the real disposable Postgres gate.
+
+## Issue #5 scenario evidence
+
+| Criterion | Evidence |
+| --- | --- |
+| Versioned world, adults, groups/relationships, resources, knowledge/memory, latent/future DSL | simulator/scenario types, strict adapters/scenario parser; quiet-overlap fixture |
+| Validated genesis rather than mutable initialization | TestGenesisAndCapabilities; tampered envelope/payload/hash and incompatible engine negatives |
+| Actor/research/future boundary | TestActorViewBoundary, TestFixtureGoldenAndBoundary; private/latent/label/future canaries, foreign knowledge denial, deep-copy mutation |
+| References, IDs, intervals, grants, capacity/overflow | TestInvalidScenarios, TestResourceIntervalsAndOverflow |
+| Unknown/duplicate fields, size/depth/nodes/aliases/typing | TestYAMLRejects, TestReaderBound, FuzzYAML |
+| Stable encoding/hash and deterministic schedule ties | byte/hash fixture goldens, TestCanonicalProperties, FuzzCanonical |
+| Offline machine-readable CLI | TestValidateCLI; parser/CLI use no database or model credentials |
+| Migration and future capability semantics | ADR-0004; declared plus inferred capabilities, old engine denies execution |
+
+Runtime persistence/application is #6, dynamics #7, runtime retrieval/policy #8/#12;
+fixture labels make no independent evaluation or human realism claim.
