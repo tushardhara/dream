@@ -54,8 +54,20 @@ func run(args []string, out io.Writer) error {
 	synthetic := flags.Bool("synthetic", false, "use versioned synthetic format fixture")
 	dataset := flags.String("dataset", "", "owner-only synthetic dataset JSON")
 	config := flags.String("config", "", "owner-only frozen evaluator config JSON")
+	studyPlan := flags.String("study-plan", "", "owner-only frozen 30-real-day study plan JSON")
+	study := flags.String("study-action", "", "explicit register/status/day/abandon-expired; no scheduler or live provider")
+	development := flags.Bool("development", false, "explicit disposable/local study database")
 	if e := flags.Parse(args); e != nil {
 		return e
+	}
+	if *studyPlan != "" || *study != "" {
+		if flags.NArg() != 0 || *studyPlan == "" || *study == "" || *image != "" || *synthetic || *config != "" || (*study != "day" && *dataset != "") {
+			return fmt.Errorf("ambiguous study/evaluation options")
+		}
+		return studyAction(*study, *studyPlan, *dataset, *development, out)
+	}
+	if *development {
+		return fmt.Errorf("development database option requires a study action")
 	}
 	if flags.NArg() != 0 || *image == "" || (*synthetic && (*dataset != "" || *config != "")) || (!*synthetic && (*dataset == "" || *config == "")) {
 		return fmt.Errorf("choose --synthetic or --dataset/--config and supply --generator-image")
