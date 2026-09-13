@@ -22,6 +22,8 @@ type Substrate struct {
 	Plasticity float64        `json:"plasticity"`
 }
 type State struct {
+	Factors      Factors            `json:"factors"`
+	Upgrade      *UpgradeRecord     `json:"upgrade,omitempty"`
 	Version      int                `json:"version"`
 	Registry     string             `json:"registry"`
 	RegistryHash string             `json:"registry_hash"`
@@ -42,7 +44,7 @@ func DefaultSubstrate() Substrate {
 	return s
 }
 func New(actor core.ID, at core.LogicalTime, substrate Substrate) (State, error) {
-	s := State{Version: Version, Registry: RegistryVersion, RegistryHash: RegistryHash, Model: ModelVersion, Actor: actor, At: at, Substrate: substrate, Causes: []core.ID{}, Applied: []dynamics.Receipt{}}
+	s := State{Factors: newFactors(at), Version: Version, Registry: RegistryVersion, RegistryHash: RegistryHash, Model: ModelVersion, Actor: actor, At: at, Substrate: substrate, Causes: []core.ID{}, Applied: []dynamics.Receipt{}}
 	for i, b := range substrate.Baseline {
 		s.Variables[i] = Variable{[4]float64{quant(b), quant(b), .5, .5}, at}
 	}
@@ -57,6 +59,10 @@ func quant(v float64) float64 {
 	return v
 }
 func clone(s State) State {
+	if s.Upgrade != nil {
+		u := *s.Upgrade
+		s.Upgrade = &u
+	}
 	s.Causes = append([]core.ID{}, s.Causes...)
 	s.Applied = append([]dynamics.Receipt{}, s.Applied...)
 	return s
@@ -71,6 +77,12 @@ func (s State) Validate() error {
 	}
 	if s.Actor.Validate() != nil || s.At < 0 || !unit(s.Substrate.Reactivity) || !unit(s.Substrate.Plasticity) || len(s.Causes) > 32 || len(s.Applied) > MaxReceipts {
 		return fmt.Errorf("invalid drive envelope or resource bounds")
+	}
+	if e := s.Factors.validate(s.At); e != nil {
+		return e
+	}
+	if s.Upgrade != nil && (s.Upgrade.Version != 1 || s.Upgrade.SourceRegistry != dynamics.RegistryVersion || !validHash(s.Upgrade.SourceHash) || s.Upgrade.NewBranch.Validate() != nil) {
+		return fmt.Errorf("invalid upgrade provenance")
 	}
 	for i, v := range s.Variables {
 		if !unit(s.Substrate.Baseline[i]) || v.AnchorAt < 0 || v.AnchorAt > s.At {
@@ -111,6 +123,7 @@ func Advance(s State, at core.LogicalTime) (State, error) {
 	}
 	out := clone(s)
 	out.At = at
+	out.Factors = out.Factors.advance(at)
 	for i, v := range out.Variables {
 		out.Variables[i].Values[0], out.Variables[i].Values[2] = decayed(v, out.Substrate.Baseline[i], definitions[i].HalfLife, at)
 	}

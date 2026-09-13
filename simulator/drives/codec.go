@@ -31,6 +31,16 @@ func (s State) Canonical() ([]byte, error) {
 			out.Substrate.Baseline[i] = 0
 		}
 	}
+	for i := range out.Factors.Variables {
+		for j, v := range out.Factors.Variables[i].Values {
+			if v == 0 {
+				out.Factors.Variables[i].Values[j] = 0
+			}
+		}
+		if out.Factors.Baseline[i] == 0 {
+			out.Factors.Baseline[i] = 0
+		}
+	}
 	if out.Substrate.Reactivity == 0 {
 		out.Substrate.Reactivity = 0
 	}

@@ -144,26 +144,26 @@ func Appraise(s State, o Observation, at core.LogicalTime) (State, Rationale, bo
 	safe := c[Beliefs]
 	available := c[Resources]
 	opportunity := c[Setting]
-	fatigue := out.Variables[EffortAvoidance].Values[0]
+	effortBurden := .7*out.Factors.Variables[Fatigue].Values[0] + .3*out.Variables[EffortAvoidance].Values[0]
 	threat := x.StatusThreat + x.Exclusion
 	raw := [Count]float64{
 		x.Scarcity + x.Opportunity + .3*opportunity - .4*available,
 		x.StatusThreat + .3*x.Opportunity - .3*support,
 		x.StatusThreat + .3*threat*(1-safe) - .3*support,
 		threat*(1-.5*safe) + .25*x.Scarcity*x.Effort - .3*x.Support,
-		x.Opportunity + .4*opportunity + .2*x.Inclusion - .5*fatigue - .3*threat,
+		x.Opportunity + .4*opportunity + .2*x.Inclusion - .5*effortBurden - .3*threat,
 		x.Effort + .25*x.Scarcity*x.Effort - x.Rest - .2*available,
 		x.Opportunity + .3*opportunity - .2*x.Scarcity,
 		threat + .3*x.Scarcity - .4*safe - .3*x.Support,
 		x.Exclusion + .2*threat - x.Inclusion - .3*support,
 		x.StatusThreat + .3*x.Effort - .2*x.Support,
-		x.Effort*(1-.4*fatigue) + .3*x.Opportunity - .3*threat,
-		x.OtherNeed*(1-.5*fatigue) + .3*support + .2*x.Support - .3*x.Effort*fatigue,
+		x.Effort*(1-.4*effortBurden) + .3*x.Opportunity - .3*threat,
+		x.OtherNeed*(1-.5*effortBurden) + .3*support + .2*x.Support - .3*x.Effort*effortBurden,
 		x.Scarcity + x.Exclusion - .3*support,
 		x.OtherNeed + .5*support - .3*x.Effort,
 		x.StatusThreat + .3*x.Opportunity - .25*x.Support,
 		threat + .3*c[History] - .3*safe,
-		x.Opportunity + .4*opportunity - .4*threat - .2*fatigue,
+		x.Opportunity + .4*opportunity - .4*threat - .2*effortBurden,
 		.4*x.OtherNeed + .4*support + .2*x.Effort - .3*threat,
 		c[Uncertainty] + .4*threat - .4*safe,
 		x.Opportunity + .5*opportunity - .3*c[History] - .3*threat,
@@ -185,6 +185,7 @@ func Appraise(s State, o Observation, at core.LogicalTime) (State, Rationale, bo
 			r.Deltas[i] = 0
 		}
 	}
+	out.Factors = out.Factors.appraise(o.Event, out.Substrate, at)
 	for _, cue := range o.Context {
 		if e = addCause(&out, cue.Evidence.Event); e != nil {
 			return State{}, Rationale{}, false, e
@@ -205,9 +206,9 @@ func Response(s State) (dynamics.Tendencies, error) {
 	}
 	v := func(i int) float64 { return s.Variables[i].Values[0] }
 	return dynamics.Tendencies{
-		Rest:     quant(.8*v(EffortAvoidance) + .2*v(Safety)),
+		Rest:     quant(.4*v(EffortAvoidance) + .4*s.Factors.Variables[Fatigue].Values[0] + .2*s.Factors.Variables[SlowResidue].Values[0]),
 		Approach: quant(.3*v(ApproachDesire) + .15*v(Curiosity) + .15*v(Novelty) + .1*v(RewardSeeking) + .1*v(Competence) + .1*v(Autonomy) + .1*v(Meaning) - .2*v(ThreatResponse)),
 		Support:  quant((.45*v(Care) + .2*v(Reciprocity) + .15*v(Fairness) + .1*v(Belonging) + .1*v(Attachment)) * (1 - .5*v(EffortAvoidance))),
 		Defend:   quant(.2*v(StatusProtection) + .15*v(ThreatResponse) + .15*v(IdentityProtection) + .15*v(LossAvoidance) + .1*v(Status) + .1*v(Comparison) + .15*v(Acquisition)),
-		Wait:     quant(.1 + .3*v(EffortAvoidance) + .2*v(Safety) + .2*v(Certainty) + .2*v(LossAvoidance) - .1*v(ApproachDesire))}, nil
+		Wait:     quant(.1 + .1*s.Factors.Variables[ScarcityOpportunity].Values[0] + .2*v(EffortAvoidance) + .2*v(Safety) + .2*v(Certainty) + .2*v(LossAvoidance) - .1*v(ApproachDesire))}, nil
 }

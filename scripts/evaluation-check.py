@@ -1,6 +1,13 @@
 """One offline command builds an isolated generator and reproduces synthetic reports.
 No registry pull, mounted labels, network, private data or policy activation.
 """
+import signal
+
+def interrupted(signum, frame):
+    raise KeyboardInterrupt("owned check interrupted")
+
+signal.signal(signal.SIGTERM, interrupted)
+
 import json
 import os
 import pathlib
@@ -33,7 +40,7 @@ def main():
                  "./cmd/hws-generate"], build_env)
         (context / "Dockerfile").write_text("FROM scratch\nCOPY hws-generate /hws-generate\nUSER 65532:65532\nENTRYPOINT [\"/hws-generate\"]\n")
         iid = path / "image-id"
-        command(["docker", "build", "--network=none", "--iidfile", str(iid), str(context)], env)
+        command(["docker", "build", "--force-rm", "--label", "dream.test.run=" + os.environ.get("DREAM_TEST_RUN", "standalone"), "--label", "dream.test.role=" + os.environ.get("DREAM_TEST_ROLE", "standalone"), "--network=none", "--iidfile", str(iid), str(context)], env)
         image = iid.read_text().strip()
         binary = path / "hws-eval"
         command(["go", "build", "-trimpath", "-o", str(binary), "./cmd/hws-eval"], env)
@@ -70,7 +77,7 @@ def main():
                          'fmt.Println("[]")}\n')
         command(["go", "build", "-trimpath", "-o", str(context / "hws-generate"), str(probe)], build_env)
         probe_iid = path / "probe-image-id"
-        command(["docker", "build", "--network=none", "--iidfile", str(probe_iid), str(context)], env)
+        command(["docker", "build", "--force-rm", "--label", "dream.test.run=" + os.environ.get("DREAM_TEST_RUN", "standalone"), "--label", "dream.test.role=" + os.environ.get("DREAM_TEST_ROLE", "standalone"), "--network=none", "--iidfile", str(probe_iid), str(context)], env)
         test_env = dict(env, DREAM_EVALUATOR_TEST_IMAGE=image,
                         DREAM_EVALUATOR_PROBE_IMAGE=probe_iid.read_text().strip(),
                         DREAM_EVALUATOR_LABEL="SYNTHETIC_ENV_CANARY")
