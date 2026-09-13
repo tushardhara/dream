@@ -110,3 +110,20 @@ access to complete traceability without publishing originals or private data.
 | IHG canonical PRD v1.1 | 208 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 209 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 210 | UNVERIFIED: original text unavailable; summarized invariants above |
+
+## Issue #3 contract evidence
+
+| Ticket criterion | Current evidence | Remaining owning-ticket gate |
+| --- | --- | --- |
+| Validated reusable records, generic events | core value/records/state; TestRecordsRoundTrip, TestInvalidRecords | #4 durable event transactions/projections |
+| Observer-owned identity and contradictory perspectives | TestContradictoryPerspectivesAndIdentityIsolation | #9 second host use cases; no implicit identity resolution |
+| Evidence, lineage, sensitivity and uncertainty | TestInvalidRecords cycles/missing evidence/NaN/calibration/time cases | #8 retrieval and #12 trusted information boundary |
+| Separate exact permissions and no implicit broadening | TestPermissionsDenyUnknownAndSeparateOperations, TestDerivationIntersection, TestStateCannotBroadenSourceRights, FuzzRightsNeverWiden | #4/#12 trusted authorization and revocation consumers |
+| Simulator-only IDs/knowledge/RNG/latent contracts | simulator/types.go, TestSimulatorLocalContracts, architecture guard | #5/#6/#7 scenarios/runtime/dynamics |
+| Consumer-defined ports outside pure entities | app/graph RightsReader, app/hws CapabilityProvider; examples/coreclient | concrete adapters and model gateway deferred |
+| Canonical encoding, logical hashing | TestCanonicalGolden, TestProvenanceGolden, TestLogicalHashGolden, TestLogicalHashAndOrdering, FuzzDecode | replay/snapshot guarantees deferred #13 |
+| Constructor invalid-input handling | TestIDConstructorsRejectInvalid, FuzzConstructors, TestNaNEncoding | domain evolution requires new regressions |
+| WAIT and unknown/censored/observed outcomes | TestOutcomeStatuses, TestInvalidRecords | #11 outcome learning and #16 independent evaluation |
+
+See ADR-0002 for exact codec and validation boundaries. Source-section traceability
+above remains UNVERIFIED; contract tests do not substitute for unavailable originals.

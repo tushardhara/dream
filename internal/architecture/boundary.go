@@ -23,7 +23,7 @@ func forbidden(from, target string) bool {
 		if strings.HasPrefix(target, module) {
 			return !within(local, "core")
 		}
-		return strings.Contains(strings.Split(target, "/")[0], ".") || within(target, "net")
+		return strings.Contains(strings.Split(target, "/")[0], ".") || within(target, "net") || within(target, "os") || within(target, "syscall") || within(target, "database") || within(target, "plugin")
 	}
 	allowed := []string(nil)
 	switch {
@@ -38,7 +38,7 @@ func forbidden(from, target string) bool {
 	}
 	if !strings.HasPrefix(target, module) {
 		// Consumer packages stay standard-library-only until a dependency is reviewed.
-		return strings.Contains(strings.Split(target, "/")[0], ".") || within(target, "net")
+		return strings.Contains(strings.Split(target, "/")[0], ".") || within(target, "net") || within(target, "os") || within(target, "syscall") || within(target, "database") || within(target, "plugin")
 	}
 	for _, p := range allowed {
 		if within(local, p) {
