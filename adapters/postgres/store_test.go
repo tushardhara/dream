@@ -171,16 +171,28 @@ func TestIntegration(t *testing.T) {
 		if _, err := store.Append(ctx, correction); err != nil {
 			t.Fatal(err)
 		}
+		// Other integration tests may already have projected journal entries. Pin
+		// the entire preexisting projection/checkpoint/delivery state, not an
+		// assumed empty database, and require byte-identical rollback.
+		projectionState := func() string {
+			t.Helper()
+			var state string
+			if err := admin.QueryRow(ctx, `SELECT jsonb_build_object(
+			'projections',(SELECT jsonb_agg(to_jsonb(p) ORDER BY actor,namespace,event_id) FROM dream.projections p),
+			'checkpoints',(SELECT jsonb_agg(to_jsonb(c) ORDER BY name) FROM dream.projection_checkpoints c),
+			'outbox',(SELECT jsonb_agg(to_jsonb(o) ORDER BY actor,namespace,event_id) FROM dream.outbox o))::text`).Scan(&state); err != nil {
+				t.Fatal(err)
+			}
+			return state
+		}
+		beforeProjection := projectionState()
 		// Force failure after rows have been written but before the checkpoint commit.
 		exec(t, admin, `CREATE FUNCTION dream.fail_checkpoint() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected checkpoint interruption'; END $$; CREATE TRIGGER fail_checkpoint BEFORE UPDATE ON dream.projection_checkpoints FOR EACH ROW EXECUTE FUNCTION dream.fail_checkpoint()`)
 		if _, err := store.Project(ctx, "default", 1000); err == nil {
 			t.Fatal("injected failure ignored")
 		}
-		if count(t, admin, "SELECT count(*) FROM dream.projections") != 0 {
-			t.Fatal("projection state escaped rollback")
-		}
-		if count(t, admin, "SELECT count(*) FROM dream.projection_checkpoints") != 0 {
-			t.Fatal("checkpoint escaped rollback")
+		if projectionState() != beforeProjection {
+			t.Fatal("projection/checkpoint/outbox state escaped rollback")
 		}
 		exec(t, admin, `DROP TRIGGER fail_checkpoint ON dream.projection_checkpoints; DROP FUNCTION dream.fail_checkpoint()`)
 		if _, err := store.Project(ctx, "default", 1000); err != nil {
