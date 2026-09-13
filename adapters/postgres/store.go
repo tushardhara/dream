@@ -151,6 +151,17 @@ func (s *Store) beginRead(ctx context.Context) (pgx.Tx, error) {
 	return tx, nil
 }
 func (s *Store) Append(ctx context.Context, c graph.AppendCommand) (graph.AppendResult, error) {
+	return s.appendCommand(ctx, c, false)
+}
+
+// AppendNew rejects an already committed command even when its digest matches.
+// Reservation consumers need a newly committed effect, not an idempotent receipt,
+// before launching work. The check and append share one locked transaction and
+// one pool connection; ordinary Append retains its existing retry semantics.
+func (s *Store) AppendNew(ctx context.Context, c graph.AppendCommand) (graph.AppendResult, error) {
+	return s.appendCommand(ctx, c, true)
+}
+func (s *Store) appendCommand(ctx context.Context, c graph.AppendCommand, fresh bool) (graph.AppendResult, error) {
 	if c.Event.Type == "revoke" {
 		return graph.AppendResult{}, fmt.Errorf("use Revoke for revocation events")
 	}
@@ -159,6 +170,15 @@ func (s *Store) Append(ctx context.Context, c graph.AppendCommand) (graph.Append
 		return graph.AppendResult{}, err
 	}
 	defer tx.Rollback(ctx)
+	if fresh {
+		var exists bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM dream.command_results WHERE actor=$1 AND namespace=$2 AND operation=$3 AND key=$4)`, c.Actor, c.Namespace, c.Operation, c.Key).Scan(&exists); err != nil {
+			return graph.AppendResult{}, err
+		}
+		if exists {
+			return graph.AppendResult{}, ErrIdempotency
+		}
+	}
 	result, err := s.append(ctx, tx, c)
 	if err != nil {
 		return result, err

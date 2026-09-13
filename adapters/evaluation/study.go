@@ -18,8 +18,8 @@ import (
 type StudyJournal struct{ db *pgxpool.Pool }
 
 func NewStudyJournal(db *pgxpool.Pool) (*StudyJournal, error) {
-	if db == nil || db.Config().MaxConns < 2 {
-		return nil, fmt.Errorf("study journal requires a bounded pool with at least two connections")
+	if db == nil || db.Config().MaxConns < 1 {
+		return nil, fmt.Errorf("study journal requires a bounded pool with at least one connection")
 	}
 	return &StudyJournal{db: db}, nil
 }
@@ -89,17 +89,9 @@ func (j *StudyJournal) Append(ctx context.Context, scope evals.StudyScope, expec
 	if e != nil {
 		return e
 	}
-	gate, e := j.db.Begin(ctx)
-	if e != nil {
-		return e
-	}
-	defer gate.Rollback(ctx)
-	// This per-study gate serializes strict CAS before the existing journal's
-	// idempotent Append. It is closed before returning, and before any provider call.
-	if _, e = gate.Exec(ctx, `SELECT pg_advisory_xact_lock(17017,hashtext($1))`, string(stream)); e != nil {
-		return e
-	}
-	events, e := studyLoad(ctx, gate, scope)
+	// Rebuild outside the writer transaction. AppendNew atomically enforces a
+	// fresh command and exact stream version, with provenance/revocation checks.
+	events, e := studyLoad(ctx, j.db, scope)
 	if e != nil {
 		return e
 	}
@@ -125,8 +117,8 @@ func (j *StudyJournal) Append(ctx context.Context, scope evals.StudyScope, expec
 		command.Event.Meta.Parents = []core.ID{studyID(stream, expected)}
 		command.DerivationContext = &grant
 	}
-	if _, e = postgres.New(j.db).Append(ctx, command); e != nil {
+	if _, e = postgres.New(j.db).AppendNew(ctx, command); e != nil {
 		return e
 	}
-	return gate.Commit(ctx)
+	return nil
 }
