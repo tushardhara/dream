@@ -276,3 +276,12 @@ Fresh experiments are explicitly not byte-guaranteed. Original actor/cognitive,
 model and runtime caps remain; no permission, budget, receipt or time reset is
 hidden inside a fork. Large/live studies and network authentication remain later
 gates, not implied by snapshot/replay engineering evidence.
+
+## #14 authenticated transport
+
+Versioned gRPC/HTTP/OpenAPI, exact configured scopes/roles, non-owner runtime
+startup, durable admission, runtime/view/snapshot adapters and revalidated paged
+exports are implemented. ADR0013 maps verification and states the management-only
+standalone executable versus embedded execution-host distinction. Engineering
+integration still requires independent exact-SHA review, green CI and an
+INTEGRATED record; implementation is not a main release or deployment.

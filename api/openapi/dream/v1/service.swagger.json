@@ -1,0 +1,770 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "dream/v1/service.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "Research"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/dream.v1.Research/ActorView": {
+      "post": {
+        "operationId": "Research_ActorView",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1Query"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/CaptureSnapshot": {
+      "post": {
+        "operationId": "Research_CaptureSnapshot",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SnapshotHandle"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SnapshotRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/Control": {
+      "post": {
+        "operationId": "Research_Control",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ControlRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/CreateWorld": {
+      "post": {
+        "operationId": "Research_CreateWorld",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateWorldRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/DownloadExport": {
+      "post": {
+        "operationId": "Research_DownloadExport",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ExportPage"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1DownloadRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/ExternalAct": {
+      "post": {
+        "operationId": "Research_ExternalAct",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ControlRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/ExternalObserve": {
+      "post": {
+        "operationId": "Research_ExternalObserve",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ExternalRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/Fork": {
+      "post": {
+        "operationId": "Research_Fork",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ForkRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/GetOperation": {
+      "post": {
+        "operationId": "Research_GetOperation",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1OperationRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/Replay": {
+      "post": {
+        "operationId": "Research_Replay",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ReplayRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/ResearchView": {
+      "post": {
+        "operationId": "Research_ResearchView",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1Query"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/SubmitExport": {
+      "post": {
+        "operationId": "Research_SubmitExport",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ExportRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    },
+    "/dream.v1.Research/ValidateScenario": {
+      "post": {
+        "operationId": "Research_ValidateScenario",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Document"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ScenarioRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Research"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1ControlRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "until": {
+          "type": "string",
+          "format": "int64"
+        },
+        "input": {
+          "$ref": "#/definitions/v1Input"
+        }
+      }
+    },
+    "v1CreateWorldRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "yaml": {
+          "type": "string"
+        },
+        "maxSteps": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "maxEvents": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "horizon": {
+          "type": "string",
+          "format": "int64"
+        },
+        "maxDurationSeconds": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1Document": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "canonicalJson": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "Canonical domain JSON is an explicit versioned document, not protobuf hash\nencoding. Adapters encode trusted outputs only; clients cannot submit it as\nrestoration authority. Domain version fields remain in the document."
+    },
+    "v1DownloadRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "exportId": {
+          "type": "string"
+        },
+        "cursor": {
+          "type": "string"
+        },
+        "pageSize": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "v1ExportPage": {
+      "type": "object",
+      "properties": {
+        "exportId": {
+          "type": "string"
+        },
+        "manifestSha256": {
+          "type": "string"
+        },
+        "manifestJson": {
+          "type": "string",
+          "format": "byte"
+        },
+        "page": {
+          "type": "string",
+          "format": "byte"
+        },
+        "pageSha256": {
+          "type": "string"
+        },
+        "nextCursor": {
+          "type": "string"
+        }
+      }
+    },
+    "v1ExportRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "exportId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/definitions/v1SnapshotHandle"
+        },
+        "throughRevision": {
+          "type": "string",
+          "format": "int64"
+        },
+        "sourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fromTime": {
+          "type": "string",
+          "format": "int64"
+        },
+        "throughTime": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1ExternalRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "sourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1ForkRequest": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/definitions/v1SnapshotHandle"
+        },
+        "child": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "pairedExogenous": {
+          "type": "boolean"
+        },
+        "policy": {
+          "type": "string"
+        },
+        "alternative": {
+          "$ref": "#/definitions/v1Input"
+        },
+        "maxDurationSeconds": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1Input": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "format": "int64"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "units": {
+          "type": "string",
+          "format": "int64"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1OperationRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "operationId": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Query": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        }
+      }
+    },
+    "v1ReplayRequest": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "$ref": "#/definitions/v1SnapshotHandle"
+        },
+        "throughRevision": {
+          "type": "string",
+          "format": "int64"
+        },
+        "mode": {
+          "type": "string"
+        }
+      }
+    },
+    "v1ScenarioRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "yaml": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Scope": {
+      "type": "object",
+      "properties": {
+        "operator": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "world": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "run": {
+          "type": "string"
+        }
+      },
+      "description": "Scope must exactly match trusted credential configuration. It never selects\nthe authenticated identity. Domain hashes do not use protobuf encoding."
+    },
+    "v1SnapshotHandle": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "key": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        }
+      }
+    },
+    "v1SnapshotRequest": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/v1Scope"
+        },
+        "key": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    }
+  }
+}

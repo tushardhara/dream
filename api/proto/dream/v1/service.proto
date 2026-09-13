@@ -1,0 +1,91 @@
+syntax = "proto3";
+package dream.v1;
+option go_package = "github.com/tushardhara/dream/adapters/transport/gen/dream/v1;dreamv1";
+
+// Scope must exactly match trusted credential configuration. It never selects
+// the authenticated identity. Domain hashes do not use protobuf encoding.
+message Scope {
+ string operator = 1;
+ string namespace = 2;
+ string world = 3;
+ string branch = 4;
+ string run = 5;
+}
+message Query { Scope scope = 1; }
+message ScenarioRequest { Scope scope = 1; string yaml = 2; }
+message CreateWorldRequest {
+ Scope scope = 1;
+ string yaml = 2;
+ uint64 max_steps = 3;
+ uint64 max_events = 4;
+ int64 horizon = 5;
+ int64 max_duration_seconds = 6;
+}
+message Input {
+ string id = 1;
+ int64 at = 2;
+ string kind = 3;
+ string actor = 4;
+ string resource = 5;
+ string text = 6;
+ int64 units = 7;
+ int32 priority = 8;
+}
+message ControlRequest {
+ Scope scope = 1;
+ string operation_id = 2;
+ string command = 3;
+ int64 until = 4;
+ Input input = 5;
+}
+message OperationRequest { Scope scope = 1; string operation_id = 2; }
+message SnapshotRequest { Scope scope = 1; string key = 2; int64 revision = 3; }
+message SnapshotHandle { Scope scope = 1; string key = 2; string hash = 3; }
+message ForkRequest {
+ SnapshotHandle source = 1;
+ Scope child = 2;
+ bool paired_exogenous = 3;
+ string policy = 4;
+ Input alternative = 5;
+ int64 max_duration_seconds = 6;
+}
+message ReplayRequest { SnapshotHandle source = 1; int64 through_revision = 2; string mode = 3; }
+message ExternalRequest { Scope scope = 1; repeated string source_ids = 2; }
+message ExportRequest {
+ Scope scope = 1;
+ string export_id = 2;
+ string kind = 3;
+ SnapshotHandle source = 4;
+ int64 through_revision = 5;
+ repeated string source_ids = 6;
+ int64 from_time = 7;
+ int64 through_time = 8;
+}
+message DownloadRequest { Scope scope = 1; string export_id = 2; string cursor = 3; uint32 page_size = 4; }
+// Canonical domain JSON is an explicit versioned document, not protobuf hash
+// encoding. Adapters encode trusted outputs only; clients cannot submit it as
+// restoration authority. Domain version fields remain in the document.
+message Document { string schema = 1; bytes canonical_json = 2; }
+message ExportPage {
+ string export_id = 1;
+ string manifest_sha256 = 2;
+ bytes manifest_json = 3;
+ bytes page = 4;
+ string page_sha256 = 5;
+ string next_cursor = 6;
+}
+service Research {
+ rpc ValidateScenario(ScenarioRequest) returns (Document);
+ rpc CreateWorld(CreateWorldRequest) returns (Document);
+ rpc Control(ControlRequest) returns (Document);
+ rpc GetOperation(OperationRequest) returns (Document);
+ rpc CaptureSnapshot(SnapshotRequest) returns (SnapshotHandle);
+ rpc Fork(ForkRequest) returns (Document);
+ rpc Replay(ReplayRequest) returns (Document);
+ rpc ActorView(Query) returns (Document);
+ rpc ResearchView(Query) returns (Document);
+ rpc ExternalObserve(ExternalRequest) returns (Document);
+ rpc ExternalAct(ControlRequest) returns (Document);
+ rpc SubmitExport(ExportRequest) returns (Document);
+ rpc DownloadExport(DownloadRequest) returns (ExportPage);
+}
