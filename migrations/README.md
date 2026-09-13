@@ -1,10 +1,9 @@
-# Database schema v1
+# Database schema v2
 
-001_initial.sql is embedded by this package and applied transactionally by
+001_initial.sql and 002_runtime.sql are embedded and applied transactionally by
 adapters/postgres.Migrate. Use dedicated migration authority in an isolated Dream
 database/cluster. Runtime writer credentials cannot create schema/roles or update
-the version ledger. Existing unsafe group roles are rejected. Rerunning version 1
-is idempotent; unknown ledger versions fail. No historical production schema or
+the version ledger. Existing unsafe group roles are rejected. Empty databases install v1 then v2 atomically; existing v1 databases upgrade forward to v2. Rerunning v2 is idempotent; unknown or noncontiguous ledger versions fail. The upgrade test preserves an existing journal event. No historical production schema or
 destructive down migration is invented.
 
 `make migration-check` exercises forward migration and rerun on a new PostgreSQL
@@ -17,3 +16,5 @@ Backups taken before a revocation can still contain private bytes. Such a backup
 must remain offline until all later tombstones are re-applied from the retained
 revocation record. This ticket does not implement a production backup/WAL erasure
 policy or claim old backups are automatically sanitized. See ADR-0003.
+
+Version 2 adds restricted runtime heads, checkpoint/event payloads, durable operation receipts and lease audit. Runtime payloads and pending command input are purged with revocation; the restore gate checks those tables too.

@@ -162,3 +162,18 @@ current make verify runs the real disposable Postgres gate.
 
 Runtime persistence/application is #6, dynamics #7, runtime retrieval/policy #8/#12;
 fixture labels make no independent evaluation or human realism claim.
+
+## Issue #6 runtime evidence
+
+| Criterion | Evidence |
+| --- | --- |
+| Pure virtual time, deterministic equal-time order and named/versioned RNG | TestDeterministicRecovery, TestInjectionAndNamedRNG, TestRNGGoldenAndBudgets, TestInclusiveRunUntilTies, TestReservationReleaseBeforeAllocation, FuzzTrajectory |
+| Durable step/run-until/inject/pause/resume/cancel and idempotency | real-PG CreateIdempotencyAndScope, RunUntilRecoveryAndControlBoundary, SimultaneousDuplicateAndVersion |
+| Expiry/reclaim, fencing, renewal and optimistic versions | LeaseReclaimFencingRenewAndOverlap, LeaseExpiryDuringCommitRollsBack, SimultaneousDuplicateAndVersion |
+| Atomic draws/outputs/events/checkpoint/receipt with crash recovery | RollbackOutputsRNGAndOperation, KillRestartMatchesCleanTrajectory (actual killed child process) |
+| Run manifest, minimum audit and step/event/horizon/duration bounds | schema v2, TestControlsAndBudgets, OperationalBudgetDiscardsComputedTransition, DeadlineCrossingDuringTransaction |
+| Restricted durable state, revocation/no resurrection, forward upgrade | RestrictedRuntimeGrants, RevocationPurgesAndPreventsResume, ForwardUpgradePreservesJournal; extended purge-aware restore gate |
+| #5 review carry-forward assertions | TestYAMLRejects pins alias/limit codes; TestForeignKnowledgeOwnershipGuard pins exact ownership path/message |
+
+See ADR-0005 for host operation semantics, serialized journal write limitation,
+trusted handler/port boundary and deferred CLI/API, dynamics/replay/scientific gates.

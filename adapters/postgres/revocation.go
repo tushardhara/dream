@@ -32,7 +32,12 @@ func (s *Store) Revoke(ctx context.Context, c graph.AppendCommand, root core.ID)
 	if err != nil {
 		return result, err
 	}
-	for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "projections"} {
+	// Pending injected input is restricted too; purge operation requests for
+	// revoked runs alongside checkpoints so restart cannot resurrect them.
+	if _, err = tx.Exec(ctx, `DELETE FROM dream.runtime_operations o USING dream.runtime_heads h,dream.tombstones t WHERE (o.actor,o.namespace,o.run)=(h.actor,h.namespace,h.run) AND (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id) AND o.actor=$1 AND o.namespace=$2`, c.Actor, c.Namespace); err != nil {
+		return result, err
+	}
+	for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "projections"} {
 		if _, err = tx.Exec(ctx, `DELETE FROM dream.`+table+` p USING dream.tombstones t WHERE(p.actor,p.namespace,p.event_id)=(t.actor,t.namespace,t.event_id) AND t.actor=$1 AND t.namespace=$2`, c.Actor, c.Namespace); err != nil {
 			return result, err
 		}

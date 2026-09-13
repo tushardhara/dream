@@ -223,3 +223,13 @@ func TestProgrammaticBudgets(t *testing.T) {
 		t.Fatal("programmatic item budget bypass")
 	}
 }
+
+func TestForeignKnowledgeOwnershipGuard(t *testing.T) {
+	s := fixture()
+	s.Actors[0].Knowledge = append(s.Actors[0].Knowledge, Knowledge{"SECRET_B", 0})
+	err := s.Validate()
+	e, ok := err.(*Error)
+	if !ok || e.Code != "invalid" || e.Path != "$.actors[0].knowledge[1].record" || e.Message != "unknown or foreign private record" {
+		t.Fatalf("ownership guard: %v", err)
+	}
+}

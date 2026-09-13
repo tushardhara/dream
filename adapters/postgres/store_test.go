@@ -65,11 +65,11 @@ func TestIntegration(t *testing.T) {
 	defer db.Close()
 	store := New(db)
 	t.Run("UnknownDatabaseVersionDenies", func(t *testing.T) {
-		exec(t, admin, "INSERT INTO dream.schema_versions VALUES(2)")
+		exec(t, admin, "INSERT INTO dream.schema_versions VALUES(999)")
 		if err := Migrate(ctx, admin); err == nil {
 			t.Fatal("unknown schema accepted")
 		}
-		exec(t, admin, "DELETE FROM dream.schema_versions WHERE version=2")
+		exec(t, admin, "DELETE FROM dream.schema_versions WHERE version=999")
 	})
 	t.Run("AtomicIdempotencyAndConcurrency", func(t *testing.T) {
 		c := command("duplicates", "event", 0)
@@ -463,9 +463,13 @@ func TestIntegration(t *testing.T) {
 			t.Fatal("actor scope collision", err)
 		}
 		exec(t, admin, `INSERT INTO dream.simulator_associations VALUES('alice','operation-scope','one','run','branch','alice',11),('alice','operation-scope','one','run','branch','bob',20)`)
-		if count(t, admin, "SELECT count(DISTINCT learned_at) FROM dream.simulator_associations") != 2 {
+		if count(t, admin, "SELECT count(DISTINCT learned_at) FROM dream.simulator_associations WHERE actor='alice' AND namespace='operation-scope' AND event_id='one'") != 2 {
 			t.Fatal("actor learned times collapsed")
 		}
+		if count(t, admin, `SELECT count(*) FROM dream.simulator_associations WHERE actor='alice' AND namespace='operation-scope' AND event_id='one' AND ((learner='alice' AND learned_at=11) OR (learner='bob' AND learned_at=20))`) != 2 {
+			t.Fatal("incorrect actor learned-at association")
+		}
+
 		for i := 0; i < 3; i++ {
 			c := command(core.ID(fmt.Sprintf("scope%d", i)), "same-key", 0)
 			if _, err := store.Append(ctx, c); err != nil {
