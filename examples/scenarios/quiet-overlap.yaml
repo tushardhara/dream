@@ -1,0 +1,89 @@
+# Entirely fictional adults. Times are logical nanoseconds; no events before noon.
+version: 1
+world: {id: quiet-overlap, seed: 42, horizon: 86400000000000}
+requires: [genesis.v1, resources.v1, memory.v1, relationships.v1, latent.v1, schedule.v1]
+public:
+  humans:
+    - {id: ada, name: Synthetic Ada, age: 30}
+    - {id: ben, name: Synthetic Ben, age: 35}
+    - {id: cy, name: Synthetic Cy, age: 28}
+  groups:
+    - {id: garden, members: [ada, ben]}
+    - {id: reading, members: [ben, cy]}
+  resources:
+    - {id: shared-room, capacity: 2, available: 2}
+  facts:
+    - id: room-notice
+      observer: ben
+      subject: ben
+      text: The shared room is available today.
+      confidence: 1
+      valid: {start: 0, end: 86400000000000}
+      grants:
+        - {actor: ada, recipient: ada, purpose: simulation, operation: read}
+        - {actor: ben, recipient: ben, purpose: simulation, operation: read}
+        - {actor: cy, recipient: cy, purpose: simulation, operation: read}
+actors:
+  - id: ada
+    facts:
+      - id: ada-note
+        observer: ada
+        subject: ben
+        text: I remember a pleasant conversation with Ben.
+        confidence: 0.7
+        valid: {start: 0}
+        grants:
+          - {actor: ada, recipient: ada, purpose: simulation, operation: read}
+    knowledge: [{record: room-notice, learned_at: 0}, {record: ada-note, learned_at: 0}]
+    memories: [{id: ada-memory, evidence: ada-note, text: I enjoyed our conversation.}]
+    relationships: [{id: ada-ben, other: ben, kind: acquaintance, evidence: ada-note}]
+  - id: ben
+    facts:
+      - id: ben-note
+        observer: ben
+        subject: ben
+        text: PRIVATE_BEN_CANARY I would like a quiet evening alone.
+        confidence: 0.8
+        valid: {start: 0}
+        grants:
+          - {actor: ben, recipient: ben, purpose: simulation, operation: read}
+    knowledge: [{record: room-notice, learned_at: 0}, {record: ben-note, learned_at: 0}]
+    memories: []
+    relationships: []
+  - id: cy
+    facts: []
+    knowledge: [{record: room-notice, learned_at: 0}]
+    memories: []
+    relationships: []
+research:
+  latent:
+    - actor: ada
+      emotion: {valence: 0.2, arousal: 0.1}
+      drives: [{kind: rest, strength: 0.6}]
+    - actor: ben
+      emotion: {valence: 0, arousal: 0.2}
+      drives: [{kind: LATENT_BEN_CANARY, strength: 0.7}]
+  labels:
+    - {id: overlap-label, text: "RESEARCH_LABEL_CANARY overlap through Ben is fixture design, not a human truth."}
+future:
+  - id: lunch-notice
+    at: 43200000000000
+    kind: observation
+    actor: cy
+    text: FUTURE_CANARY A fictional notice arrives at noon.
+  - id: ada-room
+    at: 46800000000000
+    kind: reservation
+    actor: ada
+    text: Synthetic room reservation.
+    resource: shared-room
+    units: 1
+    until: 50400000000000
+  - id: ben-room
+    at: 46800000000000
+    kind: reservation
+    actor: ben
+    text: Synthetic room reservation.
+    resource: shared-room
+    units: 1
+    until: 50400000000000
