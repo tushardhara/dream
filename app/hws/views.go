@@ -262,7 +262,10 @@ type SelfDrive struct {
 	Confidence core.Confidence
 }
 type ResearchGodState struct{ Snapshot Snapshot }
-type ExternalAgentView struct{ Items []graph.SafeContextItem }
+type ExternalAgentView struct {
+	At    core.LogicalTime
+	Items []graph.SafeContextItem
+}
 
 func (v *ViewService) recordAccess(ctx context.Context, permit ViewPermit, kind core.ID, allowed bool) error {
 	if v == nil || v.recorder == nil {
@@ -397,7 +400,7 @@ func (v *ViewService) External(ctx context.Context, permit ViewPermit, sources [
 	if err != nil || !d.Allowed {
 		return ExternalAgentView{}, ErrViewDenied
 	}
-	return ExternalAgentView{safe.Items()}, nil
+	return ExternalAgentView{At: safe.KnownAt(), Items: safe.Items()}, nil
 }
 
 // ModelContext is available only to trusted orchestration with an actor permit.

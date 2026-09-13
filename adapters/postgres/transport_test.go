@@ -262,6 +262,10 @@ func TestAuthenticatedServerPostgresOperationsAndExport(t *testing.T) {
 	if err != nil || !bytes.Contains(observed.CanonicalJson, []byte("SYNTHETIC_api-private")) {
 		t.Fatal("external observation", err)
 	}
+	var observedClock struct{ At int64 }
+	if json.Unmarshal(observed.CanonicalJson, &observedClock) != nil || observedClock.At != 20 {
+		t.Fatal("external current clock unavailable")
+	}
 	future := snapshotMemory("api-future", 90)
 	future.Event.Meta.Rights.Grants = memory.Event.Meta.Rights.Grants
 	future.Event.Meta.Rights.Resource = "api-future"
@@ -275,7 +279,7 @@ func TestAuthenticatedServerPostgresOperationsAndExport(t *testing.T) {
 	if _, err = client.ResearchView(external, &pb.Query{Scope: wire}); err == nil {
 		t.Fatal("external GodState")
 	}
-	if _, err = dummy.RequestWait(external, "external-wait", "external-intent", "a", 20); err != nil {
+	if _, err = dummy.RequestWait(external, "external-wait", "external-intent", "a", observedClock.At); err != nil {
 		t.Fatal("external requested intent", err)
 	}
 	if _, err = dummy.RequestWait(external, "external-other", "external-other", "b", 20); err == nil {
