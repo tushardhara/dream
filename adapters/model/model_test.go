@@ -124,11 +124,37 @@ func TestResponsesMockConformanceAndFailures(t *testing.T) {
 	}
 }
 func TestResponsesDefaultDenyTimeoutAndSize(t *testing.T) {
-	for _, c := range []ResponsesConfig{{}, {MockURL: "https://example.com"}, {MockURL: "http://localhost"}, {MockURL: "http://127.0.0.1", APIKey: "not-real"}, {EnableLive: true}} {
-		if _, e := NewResponses(c); e == nil {
-			t.Fatal("unknown runtime authority accepted")
+
+	// Constructor-only probes never connect, including when an individual guard
+	// is intentionally removed. Each URL isolates a different authority clause.
+	for name, c := range map[string]ResponsesConfig{
+		"zero":                  {},
+		"https-dns":             {MockURL: "https://example.com"},
+		"https-loopback":        {MockURL: "https://127.0.0.1"},
+		"dns":                   {MockURL: "http://localhost"},
+		"public-ipv4":           {MockURL: "http://192.0.2.1"},
+		"private-ipv4":          {MockURL: "http://10.0.0.1"},
+		"non-loopback-ipv6":     {MockURL: "http://[2001:db8::1]"},
+		"userinfo":              {MockURL: "http://test-user@127.0.0.1"},
+		"query":                 {MockURL: "http://127.0.0.1?route=other"},
+		"fragment":              {MockURL: "http://127.0.0.1#other"},
+		"offline-key":           {MockURL: "http://127.0.0.1", APIKey: "not-real"},
+		"live-missing-key":      {EnableLive: true},
+		"live-mock-url":         {EnableLive: true, APIKey: "not-real", MockURL: "http://127.0.0.1"},
+		"live-header-injection": {EnableLive: true, APIKey: "not-real\r\nInjected: true"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, e := NewResponses(c); e == nil {
+				t.Fatal("unknown runtime authority accepted")
+			}
+		})
+	}
+	for _, endpoint := range []string{"http://127.0.0.1", "http://[::1]"} {
+		if _, e := NewResponses(ResponsesConfig{MockURL: endpoint}); e != nil {
+			t.Fatal("valid numeric loopback rejected", e)
 		}
 	}
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
