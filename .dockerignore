@@ -1,0 +1,7 @@
+**
+!bin
+!bin/container
+!bin/container/hws
+!bin/container/hws-api
+!bin/container/hws-worker
+!bin/container/hws-admin

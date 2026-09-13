@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/tushardhara/dream/app/graph"
 	"github.com/tushardhara/dream/core"
@@ -33,6 +34,15 @@ func (s *Store) Revoke(ctx context.Context, c graph.AppendCommand, root core.ID)
 		return result, err
 	}
 
+	if err = purgeRevoked(ctx, tx); err != nil {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+func purgeRevoked(ctx context.Context, tx pgx.Tx) error {
+	var err error
+
 	// Propagate both ordinary lineage and immutable cross-scope snapshot/fork
 	// provenance in one closure, including model application links.
 	if _, err = tx.Exec(ctx, `WITH RECURSIVE edges(actor,namespace,id,pa,pn,pid) AS (
@@ -43,27 +53,27 @@ func (s *Store) Revoke(ctx context.Context, c graph.AppendCommand, root core.ID)
   SELECT actor,namespace,event_id FROM dream.tombstones
   UNION SELECT e.actor,e.namespace,e.id FROM edges e JOIN affected a ON(e.pa,e.pn,e.pid)=(a.actor,a.namespace,a.id)
  ) INSERT INTO dream.tombstones SELECT actor,namespace,id,clock_timestamp() FROM affected ON CONFLICT DO NOTHING`); err != nil {
-		return result, err
+		return err
 	}
 	// Revoking a run also destroys every attempt payload, not only its newest head.
 	if _, err = tx.Exec(ctx, `INSERT INTO dream.tombstones SELECT e.actor,e.namespace,e.id,clock_timestamp() FROM dream.model_requests r JOIN dream.runtime_heads h USING(actor,namespace,run) JOIN dream.tombstones t ON (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id) JOIN dream.events latest ON (r.principal,r.memory_namespace,r.event_id)=(latest.actor,latest.namespace,latest.id) JOIN dream.events e ON (e.actor,e.namespace,e.stream)=(latest.actor,latest.namespace,latest.stream) ON CONFLICT DO NOTHING`); err != nil {
-		return result, err
+		return err
 	}
 
 	// Pending injected input is restricted too; purge operation requests for
 	// revoked runs alongside checkpoints so restart cannot resurrect them.
 	if _, err = tx.Exec(ctx, `DELETE FROM dream.runtime_operations o USING dream.runtime_heads h,dream.tombstones t WHERE (o.actor,o.namespace,o.run)=(h.actor,h.namespace,h.run) AND (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id)`); err != nil {
-		return result, err
+		return err
 	}
 	for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "model_payloads", "snapshot_payloads", "projections"} {
 		if _, err = tx.Exec(ctx, `DELETE FROM dream.`+table+` p USING dream.tombstones t WHERE(p.actor,p.namespace,p.event_id)=(t.actor,t.namespace,t.event_id)`); err != nil {
-			return result, err
+			return err
 		}
 	}
 	if _, err = tx.Exec(ctx, `UPDATE dream.artifact_refs a SET invalidated=true WHERE EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(a.actor,a.namespace,a.id)) OR EXISTS(SELECT 1 FROM dream.artifact_sources src JOIN dream.tombstones t USING(actor,namespace,event_id) WHERE(src.actor,src.namespace,src.artifact_id)=(a.actor,a.namespace,a.id))`); err != nil {
-		return result, err
+		return err
 	}
-	return result, tx.Commit(ctx)
+	return nil
 }
 
 // RegisterArtifact records references only, not a snapshot/export implementation.
@@ -102,7 +112,12 @@ func (s *Store) RegisterArtifact(ctx context.Context, actor, namespace, id core.
 	return tx.Commit(ctx)
 }
 func (s *Store) ArtifactValid(ctx context.Context, actor, namespace, id core.ID) (bool, error) {
+	tx, err := s.beginRead(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
 	var valid bool
-	err := s.db.QueryRow(ctx, `SELECT NOT invalidated AND NOT EXISTS(SELECT 1 FROM dream.artifact_sources src JOIN dream.tombstones t USING(actor,namespace,event_id) WHERE(src.actor,src.namespace,src.artifact_id)=(a.actor,a.namespace,a.id)) FROM dream.artifact_refs a WHERE actor=$1 AND namespace=$2 AND id=$3`, actor, namespace, id).Scan(&valid)
+	err = tx.QueryRow(ctx, `SELECT NOT invalidated AND NOT EXISTS(SELECT 1 FROM dream.artifact_sources src JOIN dream.tombstones t USING(actor,namespace,event_id) WHERE(src.actor,src.namespace,src.artifact_id)=(a.actor,a.namespace,a.id)) FROM dream.artifact_refs a WHERE actor=$1 AND namespace=$2 AND id=$3`, actor, namespace, id).Scan(&valid)
 	return valid, err
 }

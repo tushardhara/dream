@@ -429,7 +429,7 @@ func TestSnapshotIntegration(t *testing.T) {
 		}
 		a, _ := original.State.Hash()
 		b, _ := after.State.Hash()
-		if a != b || count(t, old, `SELECT count(*) FROM dream.schema_versions`) != 5 {
+		if a != b || count(t, old, `SELECT count(*) FROM dream.schema_versions`) != 6 {
 			t.Fatal("upgrade changed existing state")
 		}
 		if _, e = prior.CaptureSnapshot(ctx, m.Scope, "upgraded", 1); e != nil {

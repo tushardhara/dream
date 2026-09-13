@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/simulator"
+	"github.com/tushardhara/dream/simulator/behavior"
 	rt "github.com/tushardhara/dream/simulator/runtime"
 	"github.com/tushardhara/dream/simulator/scenario"
 	"time"
@@ -121,6 +122,7 @@ type RuntimeStore interface {
 // lease/deadline checks are authoritative; this clock avoids needless work.
 type OperationalClock interface{ Now() time.Time }
 type Runtime struct {
+	Observer     OperationalObserver
 	BeforeCommit func(context.Context) error
 	Store        RuntimeStore
 	Clock        OperationalClock
@@ -144,6 +146,7 @@ func CommandDigest(c rt.Command) (string, error) {
 // until Done; retries after an uncertain success continue durable progress, never
 // restart the operation. Step/inject/control retries return their first receipt.
 func (r Runtime) Execute(ctx context.Context, scope Scope, lease Lease, key core.ID, c rt.Command) (Receipt, error) {
+	started := time.Now()
 	if err := scope.Validate(); err != nil {
 		return Receipt{}, err
 	}
@@ -197,5 +200,18 @@ func (r Runtime) Execute(ctx context.Context, scope Scope, lease Lease, key core
 	if errors.Is(err, ErrDeadline) {
 		return r.Store.CommitRun(ctx, commit)
 	} // one bounded retry; DB writes a budget-only checkpoint
+
+	if err == nil && r.Observer != nil && tr != nil {
+		outcome := OperationalSuccess
+		if checkpoint, e := DecodeCognitiveCheckpoint(next.Data); e == nil && checkpoint.Last != nil {
+			decision := checkpoint.Last
+			if decision.Operational {
+				outcome = ProviderOutage
+			} else if decision.Candidates[decision.Selected].Offer.Kind == behavior.Wait {
+				outcome = BehavioralWait
+			}
+		}
+		r.Observer.Observe(CognitiveCommit, outcome, time.Since(started))
+	}
 	return receipt, err
 }

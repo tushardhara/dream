@@ -226,6 +226,43 @@ func (b *Backend) ResearchView(ctx context.Context, r *pb.Query) (*pb.Document, 
 	if err != nil {
 		return nil, err
 	}
+	if r.ModelUsage {
+		if r.AuditSource != nil || r.AuditThroughRevision != 0 {
+			return nil, ErrDenied
+		}
+		store, ok := b.Store.(hws.ModelUsageReader)
+		if !ok {
+			return nil, ErrDenied
+		}
+		usage, e := store.ReadModelUsage(ctx, c.Scope)
+		if e != nil {
+			return nil, e
+		}
+		if _, e = b.Views.Research(ctx, permit); e != nil {
+			return nil, e
+		}
+		return document("model.usage.v1", usage)
+	}
+	if r.AuditSource != nil {
+		if scope(r.AuditSource.Scope) != c.Scope {
+			return nil, ErrDenied
+		}
+		store, ok := b.Store.(hws.AuditStore)
+		if !ok {
+			return nil, ErrDenied
+		}
+		packet, e := store.ReadAudit(ctx, handle(r.AuditSource), r.AuditThroughRevision)
+		if e != nil {
+			return nil, e
+		}
+		if _, e = b.Views.Research(ctx, permit); e != nil {
+			return nil, e
+		}
+		return document("audit.v1", packet)
+	}
+	if r.AuditThroughRevision != 0 {
+		return nil, ErrDenied
+	}
 	return document("research.view.v1", out)
 }
 func (b *Backend) ExternalObserve(ctx context.Context, r *pb.ExternalRequest) (*pb.Document, error) {

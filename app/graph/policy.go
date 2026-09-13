@@ -17,10 +17,13 @@ var ErrPolicyWriter = errors.New("approved writer failed")
 var ErrPolicyAudit = errors.New("policy audit unavailable")
 
 type PolicyAudit struct {
-	Version  uint32         `json:"version"`
-	Binding  core.ID        `json:"binding"`
-	Stage    core.ID        `json:"stage"`
-	Decision PolicyDecision `json:"decision"`
+	ContextRevision string           `json:"context_revision,omitempty"`
+	ContextHash     string           `json:"context_hash,omitempty"`
+	KnownAt         core.LogicalTime `json:"known_at,omitempty"`
+	Version         uint32           `json:"version"`
+	Binding         core.ID          `json:"binding"`
+	Stage           core.ID          `json:"stage"`
+	Decision        PolicyDecision   `json:"decision"`
 }
 type DecisionRecorder interface {
 	RecordPolicyDecision(context.Context, PolicyAudit) error
@@ -256,14 +259,22 @@ func (p *PolicyService) evaluate(ctx context.Context, proposal ContextProposal) 
 	}
 	return safe, snapshot, PolicyDecision{Allowed: true, Action: "ALLOW", Evidence: []ClauseEvidence{{-1, "explicit_rights_current_lineage"}}}, nil
 }
-func (p *PolicyService) record(ctx context.Context, binding, stage core.ID, decision PolicyDecision) error {
+func (p *PolicyService) record(ctx context.Context, binding, stage core.ID, decision PolicyDecision, proof ...SafeContext) error {
 	if p == nil || p.recorder == nil {
 		return ErrPolicyAudit
 	}
 	if binding.Validate() != nil {
 		binding = "unverified"
 	}
-	if p.recorder.RecordPolicyDecision(ctx, PolicyAudit{Version: 1, Binding: binding, Stage: stage, Decision: decision}) != nil {
+	audit := PolicyAudit{Version: 1, Binding: binding, Stage: stage, Decision: decision}
+	if decision.Allowed && len(proof) == 1 {
+		raw, _ := json.Marshal(proof[0].Items())
+		hash := sha256.Sum256(raw)
+		audit.ContextHash = hex.EncodeToString(hash[:])
+		audit.ContextRevision = proof[0].Revision()
+		audit.KnownAt = proof[0].KnownAt()
+	}
+	if p.recorder.RecordPolicyDecision(ctx, audit) != nil {
 		return ErrPolicyAudit
 	}
 	return nil
@@ -295,7 +306,7 @@ func (p *PolicyService) Approve(ctx context.Context, proposal ContextProposal) (
 }
 func (p *PolicyService) Revalidate(ctx context.Context, approved ApprovedContext, binding core.ID) (safeOut SafeContext, decisionOut PolicyDecision, resultErr error) {
 	defer func() {
-		if err := p.record(ctx, binding, "revalidate", decisionOut); err != nil {
+		if err := p.record(ctx, binding, "revalidate", decisionOut, safeOut); err != nil {
 			safeOut = SafeContext{}
 			decisionOut = policyDeny("audit_unavailable", -1)
 			resultErr = err

@@ -115,6 +115,10 @@ func (r ModelRoute) Validate() error {
 	return nil
 }
 
+// Single-host hard ceiling shared across gateway instances and run scopes. A
+// provider ignoring cancellation holds its slot until Execute actually returns.
+var processModelSlots = make(chan struct{}, 8)
+
 type ModelGateway struct {
 	store    ModelStore
 	views    ModelContextReader
@@ -154,6 +158,12 @@ func (g *ModelGateway) Execute(ctx context.Context, r ModelRequest) (ModelArtifa
 	}
 	scope, _ := (ViewRealm{Scope: r.Scope, Principal: r.Principal}).MemoryScope()
 	intent := ModelIntent{Version: 1, MemoryRevision: safe.Revision(), At: safe.KnownAt(), Scope: r.Scope, Principal: r.Principal, MemoryScope: scope, Key: r.Key, Input: input}
+	select {
+	case processModelSlots <- struct{}{}:
+		defer func() { <-processModelSlots }()
+	default:
+		return ModelArtifact{}, ErrModelBusy
+	}
 	if err = g.store.ConfigureModels(ctx, r.Scope, g.route.Limits); err != nil {
 		return ModelArtifact{}, err
 	}

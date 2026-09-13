@@ -44,7 +44,12 @@ func (s *Store) LoadExport(ctx context.Context, sc hws.Scope, caller, id core.ID
 		return out, hws.ErrViewDenied
 	}
 	var raw []byte
-	err = s.db.QueryRow(ctx, `SELECT p.payload FROM dream.private_payloads p JOIN dream.events e ON(e.actor,e.namespace,e.id)=(p.actor,p.namespace,p.event_id) WHERE p.actor=$1 AND p.namespace=$2 AND p.event_id=$3 AND e.envelope->>'type'='api.export.v1' AND NOT EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(e.actor,e.namespace,e.id))`, sc.Actor, namespace, id).Scan(&raw)
+	tx, err := s.beginRead(ctx)
+	if err != nil {
+		return hws.ExportSubmission{}, err
+	}
+	defer tx.Rollback(ctx)
+	err = tx.QueryRow(ctx, `SELECT p.payload FROM dream.private_payloads p JOIN dream.events e ON(e.actor,e.namespace,e.id)=(p.actor,p.namespace,p.event_id) WHERE p.actor=$1 AND p.namespace=$2 AND p.event_id=$3 AND e.envelope->>'type'='api.export.v1' AND NOT EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(e.actor,e.namespace,e.id))`, sc.Actor, namespace, id).Scan(&raw)
 	if err != nil {
 		return out, hws.ErrViewDenied
 	}

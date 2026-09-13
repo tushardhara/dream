@@ -24,10 +24,24 @@ build:
 	go build -trimpath -o bin/hws ./cmd/hws
 	go build -trimpath -o bin/hws-api ./cmd/hws-api
 	go build -trimpath -o bin/hws-worker ./cmd/hws-worker
+	go build -trimpath -o bin/hws-admin ./cmd/hws-admin
 help-check: build
 	./bin/hws --help
 	./bin/hws-api --help
 	./bin/hws-worker --help
-verify: fmt-check lint test test-race generated-check migration-check help-check
+	./bin/hws-admin --help
+verify: fmt-check lint test test-race generated-check migration-check help-check container-check
 live-provider soak:
 	@echo "BLOCKED: requires explicit owner authorization, provider/budget/infrastructure configuration and a later implemented runner."; exit 1
+
+# Local build only; no registry push, deployment or running provider is implied.
+container-build:
+	@mkdir -p bin/container
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/container/hws ./cmd/hws
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/container/hws-api ./cmd/hws-api
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/container/hws-worker ./cmd/hws-worker
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/container/hws-admin ./cmd/hws-admin
+	docker build --network=none --build-arg REVISION=$$(git rev-parse HEAD) -t dream-local:operations .
+
+container-check:
+	python3 scripts/container-check.py

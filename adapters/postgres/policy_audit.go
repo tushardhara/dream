@@ -22,6 +22,13 @@ func (s *Store) RecordPolicyDecision(ctx context.Context, a graph.PolicyAudit) e
 	if a.Version != 1 || a.Binding.Validate() != nil || (a.Stage != "approve" && a.Stage != "revalidate" && a.Stage != "writer_output" && a.Stage != "view_access") || len(a.Decision.Evidence) > 16 || (a.Decision.Action != "ALLOW" && a.Decision.Action != "WAIT") || a.Decision.Allowed != (a.Decision.Action == "ALLOW") {
 		return fmt.Errorf("invalid policy audit")
 	}
+	if a.ContextHash != "" || a.ContextRevision != "" {
+		hash, e := hex.DecodeString(a.ContextHash)
+		revision, r := hex.DecodeString(a.ContextRevision)
+		if e != nil || r != nil || len(hash) != 32 || len(revision) != 32 || !a.Decision.Allowed || a.Stage != "revalidate" || a.KnownAt < 0 {
+			return fmt.Errorf("invalid policy audit context proof")
+		}
+	}
 	for _, e := range a.Decision.Evidence {
 		if e.Clause.Validate() != nil || e.SourceOrdinal < -1 || e.SourceOrdinal > 15 {
 			return fmt.Errorf("invalid policy audit clause")

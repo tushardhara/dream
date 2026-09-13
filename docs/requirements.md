@@ -285,3 +285,13 @@ exports are implemented. ADR0013 maps verification and states the management-onl
 standalone executable versus embedded execution-host distinction. Engineering
 integration still requires independent exact-SHA review, green CI and an
 INTEGRATED record; implementation is not a main release or deployment.
+
+## #15 operations and audit
+
+ADR-0014 and docs/operations.md map append-only known-usage facts, retained
+reservations, cross-scope provider limits, recovery fencing, redacted metrics/OTel,
+graceful drain/readiness, authorized audit/reproducibility verification and an
+actual pre-revocation backup restore drill. Schema 6 adds a quarantine gate and
+retained revoked IDs; no administrator-proof erasure or automatic journal freshness
+is claimed. The product maintenance worker is not an agent supervisor. Engineering
+acceptance still requires full checks and independent exact-SHA review/integration.

@@ -11,7 +11,7 @@ message Scope {
  string branch = 4;
  string run = 5;
 }
-message Query { Scope scope = 1; }
+message Query { Scope scope = 1; SnapshotHandle audit_source = 2; int64 audit_through_revision = 3; bool model_usage = 4; }
 message ScenarioRequest { Scope scope = 1; string yaml = 2; }
 message CreateWorldRequest {
  Scope scope = 1;

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -140,6 +141,149 @@ func TestModelIntegration(t *testing.T) {
 		}
 		return hws.ModelRequest{Scope: m.Scope, Principal: "a", Key: "decision", Capability: hws.ModelAppraisal, Permit: permit, Approved: approved}, views, record
 	}
+
+	t.Run("UsageLedgerRetainsReservationsAcrossRestartAndFailure", func(t *testing.T) {
+		request, views, _ := fixture(t, "usage-ledger")
+		route := modelRoute()
+		gateway, _ := hws.NewModelGateway(store, views, model.Fake{}, route)
+		if _, e := gateway.Execute(ctx, request); e != nil {
+			t.Fatal(e)
+		}
+		usage, e := New(db).ReadModelUsage(ctx, request.Scope)
+		if e != nil || usage.ReservedTokens != 60000 || usage.KnownAttempts != 1 || usage.KnownInputTokens != 1 || usage.KnownOutputTokens != 1 {
+			t.Fatal(usage, e)
+		}
+		if _, e = gateway.Execute(ctx, request); e != nil {
+			t.Fatal(e)
+		}
+		again, e := New(db).ReadModelUsage(ctx, request.Scope)
+		if e != nil || again != usage {
+			t.Fatal("retry changed ledger", again, e)
+		}
+		for _, sql := range []string{"UPDATE dream.model_usage SET input_tokens=0", "DELETE FROM dream.model_usage"} {
+			if _, e := db.Exec(ctx, sql); e == nil {
+				t.Fatal("mutable usage audit")
+			}
+		}
+		request.Key = "outage"
+		gateway, _ = hws.NewModelGateway(New(db), views, modelFunc(func(context.Context, hws.ProviderInput) (hws.ProviderResponse, error) {
+			return hws.ProviderResponse{}, errors.New("synthetic outage")
+		}), route)
+		if _, e = gateway.Execute(ctx, request); !errors.Is(e, hws.ErrModelUncertain) {
+			t.Fatal(e)
+		}
+		usage, e = New(db).ReadModelUsage(ctx, request.Scope)
+		if e != nil || usage.ReservedTokens != 240000 || usage.ReservedSpendMicros != 240000 || usage.KnownAttempts != 1 || usage.SettledUnknownAttempts != 3 {
+			t.Fatal("outage refunded or hidden", usage, e)
+		}
+		request.Key = "audit-unavailable"
+		exec(t, admin, `CREATE FUNCTION dream.reject_usage() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic audit outage'; END $$; CREATE TRIGGER reject_usage BEFORE INSERT ON dream.model_usage FOR EACH ROW EXECUTE FUNCTION dream.reject_usage()`)
+		gateway, _ = hws.NewModelGateway(New(db), views, model.Fake{}, route)
+		_, e = gateway.Execute(ctx, request)
+		exec(t, admin, `DROP TRIGGER reject_usage ON dream.model_usage; DROP FUNCTION dream.reject_usage()`)
+		if e == nil {
+			t.Fatal("unaudited provider result accepted")
+		}
+		usage, e = New(db).ReadModelUsage(ctx, request.Scope)
+		if e != nil || usage.KnownAttempts != 1 || usage.RunningAttempts != 1 || usage.ReservedTokens != 300000 {
+			t.Fatal("failed settlement was not atomic", usage, e)
+		}
+		exec(t, admin, `UPDATE dream.model_requests SET expires=clock_timestamp()-interval '1 second' WHERE key='audit-unavailable'`)
+		exec(t, admin, `CREATE FUNCTION dream.reject_recovery() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF convert_from(NEW.envelope,'UTF8') LIKE '%model.recovery.v1%' THEN RAISE EXCEPTION 'synthetic audit outage'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_recovery BEFORE INSERT ON dream.events FOR EACH ROW EXECUTE FUNCTION dream.reject_recovery()`)
+		if n, e := store.ReconcileModels(ctx, request.Scope); e == nil || n != 0 {
+			t.Fatal("unaudited recovery", n, e)
+		}
+		exec(t, admin, `DROP TRIGGER reject_recovery ON dream.events; DROP FUNCTION dream.reject_recovery()`)
+		var recovered atomic.Int64
+		var recoveryWG sync.WaitGroup
+		for range 8 {
+			recoveryWG.Go(func() {
+				n, e := New(db).ReconcileModels(ctx, request.Scope)
+				if e != nil {
+					t.Error(e)
+				}
+				recovered.Add(int64(n))
+			})
+		}
+		recoveryWG.Wait()
+		if recovered.Load() != 1 {
+			t.Fatal("recovery duplicate or missing", recovered.Load())
+		}
+		usage, e = New(db).ReadModelUsage(ctx, request.Scope)
+		if e != nil || usage.UncertainRequests != 1 || usage.ReservedTokens != 300000 || usage.KnownAttempts != 1 {
+			t.Fatal("recovery refunded uncertainty", usage, e)
+		}
+		if _, _, e = store.FailedModel(ctx, request.Scope, request.Key); e == nil {
+			t.Fatal("uncertain call became behavioral WAIT")
+		}
+		if _, e = gateway.Execute(ctx, request); e != nil {
+			t.Fatal("explicit retry after recovery", e)
+		}
+		usage, e = New(db).ReadModelUsage(ctx, request.Scope)
+		if e != nil || usage.ReservedTokens != 360000 || usage.KnownAttempts != 2 || usage.UncertainRequests != 0 {
+			t.Fatal("retry ledger", usage, e)
+		}
+		request.Key = "over-total-after-restart"
+		gateway, _ = hws.NewModelGateway(New(db), views, model.Fake{}, route)
+		if _, e = gateway.Execute(ctx, request); !errors.Is(e, hws.ErrModelBudget) {
+			t.Fatal("restart reset budget", e)
+		}
+
+	})
+
+	t.Run("ProcessProviderCeilingAcrossRunScopesAndCancellation", func(t *testing.T) {
+		requests := make([]hws.ModelRequest, 9)
+		gateways := make([]*hws.ModelGateway, 9)
+		entered := make(chan struct{}, 9)
+		release := make(chan struct{})
+		var once sync.Once
+		unblock := func() { once.Do(func() { close(release) }) }
+		defer unblock()
+		var calls atomic.Int64
+		provider := modelFunc(func(c context.Context, i hws.ProviderInput) (hws.ProviderResponse, error) {
+			if calls.Add(1) > 8 {
+				return (model.Fake{}).Generate(c, i)
+			}
+			entered <- struct{}{}
+			<-release
+			return (model.Fake{}).Generate(c, i)
+		})
+		for index := range requests {
+			r, v, _ := fixture(t, fmt.Sprintf("host-cap-%d", index))
+			requests[index] = r
+			gateways[index], _ = hws.NewModelGateway(store, v, provider, modelRoute())
+		}
+		bounded, cancel := context.WithCancel(ctx)
+		defer cancel()
+		var wg sync.WaitGroup
+		for i := range 8 {
+			wg.Go(func() { _, _ = gateways[i].Execute(bounded, requests[i]) })
+		}
+		for range 8 {
+			select {
+			case <-entered:
+			case <-time.After(5 * time.Second):
+				unblock()
+				wg.Wait()
+				t.Fatal("provider admission missing")
+			}
+		}
+		if _, e := gateways[8].Execute(ctx, requests[8]); !errors.Is(e, hws.ErrModelBusy) {
+			t.Fatal("cross-run provider cap absent", e)
+		}
+		cancel()
+		if _, e := gateways[8].Execute(ctx, requests[8]); !errors.Is(e, hws.ErrModelBusy) {
+			t.Fatal("cancel freed physically active slots", e)
+		}
+		if calls.Load() != 8 {
+			t.Fatal("too many physical provider calls", calls.Load())
+		}
+		unblock()
+		wg.Wait()
+		if _, e := gateways[8].Execute(ctx, requests[8]); e != nil {
+			t.Fatal("provider slots did not recover", e)
+		}
+	})
 	t.Run("DurableResponseCrashAndExactlyOnceTransition", func(t *testing.T) {
 		request, views, record := fixture(t, "crash")
 		var calls int

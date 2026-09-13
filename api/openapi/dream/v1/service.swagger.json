@@ -687,6 +687,16 @@
       "properties": {
         "scope": {
           "$ref": "#/definitions/v1Scope"
+        },
+        "auditSource": {
+          "$ref": "#/definitions/v1SnapshotHandle"
+        },
+        "auditThroughRevision": {
+          "type": "string",
+          "format": "int64"
+        },
+        "modelUsage": {
+          "type": "boolean"
         }
       }
     },
