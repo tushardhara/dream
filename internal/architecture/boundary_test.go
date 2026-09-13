@@ -53,6 +53,11 @@ func TestRules(t *testing.T) {
 		{"simulator", "github.com/tushardhara/dream/evals", true},
 		{"app/hws", "github.com/tushardhara/dream/evals", true},
 		{"app/graph", "github.com/tushardhara/dream/core", false},
+		{"examples/graphclient", "github.com/tushardhara/dream/simulator", true},
+		{"examples/graphclient", "github.com/tushardhara/dream/app/hws", true},
+		{"examples/graphclient", "github.com/tushardhara/dream/adapters/postgres", true},
+		{"examples/graphclient", "github.com/tushardhara/dream/app/graph", false},
+		{"examples/graphclient", "github.com/tushardhara/dream/core", false},
 		{"adapters", "github.com/tushardhara/dream/core", false},
 	} {
 		t.Run(tc.from+"/"+tc.target, func(t *testing.T) {

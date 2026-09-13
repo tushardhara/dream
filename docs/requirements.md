@@ -209,3 +209,16 @@ required by retrieval. The unchanged payload cap and explicit per-scope record
 budget are small-fixture limits, not long-horizon scale claims; #11/#15 carry that
 integration work. Full source traceability and later #12 policy/#14 credentials
 remain separate gates, not fabricated passes.
+
+## Issue #9 relationship and second-host evidence
+
+ADR-0008 maps first-class observer-specific edge/group projections, temporal roles,
+multiple types, uncertain dimensions/patterns, commitment/open-loop references,
+history and deltas to focused tests and TestRelationIntegration. Membership grants
+no private historical access; opposing perspectives remain separate. The independent
+`examples/graphclient.Run` consumer executes statement ingestion, differing claims,
+correction, revocation and permitted export against real disposable PostgreSQL in
+TestGraphClientIntegration, with no world/run or simulator imports. Import guards
+pin that boundary. app/hws only converts permitted own-perspective projections to
+simulator edge context; actual behavior is #11 and model information policy is #12.
+Small typed-record byte/count limits remain explicit, not final scale evidence.
