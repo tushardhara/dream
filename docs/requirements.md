@@ -177,3 +177,22 @@ fixture labels make no independent evaluation or human realism claim.
 
 See ADR-0005 for host operation semantics, serialized journal write limitation,
 trusted handler/port boundary and deferred CLI/API, dynamics/replay/scientific gates.
+
+## Issue #7 synthetic appraisal evidence and source gap
+
+| Criterion | Evidence / status |
+| --- | --- |
+| Complete HWS §6 drive-name registry | **UNVERIFIED / NOT VERIFIABLE**: complete source list unavailable. No all-names coverage claim. Owner source request remains open |
+| Versioned documented initial active subset | ticket7-subset.v1 contains only the six concepts explicitly named in #7; ADR-0006 lists defaults, active and unsupported parameter coverage |
+| Stable substrate, bounded uncertain latent state, time and causes | TestDecaySubdivisionAndResidue, TestPlasticityBoundsAndCompoundInteraction, TestCodecAndCausalLedger |
+| Permitted perceived event → appraisal → competing deltas | TestPermissionAndStageIdempotency, TestReferenceTransitionGolden, AppraisalHandler boundary tests |
+| One stage owner/key; no double appraisal | appraisal.v1 actor/event key; duplicate/conflict/revocation negatives; real-PG AppraisalPersistenceAndRetry |
+| Analytic decay and subdivision contract | 997-way subdivision, analytic half-life check, FuzzDecayAndAppraisal; explicit 1e-9 quantum/tolerance |
+| Structured short rationale, no private trace | enum/delta-only Rationale; runtime raw-text canary and unknown rationale-code rejection |
+| Intervention changes reference tendency; no action selection | TestInterventionChangesCompetingTendency; #11 owns actual actions/outcomes |
+| Pinned encoding/restart/limits | canonical codec/hash tests, runtime restart hash comparison and existing 4096-byte cap retained |
+
+Proceeding with the explicitly scoped subset follows the existing epic missing-source
+policy and Claude's clarification on issue #7 (comment 5651532761). This does not
+satisfy or erase the complete-registry source gap. Registry/model additions require
+new versions and explicit migration; unknown initialization parameters fail closed.
