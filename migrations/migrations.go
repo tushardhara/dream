@@ -14,3 +14,8 @@ var Initial string
 //
 //go:embed 002_runtime.sql
 var Runtime string
+
+// ReaderScopes adds schema version 3 with explicit scoped restricted readers.
+//
+//go:embed 003_reader_scopes.sql
+var ReaderScopes string

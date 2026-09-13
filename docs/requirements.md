@@ -222,3 +222,19 @@ TestGraphClientIntegration, with no world/run or simulator imports. Import guard
 pin that boundary. app/hws only converts permitted own-perspective projections to
 simulator edge context; actual behavior is #11 and model information policy is #12.
 Small typed-record byte/count limits remain explicit, not final scale evidence.
+
+
+## Issue #12 information boundary evidence
+
+ADR-0009 maps exact per-right lineage checks, opaque context capabilities, current
+runtime revision/time, cache revocation, bounded quotation output and mandatory
+sanitized audits to unit/race and real PostgreSQL tests. Fictional own-disclosure
+has a positive control; restricted third-party assistant disclosure fails directly
+and through derivatives. Actor/self/research/external views are distinct. External
+GodState, labels/future state, unknown attribution and injected writer sources deny.
+Cross-perspective abstraction remains disabled, including research assessments;
+there is no inferred privacy guarantee. Migration 003 adds authenticated-login,
+actor/namespace/class mappings and FORCE RLS; runtime checkpoints stay writer-only.
+Trusted host composition is not network authentication (#14), and models/actions
+remain #10/#11. See ADR-0009 for byte/count limits, attribution assumptions, old
+snapshots/delivered-data limitations and complete requirement-to-test mapping.
