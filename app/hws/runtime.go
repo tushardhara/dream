@@ -77,8 +77,9 @@ type Operation struct {
 	Receipt Receipt
 }
 type ModelUse struct {
-	Key  core.ID `json:"key"`
-	Hash string  `json:"hash"`
+	Failed bool    `json:"failed,omitempty"`
+	Key    core.ID `json:"key"`
+	Hash   string  `json:"hash"`
 }
 
 func RuntimeCommandDigest(c rt.Command, model *ModelUse) (string, error) {

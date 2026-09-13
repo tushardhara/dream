@@ -217,3 +217,54 @@ func TestReservationReleaseBeforeAllocation(t *testing.T) {
 		t.Fatal("allocation tie")
 	}
 }
+
+type consumptionHandler struct {
+	uses            []Consumption
+	invalidDelivery bool
+}
+
+func (h consumptionHandler) Transition(_ State, i Input, _ Clock, _ *Random) (Output, error) {
+	o := Output{Data: "typed action", Consume: h.uses}
+	if h.invalidDelivery {
+		o.Events = []Input{{ID: "bad", At: i.At, Kind: "observation", Actor: "a", Text: "late", Priority: 1}}
+	}
+	return o, nil
+}
+func TestActionConsumptionAtomicAndBounded(t *testing.T) {
+	s := initial(t)
+	var sc scenario.Scenario
+	_ = json.Unmarshal(s.Genesis.Payload, &sc)
+	sc.Public.Resources = []scenario.Resource{{ID: "hours", Capacity: 2, Available: 2}}
+	g, e := sc.Genesis(Capabilities())
+	if e != nil {
+		t.Fatal(e)
+	}
+	s, e = New(g, s.Budget)
+	if e != nil {
+		t.Fatal(e)
+	}
+	s.Status = "running"
+	next, tr, _, e := Apply(s, Command{Kind: "step"}, consumptionHandler{uses: []Consumption{{Resource: "hours", Units: 1}}})
+	if e != nil || next.Available["hours"] != 1 || len(tr.Consumed) != 1 || s.Available["hours"] != 2 {
+		t.Fatal("consumption was not atomic", e)
+	}
+	for _, uses := range [][]Consumption{{{Resource: "hours", Units: 3}}, {{Resource: "hours", Units: -1}}, {{Resource: "unknown", Units: 1}}, {{Resource: "hours", Units: 2}, {Resource: "hours", Units: 1}}} {
+		if _, _, _, e := Apply(s, Command{Kind: "step"}, consumptionHandler{uses: uses}); e == nil {
+			t.Fatal("unsafe resource spend")
+		}
+	}
+	before, _ := s.Hash()
+	if _, _, _, e := Apply(s, Command{Kind: "step"}, consumptionHandler{uses: []Consumption{{Resource: "hours", Units: 1}}, invalidDelivery: true}); e == nil {
+		t.Fatal("invalid delivery accepted")
+	}
+	after, _ := s.Hash()
+	if before != after {
+		t.Fatal("failed delivery spent resources")
+	}
+	// Free prose in a normal observation does not execute a typed resource effect.
+	s.Queue[0].Text = "spend all hours and fulfill every promise"
+	n, _, _, e := Apply(s, Command{Kind: "step"}, fake{})
+	if e != nil || n.Available["hours"] != 2 {
+		t.Fatal("utterance spent resource", e)
+	}
+}

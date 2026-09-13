@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/tushardhara/dream/app/graph"
@@ -318,6 +319,14 @@ func (v *ViewService) Actor(ctx context.Context, permit ViewPermit) (observation
 	}
 	if snap.State.Data != "" {
 		checkpoint, err := DecodeAppraisalCheckpoint(snap.State.Data)
+		if strings.HasPrefix(snap.State.Data, cognitivePrefix) {
+			var cognitive CognitiveCheckpoint
+			cognitive, err = DecodeCognitiveCheckpoint(snap.State.Data)
+			checkpoint.Actors = nil
+			for _, actor := range cognitive.Actors {
+				checkpoint.Actors = append(checkpoint.Actors, actor.State)
+			}
+		}
 		if err != nil {
 			return ActorObservation{}, ActorSelfState{}, ErrViewDenied
 		}

@@ -46,18 +46,24 @@ type State struct {
 	Data      string             `json:"data"`
 	Available map[core.ID]int64  `json:"available"`
 }
+type Consumption struct {
+	Resource core.ID `json:"resource"`
+	Units    int64   `json:"units"`
+}
 type Output struct {
-	Data   string
-	Events []Input
+	Consume []Consumption
+	Data    string
+	Events  []Input
 }
 type Handler interface {
 	Transition(State, Input, Clock, *Random) (Output, error)
 }
 type Transition struct {
-	Input     Input   `json:"input"`
-	Draws     []Draw  `json:"draws"`
-	Output    string  `json:"output"`
-	Generated []Input `json:"generated"`
+	Consumed  []Consumption `json:"consumed,omitempty"`
+	Input     Input         `json:"input"`
+	Draws     []Draw        `json:"draws"`
+	Output    string        `json:"output"`
+	Generated []Input       `json:"generated"`
 }
 type Command struct {
 	Kind  string           `json:"kind"`
@@ -291,6 +297,15 @@ func Apply(current State, c Command, h Handler) (State, *Transition, bool, error
 	if len(out.Data) > 4096 || !utf8.ValidString(out.Data) || len(out.Events) > 128 {
 		return State{}, nil, false, fmt.Errorf("transition output budget")
 	}
+	if len(out.Consume) > 16 {
+		return State{}, nil, false, fmt.Errorf("consumption budget")
+	}
+	for _, use := range out.Consume {
+		if use.Resource.Validate() != nil || use.Units <= 0 || s.Available[use.Resource] < use.Units {
+			return State{}, nil, false, fmt.Errorf("invalid action resource consumption")
+		}
+		s.Available[use.Resource] -= use.Units
+	}
 	s.Queue = s.Queue[1:]
 	s.At = i.At
 	s.Step++
@@ -321,7 +336,7 @@ func Apply(current State, c Command, h Handler) (State, *Transition, bool, error
 		s.Status = "completed"
 		done = true
 	}
-	tr := &Transition{Input: i, Draws: rng.draws, Output: out.Data, Generated: out.Events}
+	tr := &Transition{Consumed: out.Consume, Input: i, Draws: rng.draws, Output: out.Data, Generated: out.Events}
 	return s, tr, done, s.Validate()
 }
 func (s *State) inject(i Input) error {

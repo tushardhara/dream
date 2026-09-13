@@ -226,3 +226,36 @@ func TestOpposingRelationshipViewsStaySeparate(t *testing.T) {
 		t.Fatal("cross-observer delta fabricated")
 	}
 }
+
+func TestApprovedRelationProjectionKeepsObserverAndProvenance(t *testing.T) {
+	v := RelationState{Version: 1, ID: "edge", Kind: "edge", From: &core.Subject{Principal: "a"}, To: &core.Subject{Principal: "b"}, Types: []core.ID{"friend"}, Dimensions: []RelationshipDimension{{Name: "trust", Value: -.5, Confidence: .6}}}
+	text, e := EncodeRelation(v, "a")
+	if e != nil {
+		t.Fatal(e)
+	}
+	item := SafeContextItem{Source: "relation-evidence", Observer: "a", Subject: core.Subject{Principal: "a"}, Kind: RelationshipMemory, Text: text}
+	context := SafeContext{items: []SafeContextItem{item}}
+	relations, e := context.Relations()
+	if e != nil || len(relations) != 1 || relations[0].Observer != "a" || relations[0].Source != "relation-evidence" || relations[0].State.Dimensions[0].Value != -.5 {
+		t.Fatal("relation attribution lost", e)
+	}
+	relations[0].State.Dimensions[0].Value = 1
+	again, e := context.Relations()
+	if e != nil || again[0].State.Dimensions[0].Value != -.5 {
+		t.Fatal("shared relation state")
+	}
+	bad := item
+	bad.Subject = core.Subject{Principal: "b"}
+	if _, e = (SafeContext{items: []SafeContextItem{bad}}).Relations(); e == nil {
+		t.Fatal("envelope mismatch")
+	}
+	v.OpenLoops = []core.ID{"unknown-source"}
+	bad = item
+	bad.Text, e = EncodeRelation(v, "a")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = (SafeContext{items: []SafeContextItem{bad}}).Relations(); e == nil {
+		t.Fatal("missing relation provenance")
+	}
+}

@@ -265,14 +265,19 @@ func validateModelUse(ctx context.Context, tx pgx.Tx, sc hws.Scope, use hws.Mode
 	var principal, namespace, eventID core.ID
 	var status string
 	err := tx.QueryRow(ctx, `SELECT principal,memory_namespace,event_id,status FROM dream.model_requests WHERE actor=$1 AND namespace=$2 AND run=$3 AND key=$4`, sc.Actor, sc.Namespace, sc.Run, use.Key).Scan(&principal, &namespace, &eventID, &status)
-	if err != nil || status != "complete" {
+	if err != nil || (!use.Failed && status != "complete") {
 		return hws.ErrModel
 	}
 	p, err := readModelPayload(ctx, tx, principal, namespace, eventID)
 	if err != nil {
 		return err
 	}
-	if p.Artifact == nil || p.Artifact.Validate(p.Intent.Input) != nil || p.Artifact.Hash != use.Hash {
+	if use.Failed {
+		_, verified, e := failedModel(ctx, tx, sc, use.Key)
+		if e != nil || verified != use {
+			return hws.ErrModel
+		}
+	} else if p.Artifact == nil || p.Artifact.Validate(p.Intent.Input) != nil || p.Artifact.Hash != use.Hash {
 		return hws.ErrModel
 	}
 	snap, _, _, err := loadRuntime(ctx, tx, sc)
@@ -305,4 +310,59 @@ func checkModelSources(ctx context.Context, tx pgx.Tx, i hws.ModelIntent, at cor
 		return hws.ErrModel
 	}
 	return nil
+}
+
+// FailedModel exposes only a settled, exhausted retryable failure. Busy, expired
+// uncertain attempts, refusals, malformed output and policy denial cannot become
+// provider-outage WAIT. The canonical commit rechecks this exact evidence.
+func (s *Store) FailedModel(ctx context.Context, sc hws.Scope, key core.ID) (hws.ModelIntent, hws.ModelUse, error) {
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return hws.ModelIntent{}, hws.ModelUse{}, err
+	}
+	defer tx.Rollback(ctx)
+	intent, use, err := failedModel(ctx, tx, sc, key)
+	if err != nil {
+		return intent, use, err
+	}
+	snap, _, _, err := loadRuntime(ctx, tx, sc)
+	if err != nil {
+		return intent, use, err
+	}
+	if err = checkModelSources(ctx, tx, intent, snap.State.At); err != nil {
+		return intent, use, err
+	}
+	return intent, use, tx.Commit(ctx)
+}
+func failedModel(ctx context.Context, tx pgx.Tx, sc hws.Scope, key core.ID) (hws.ModelIntent, hws.ModelUse, error) {
+	fail := func() (hws.ModelIntent, hws.ModelUse, error) { return hws.ModelIntent{}, hws.ModelUse{}, hws.ErrModel }
+	if sc.Validate() != nil || key.Validate() != nil {
+		return fail()
+	}
+	var principal, namespace, eventID core.ID
+	var status string
+	var attempt int
+	var encoded []byte
+	err := tx.QueryRow(ctx, `SELECT r.principal,r.memory_namespace,r.event_id,r.status,r.attempt,b.limits FROM dream.model_requests r JOIN dream.model_budgets b USING(actor,namespace,run) WHERE r.actor=$1 AND r.namespace=$2 AND r.run=$3 AND r.key=$4`, sc.Actor, sc.Namespace, sc.Run, key).Scan(&principal, &namespace, &eventID, &status, &attempt, &encoded)
+	if err != nil || (status != "unavailable" && status != "rate_limited") {
+		return fail()
+	}
+	var limits hws.ModelLimits
+	if json.Unmarshal(encoded, &limits) != nil || limits.Validate() != nil || attempt != limits.MaxAttempts {
+		return fail()
+	}
+	p, err := readModelPayload(ctx, tx, principal, namespace, eventID)
+	if err != nil || p.Artifact != nil || p.Intent.Validate() != nil || p.Intent.Scope != sc || p.Intent.Key != key {
+		return fail()
+	}
+	hash, err := hws.ModelDigest(struct {
+		Version int
+		Intent  hws.ModelIntent
+		Status  string
+		Attempt int
+	}{1, p.Intent, status, attempt})
+	if err != nil {
+		return fail()
+	}
+	return p.Intent, hws.ModelUse{Key: key, Hash: hash, Failed: true}, nil
 }
