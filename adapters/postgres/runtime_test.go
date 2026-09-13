@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tushardhara/dream/app/hws"
+	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/migrations"
 	"github.com/tushardhara/dream/simulator"
+	"github.com/tushardhara/dream/simulator/dynamics"
 	rt "github.com/tushardhara/dream/simulator/runtime"
 	"github.com/tushardhara/dream/simulator/scenario"
 	"os"
@@ -18,6 +20,12 @@ import (
 	"testing"
 	"time"
 )
+
+type appraisalPerception struct{}
+
+func (appraisalPerception) Perceive(i rt.Input) (dynamics.Perceived, error) {
+	return dynamics.Perceived{Event: i.ID, Actor: i.Actor, OccurredAt: i.At, LearnedAt: i.At, Confidence: .8, Signals: dynamics.Signals{Effort: .5, OtherNeed: .7}, Rights: core.Rights{Resource: i.ID, Grants: []core.Grant{{Actor: i.Actor, Recipient: i.Actor, Purpose: "simulation", Operation: core.Read}, {Actor: i.Actor, Recipient: i.Actor, Purpose: "simulation", Operation: core.Derive}}}}, nil
+}
 
 type futureClock struct{}
 
@@ -349,6 +357,49 @@ func TestRuntimeIntegration(t *testing.T) {
 		snap, e := store.LoadRun(ctx, m.Scope)
 		if e != nil || snap.State.Step != 0 || len(snap.State.Positions) != 0 {
 			t.Fatal("deadline advanced", e)
+		}
+	})
+
+	t.Run("AppraisalPersistenceAndRetry", func(t *testing.T) {
+		m, l := start("appraisal")
+		app := hws.Runtime{Store: store, Handler: hws.AppraisalHandler{Source: appraisalPerception{}}}
+		first, err := app.Execute(ctx, m.Scope, l, "appraise-first", rt.Command{Kind: "step"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		snap, err := store.LoadRun(ctx, m.Scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkpoint, err := hws.DecodeAppraisalCheckpoint(snap.State.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if checkpoint.Last == nil || checkpoint.Last.Cause != "e1" {
+			t.Fatal("appraisal not persisted")
+		}
+		resumed := hws.Runtime{Store: New(db), Handler: hws.AppraisalHandler{Source: appraisalPerception{}}}
+		repeated, err := resumed.Execute(ctx, m.Scope, l, "appraise-first", rt.Command{Kind: "step"})
+		if err != nil || first != repeated {
+			t.Fatal("appraisal retry changed receipt", err)
+		}
+		if _, err = resumed.Execute(ctx, m.Scope, l, "appraise-second", rt.Command{Kind: "step"}); err != nil {
+			t.Fatal(err)
+		}
+		after, err := store.LoadRun(ctx, m.Scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := hws.DecodeAppraisalCheckpoint(after.State.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		applied := 0
+		for _, s := range c.Actors {
+			applied += len(s.Applied)
+		}
+		if applied != 2 {
+			t.Fatal("double appraisal after restart", applied)
 		}
 	})
 	t.Run("RevocationPurgesAndPreventsResume", func(t *testing.T) {
