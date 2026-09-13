@@ -300,11 +300,19 @@ func Apply(current State, c Command, h Handler) (State, *Transition, bool, error
 	if len(out.Consume) > 16 {
 		return State{}, nil, false, fmt.Errorf("consumption budget")
 	}
+	spendable := s.Available
+	if len(out.Consume) > 0 {
+		spendable, err = SpendableResources(s)
+		if err != nil {
+			return State{}, nil, false, err
+		}
+	}
 	for _, use := range out.Consume {
-		if use.Resource.Validate() != nil || use.Units <= 0 || s.Available[use.Resource] < use.Units {
+		if use.Resource.Validate() != nil || use.Units <= 0 || spendable[use.Resource] < use.Units {
 			return State{}, nil, false, fmt.Errorf("invalid action resource consumption")
 		}
 		s.Available[use.Resource] -= use.Units
+		spendable[use.Resource] -= use.Units
 	}
 	s.Queue = s.Queue[1:]
 	s.At = i.At
@@ -370,4 +378,51 @@ func order(q []Input) {
 		}
 		return a.ID < b.ID
 	})
+}
+
+// SpendableResources is the resource executor's permanent-consumption ceiling.
+// Existing reservation commitments remain reserved, even before their interval
+// starts. This is an affordability constraint, not actor access to future text.
+func SpendableResources(s State) (map[core.ID]int64, error) {
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	var sc scenario.Scenario
+	if err := json.Unmarshal(s.Genesis.Payload, &sc); err != nil {
+		return nil, err
+	}
+	maximum := map[core.ID]int64{}
+	for _, r := range sc.Public.Resources {
+		maximum[r.ID] = r.Available
+	}
+	available := map[core.ID]int64{}
+	ceiling := map[core.ID]int64{}
+	for id, n := range s.Available {
+		available[id] = n
+		ceiling[id] = n
+	}
+	queue := append([]Input{}, s.Queue...)
+	order(queue)
+	for _, event := range queue {
+		n := available[event.Resource]
+		switch event.Kind {
+		case "reservation":
+			if event.Units > n {
+				return nil, fmt.Errorf("committed resource schedule impossible")
+			}
+			n -= event.Units
+		case "release":
+			if n > maximum[event.Resource]-event.Units {
+				return nil, fmt.Errorf("committed resource release invalid")
+			}
+			n += event.Units
+		default:
+			continue
+		}
+		available[event.Resource] = n
+		if n < ceiling[event.Resource] {
+			ceiling[event.Resource] = n
+		}
+	}
+	return ceiling, nil
 }
