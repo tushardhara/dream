@@ -312,3 +312,34 @@ func TestActionCannotConsumeCommittedFutureReservation(t *testing.T) {
 		t.Fatal("reservation release resurrected spent capacity")
 	}
 }
+
+func TestRecordedDrawRejectsMismatch(t *testing.T) {
+	original := NewRandom(42, nil)
+	value, e := original.Draw("recorded")
+	if e != nil {
+		t.Fatal(e)
+	}
+	expected := Draw{Stream: "recorded", Position: 0, Value: value}
+	if e = NewRandom(42, nil).ReplayDraw(expected); e != nil {
+		t.Fatal("matching draw denied", e)
+	}
+	for _, kind := range []string{"value", "position", "seed", "stream"} {
+		t.Run(kind, func(t *testing.T) {
+			bad := expected
+			seed := uint64(42)
+			switch kind {
+			case "value":
+				bad.Value++
+			case "position":
+				bad.Position++
+			case "seed":
+				seed++
+			case "stream":
+				bad.Stream = ""
+			}
+			if e := NewRandom(seed, nil).ReplayDraw(bad); e == nil {
+				t.Fatal("recorded draw mismatch accepted")
+			}
+		})
+	}
+}

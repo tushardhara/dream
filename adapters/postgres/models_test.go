@@ -96,7 +96,7 @@ func TestModelIntegration(t *testing.T) {
 		if e = prior.ConfigureModels(ctx, manifest.Scope, modelRoute().Limits); e != nil {
 			t.Fatal("new model budget rejected existing run", e)
 		}
-		if n := count(t, old, `SELECT count(*) FROM dream.schema_versions WHERE version IN(1,2,3,4)`); n != 4 {
+		if n := count(t, old, `SELECT count(*) FROM dream.schema_versions WHERE version IN(1,2,3,4,5)`); n != 5 {
 			t.Fatal("forward ledger", n)
 		}
 	})

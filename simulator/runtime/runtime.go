@@ -12,6 +12,10 @@ import (
 )
 
 const EngineVersion = "runtime.v1"
+const BranchEngineVersion = "runtime.branch.v1"
+
+func SupportedEngine(v string) bool { return v == EngineVersion || v == BranchEngineVersion }
+
 const MaxQueue = 4096
 
 // Budgets are hard ceilings per run, not replenished by resume or lease reclaim.
@@ -31,20 +35,23 @@ type Input struct {
 	Priority int              `json:"priority"`
 }
 type State struct {
-	Version   int                `json:"version"`
-	Genesis   scenario.Genesis   `json:"genesis"`
-	Engine    string             `json:"engine"`
-	RNG       string             `json:"rng"`
-	At        core.LogicalTime   `json:"at"`
-	Step      uint64             `json:"step"`
-	Events    uint64             `json:"events"`
-	Budget    Budgets            `json:"budget"`
-	Status    string             `json:"status"`
-	Queue     []Input            `json:"queue"`
-	Seen      map[core.ID]bool   `json:"seen"`
-	Positions map[core.ID]uint64 `json:"positions"`
-	Data      string             `json:"data"`
-	Available map[core.ID]int64  `json:"available"`
+	RandomDomain    core.ID            `json:"random_domain,omitempty"`
+	ExogenousDomain core.ID            `json:"exogenous_domain,omitempty"`
+	Coupled         bool               `json:"coupled,omitempty"`
+	Version         int                `json:"version"`
+	Genesis         scenario.Genesis   `json:"genesis"`
+	Engine          string             `json:"engine"`
+	RNG             string             `json:"rng"`
+	At              core.LogicalTime   `json:"at"`
+	Step            uint64             `json:"step"`
+	Events          uint64             `json:"events"`
+	Budget          Budgets            `json:"budget"`
+	Status          string             `json:"status"`
+	Queue           []Input            `json:"queue"`
+	Seen            map[core.ID]bool   `json:"seen"`
+	Positions       map[core.ID]uint64 `json:"positions"`
+	Data            string             `json:"data"`
+	Available       map[core.ID]int64  `json:"available"`
 }
 type Consumption struct {
 	Resource core.ID `json:"resource"`
@@ -120,8 +127,11 @@ func New(g scenario.Genesis, b Budgets) (State, error) {
 	return s, s.Validate()
 }
 func (s State) Validate() error {
-	if s.Version != 1 || s.Engine != EngineVersion || s.RNG != RNGVersion || s.At < 0 || s.At > s.Budget.Horizon || s.Step > s.Budget.Steps || s.Events > s.Budget.Events || s.Budget.Steps == 0 || s.Budget.Events == 0 || s.Budget.Steps > 1000000 || s.Budget.Events > 1000000 || len(s.Queue) > MaxQueue || len(s.Seen) > MaxQueue*4 || len(s.Positions) > 64 || len(s.Data) > 4096 || !utf8.ValidString(s.Data) {
+	if s.Version != 1 || !SupportedEngine(s.Engine) || s.RNG != RNGVersion || s.At < 0 || s.At > s.Budget.Horizon || s.Step > s.Budget.Steps || s.Events > s.Budget.Events || s.Budget.Steps == 0 || s.Budget.Events == 0 || s.Budget.Steps > 1000000 || s.Budget.Events > 1000000 || len(s.Queue) > MaxQueue || len(s.Seen) > MaxQueue*4 || len(s.Positions) > 64 || len(s.Data) > 4096 || !utf8.ValidString(s.Data) {
 		return fmt.Errorf("invalid runtime state")
+	}
+	if (s.Engine == EngineVersion && (s.RandomDomain != "" || s.ExogenousDomain != "" || s.Coupled)) || (s.Engine == BranchEngineVersion && (s.RandomDomain.Validate() != nil || (s.ExogenousDomain != "" && s.ExogenousDomain.Validate() != nil) || (!s.Coupled && s.ExogenousDomain != ""))) {
+		return fmt.Errorf("invalid branch RNG profile")
 	}
 	switch s.Status {
 	case "paused", "running", "cancelled", "completed", "budget":
@@ -285,7 +295,7 @@ func Apply(current State, c Command, h Handler) (State, *Transition, bool, error
 	if err = json.Unmarshal(s.Genesis.Payload, &sc); err != nil {
 		return State{}, nil, false, err
 	}
-	rng := NewRandom(sc.World.Seed, s.Positions)
+	rng := NewScopedRandom(sc.World.Seed, s.Positions, s.RandomDomain, s.ExogenousDomain, s.Coupled)
 	handlerState, err := s.Clone()
 	if err != nil {
 		return State{}, nil, false, err

@@ -61,9 +61,10 @@ type Lease struct {
 	Expires time.Time
 }
 type Snapshot struct {
-	Revision int64
-	State    rt.State
-	Deadline time.Time
+	Experiment *ExperimentLabel `json:"experiment,omitempty"`
+	Revision   int64
+	State      rt.State
+	Deadline   time.Time
 }
 type Receipt struct {
 	Revision int64  `json:"revision"`

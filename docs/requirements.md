@@ -264,3 +264,15 @@ codec and ticket-named action registry do not claim complete unavailable HWS sou
 coverage, large studies or validated human realism. Pure internal planner/handler
 ports are not network authentication. See ADR-0011 for recovery, privacy and sizing
 limits and later-ticket responsibilities.
+
+## Issue #13 snapshot, replay and branch evidence
+
+ADR-0012 maps frozen scope/key/hash handles, research authorization, current
+revocation checks, exact recorded replay and isolated counterfactual experiments
+to corruption, concurrent branch/revocation, knowledge-cutoff, budget and process
+restart tests. Migration 005 adds restricted snapshot bodies and immutable
+cross-scope provenance; all old source and scientific limitations remain.
+Fresh experiments are explicitly not byte-guaranteed. Original actor/cognitive,
+model and runtime caps remain; no permission, budget, receipt or time reset is
+hidden inside a fork. Large/live studies and network authentication remain later
+gates, not implied by snapshot/replay engineering evidence.
