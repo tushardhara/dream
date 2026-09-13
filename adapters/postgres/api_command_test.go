@@ -130,4 +130,26 @@ func TestAPICommandStartsAuthenticatedAndStops(t *testing.T) {
 	if strings.Contains(stderr.String(), secret) || strings.Contains(stderr.String(), dbConfig.ConnConfig.Password) {
 		t.Fatal("command exposed credentials")
 	}
+	workerBinary := filepath.Join(directory, "hws-worker")
+	build = osexec.CommandContext(ctx, "go", "build", "-trimpath", "-o", workerBinary, "./cmd/hws-worker")
+	build.Dir = "../.."
+	if output, e := build.CombinedOutput(); e != nil {
+		t.Fatalf("worker build: %v %s", e, output)
+	}
+	workerConfig := map[string]any{"version": 1, "development": true, "scopes": []hws.Scope{manifest.Scope}, "interval_seconds": 1, "max_cycles": 1}
+	workerRaw, _ := json.Marshal(workerConfig)
+	workerPath := filepath.Join(directory, "worker.json")
+	if e := os.WriteFile(workerPath, workerRaw, 0600); e != nil {
+		t.Fatal(e)
+	}
+	worker := osexec.CommandContext(ctx, workerBinary, "--config", workerPath)
+	worker.Env = child.Env
+	output, e := worker.CombinedOutput()
+	if e != nil || !bytes.Contains(output, []byte("bounded cycle budget complete")) {
+		t.Fatal("compiled maintenance worker failed")
+	}
+	if bytes.Contains(output, []byte(secret)) || bytes.Contains(output, []byte(dbConfig.ConnConfig.Password)) {
+		t.Fatal("maintenance log exposed credential")
+	}
+
 }

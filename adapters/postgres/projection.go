@@ -96,8 +96,13 @@ func (s *Store) Query(ctx context.Context, actor, namespace core.ID, subject cor
 	if knownAsOf.IsZero() {
 		return "", fmt.Errorf("missing known-as-of")
 	}
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
 	var id core.ID
-	err := s.db.QueryRow(ctx, `SELECT event_id FROM dream.projections p WHERE actor=$1 AND namespace=$2 AND subject=$3 AND valid_from<=$4 AND (valid_to IS NULL OR valid_to>$4) AND recorded_at<=$5 AND NOT EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(p.actor,p.namespace,p.event_id)) ORDER BY seq DESC LIMIT 1`, actor, namespace, subjectKey(subject), validAt, knownAsOf).Scan(&id)
+	err = tx.QueryRow(ctx, `SELECT event_id FROM dream.projections p WHERE actor=$1 AND namespace=$2 AND subject=$3 AND valid_from<=$4 AND (valid_to IS NULL OR valid_to>$4) AND recorded_at<=$5 AND NOT EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(p.actor,p.namespace,p.event_id)) ORDER BY seq DESC LIMIT 1`, actor, namespace, subjectKey(subject), validAt, knownAsOf).Scan(&id)
 	return id, err
 }
 func subjectKey(v core.Subject) string { return subject(v) }
@@ -109,8 +114,13 @@ func (s *Store) ReadPayload(ctx context.Context, actor, namespace, id core.ID) (
 	}
 	// Single statement keeps class selection and tombstone/payload read on one DB
 	// snapshot. A completed revocation removes bytes from every class table.
+	tx, err := s.begin(ctx)
+	if err != nil {
+		return graph.Payload{}, err
+	}
+	defer tx.Rollback(ctx)
 	var raw []byte
-	err := s.db.QueryRow(ctx, `SELECT payload FROM (SELECT actor,namespace,event_id,payload FROM dream.observable_payloads UNION ALL SELECT actor,namespace,event_id,payload FROM dream.private_payloads UNION ALL SELECT actor,namespace,event_id,payload FROM dream.research_payloads) p WHERE actor=$1 AND namespace=$2 AND event_id=$3 AND NOT EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(p.actor,p.namespace,p.event_id))`, actor, namespace, id).Scan(&raw)
+	err = tx.QueryRow(ctx, `SELECT payload FROM (SELECT actor,namespace,event_id,payload FROM dream.observable_payloads UNION ALL SELECT actor,namespace,event_id,payload FROM dream.private_payloads UNION ALL SELECT actor,namespace,event_id,payload FROM dream.research_payloads) p WHERE actor=$1 AND namespace=$2 AND event_id=$3 AND NOT EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(p.actor,p.namespace,p.event_id))`, actor, namespace, id).Scan(&raw)
 	if err != nil {
 		return graph.Payload{}, err
 	}

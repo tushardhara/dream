@@ -51,6 +51,25 @@ func (b *Backend) exportBytes(ctx context.Context, c Credential, r *pb.ExportReq
 		return nil, err
 	}
 	switch r.Kind {
+	case "audit":
+		if c.Role != hws.ResearchViewKind || r.Source == nil || scope(r.Source.Scope) != c.Scope || len(r.SourceIds) != 0 || r.FromTime != 0 || r.ThroughTime != 0 {
+			return nil, ErrDenied
+		}
+		if _, err = b.Views.Research(ctx, p); err != nil {
+			return nil, err
+		}
+		store, ok := b.Store.(hws.AuditStore)
+		if !ok {
+			return nil, ErrDenied
+		}
+		packet, e := store.ReadAudit(ctx, handle(r.Source), r.ThroughRevision)
+		if e != nil {
+			return nil, e
+		}
+		if err = b.Views.CheckOperation(ctx, p, core.Export); err != nil {
+			return nil, err
+		}
+		return json.Marshal(packet)
 	case "research":
 		if c.Role != hws.ResearchViewKind || r.Source == nil || scope(r.Source.Scope) != c.Scope || len(r.SourceIds) != 0 {
 			return nil, ErrDenied

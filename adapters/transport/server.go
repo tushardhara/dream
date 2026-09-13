@@ -30,8 +30,9 @@ func CurrentIdentity(ctx context.Context, auth *Authenticator) (Credential, erro
 }
 
 type ServerConfig struct {
-	Auth    *Authenticator
-	Backend pb.ResearchServer
+	Observer hws.OperationalObserver
+	Auth     *Authenticator
+	Backend  pb.ResearchServer
 	// RuntimeReady must verify the actual runtime database connection/role.
 	RuntimeReady func(context.Context) error
 	// Admission is an atomic durable ledger; the in-process limiter is additional
@@ -45,6 +46,7 @@ type Servers struct {
 	grpc   *grpc.Server
 	http   *http.Server
 	config ServerConfig
+	life   lifecycle
 }
 
 func NewServers(ctx context.Context, c ServerConfig) (*Servers, error) {
@@ -57,7 +59,11 @@ func NewServers(ctx context.Context, c ServerConfig) (*Servers, error) {
 	if err := c.RuntimeReady(ctx); err != nil {
 		return nil, ErrDenied
 	}
+	servers := &Servers{config: c, life: lifecycle{done: make(chan struct{})}}
 	auth := func(ctx context.Context, values []string) (context.Context, error) {
+		if servers.life.draining.Load() {
+			return nil, status.Error(codes.Unavailable, "server draining")
+		}
 		if len(values) != 1 {
 			return nil, status.Error(codes.Unauthenticated, "authentication required")
 		}
@@ -74,7 +80,9 @@ func NewServers(ctx context.Context, c ServerConfig) (*Servers, error) {
 		}
 		return context.WithValue(ctx, sessionKey{}, s), nil
 	}
-	interceptor := func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	interceptor := func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (result any, resultErr error) {
+		started := time.Now()
+		defer func() { observeAPI(c.Observer, status.Code(resultErr), time.Since(started)) }()
 		ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
 		md, _ := metadata.FromIncomingContext(ctx)
@@ -107,6 +115,14 @@ func NewServers(ctx context.Context, c ServerConfig) (*Servers, error) {
 		return nil, err
 	}
 	httpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+			servers.health(w, r)
+			return
+		}
+		started := time.Now()
+		recorded := &observedWriter{ResponseWriter: w, code: 200}
+		w = recorded
+		defer func() { observeHTTP(c.Observer, recorded.code, time.Since(started)) }()
 		bounded, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
 		r = r.WithContext(bounded)
@@ -118,6 +134,9 @@ func NewServers(ctx context.Context, c ServerConfig) (*Servers, error) {
 		trusted, err := auth(r.Context(), r.Header.Values("Authorization"))
 		if err != nil {
 			code := http.StatusUnauthorized
+			if status.Code(err) == codes.Unavailable {
+				code = http.StatusServiceUnavailable
+			}
 			if status.Code(err) == codes.ResourceExhausted {
 				code = http.StatusTooManyRequests
 			}
@@ -127,7 +146,9 @@ func NewServers(ctx context.Context, c ServerConfig) (*Servers, error) {
 		r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 		mux.ServeHTTP(w, r.WithContext(trusted))
 	})
-	return &Servers{grpc: rpc, http: &http.Server{Handler: httpHandler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: c.TLS}, config: c}, nil
+	servers.grpc = rpc
+	servers.http = &http.Server{Handler: httpHandler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, TLSConfig: c.TLS}
+	return servers, nil
 }
 func (s *Servers) validateListener(l net.Listener) error {
 	if s == nil || l == nil {
@@ -212,6 +233,7 @@ func authorizeWire(ctx context.Context, a *Authenticator, method string, request
 
 func (s *Servers) Close() {
 	if s != nil {
+		s.life.draining.Store(true)
 		s.grpc.Stop()
 		_ = s.http.Close()
 	}

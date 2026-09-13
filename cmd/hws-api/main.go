@@ -14,12 +14,12 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tushardhara/dream/adapters/postgres"
+	"github.com/tushardhara/dream/adapters/telemetry"
 	api "github.com/tushardhara/dream/adapters/transport"
 	"github.com/tushardhara/dream/app/hws"
 )
@@ -122,7 +122,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	startup, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	poolConfig, err := pgxpool.ParseConfig(dsn)
-	if err != nil || (!c.Development && poolConfig.ConnConfig.TLSConfig == nil && !strings.HasPrefix(poolConfig.ConnConfig.Host, "/")) {
+	if err != nil || (!c.Development && !postgres.ProtectedConnection(poolConfig.ConnConfig)) {
 		fmt.Fprintln(errOut, "hws-api: protected runtime database configuration required")
 		return 1
 	}
@@ -148,7 +148,9 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 		return 1
 	}
 	backend := &api.Backend{Auth: auth, Store: store, Views: views}
-	servers, err := api.NewServers(startup, api.ServerConfig{Auth: auth, Backend: backend, Development: c.Development, TLS: protection, RuntimeReady: store.RuntimeReady, Admission: func(ctx context.Context, c api.Credential) error {
+	signals := &telemetry.Recorder{}
+	defer func() { fmt.Fprintf(out, "hws-api: operational_counts=%v\n", signals.Counts()) }()
+	servers, err := api.NewServers(startup, api.ServerConfig{Observer: signals, Auth: auth, Backend: backend, Development: c.Development, TLS: protection, RuntimeReady: store.RuntimeReady, Admission: func(ctx context.Context, c api.Credential) error {
 		return store.AdmitRequest(ctx, hws.RequestBudget{Credential: c.ID, Scope: c.Scope, PerMinute: c.RequestsPerMinute, Total: c.TotalRequests})
 	}})
 	if err != nil {
@@ -174,6 +176,12 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	fmt.Fprintf(out, "hws-api: management-only grpc=%s http=%s\n", rpc.Addr(), http.Addr())
 	select {
 	case <-ctx.Done():
+		drain, cancelDrain := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancelDrain()
+		if servers.Shutdown(drain) != nil {
+			fmt.Fprintln(errOut, "hws-api: drain deadline reached; durable state requires reconciliation")
+			return 1
+		}
 		return 0
 	case <-failures:
 		fmt.Fprintln(errOut, "hws-api: listener stopped")

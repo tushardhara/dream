@@ -28,7 +28,7 @@ func New(db *pgxpool.Pool) *Store { return &Store{db: db} }
 var _ graph.EventWriter = (*Store)(nil)
 
 // Migrate requires dedicated migration authority. Runtime writers cannot create
-// schemas/roles. Supports empty, v1 (forward upgrade), or the current v5 ledger.
+// schemas/roles. Supports empty, v1 (forward upgrade), or the current v6 ledger.
 func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -47,7 +47,7 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 		if err = tx.QueryRow(ctx, "SELECT count(*),coalesce(max(version),0) FROM dream.schema_versions").Scan(&count, &version); err != nil {
 			return err
 		}
-		if !(count == version && version >= 1 && version <= 5) {
+		if !(count == version && version >= 1 && version <= 6) {
 			return fmt.Errorf("unsupported database schema")
 		}
 		if version == 1 {
@@ -70,6 +70,11 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 				return err
 			}
 		}
+		if version < 6 {
+			if _, err = tx.Exec(ctx, migrations.Operations); err != nil {
+				return err
+			}
+		}
 	} else {
 		if _, err = tx.Exec(ctx, migrations.Initial); err != nil {
 			return err
@@ -86,6 +91,9 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 		if _, err = tx.Exec(ctx, migrations.Snapshots); err != nil {
 			return err
 		}
+		if _, err = tx.Exec(ctx, migrations.Operations); err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx)
 }
@@ -95,6 +103,9 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 // commit cannot cause a projector to skip an earlier uncommitted sequence).
 // No callback or provider call is accepted inside these transactions.
 func (s *Store) begin(ctx context.Context) (pgx.Tx, error) {
+	return s.beginRecovery(ctx, false)
+}
+func (s *Store) beginRecovery(ctx context.Context, recovery bool) (pgx.Tx, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -102,6 +113,40 @@ func (s *Store) begin(ctx context.Context) (pgx.Tx, error) {
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(41001)"); err != nil {
 		tx.Rollback(ctx)
 		return nil, err
+	}
+	var exists bool
+	if err = tx.QueryRow(ctx, `SELECT to_regclass('dream.recovery_gate') IS NOT NULL`).Scan(&exists); err != nil {
+		tx.Rollback(ctx)
+		return nil, err
+	}
+	if exists && !recovery {
+		var ready bool
+		if err = tx.QueryRow(ctx, `SELECT ready FROM dream.recovery_gate WHERE singleton`).Scan(&ready); err != nil || !ready {
+			tx.Rollback(ctx)
+			return nil, ErrRevoked
+		}
+	}
+	return tx, nil
+}
+
+// beginRead preserves independent lease renewal/read transactions while checking
+// restore admission. Restore itself must start on an isolated, drained database.
+func (s *Store) beginRead(ctx context.Context) (pgx.Tx, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var exists bool
+	if err = tx.QueryRow(ctx, `SELECT to_regclass('dream.recovery_gate') IS NOT NULL`).Scan(&exists); err != nil {
+		tx.Rollback(ctx)
+		return nil, err
+	}
+	if exists {
+		var ready bool
+		if err = tx.QueryRow(ctx, `SELECT ready FROM dream.recovery_gate WHERE singleton`).Scan(&ready); err != nil || !ready {
+			tx.Rollback(ctx)
+			return nil, ErrRevoked
+		}
 	}
 	return tx, nil
 }
@@ -124,6 +169,20 @@ func (s *Store) append(ctx context.Context, tx pgx.Tx, c graph.AppendCommand) (g
 	digest, err := c.Digest()
 	if err != nil {
 		return graph.AppendResult{}, err
+	}
+	var hasJournal bool
+	if err = tx.QueryRow(ctx, `SELECT to_regclass('dream.restored_revocations') IS NOT NULL`).Scan(&hasJournal); err != nil {
+		return graph.AppendResult{}, err
+	}
+	if hasJournal {
+		var revoked bool
+		ids := append([]core.ID{c.Event.Meta.ID}, c.Event.Meta.Parents...)
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM dream.restored_revocations WHERE actor=$1 AND namespace=$2 AND event_id=ANY($3))`, c.Actor, c.Namespace, ids).Scan(&revoked); err != nil {
+			return graph.AppendResult{}, err
+		}
+		if revoked {
+			return graph.AppendResult{}, ErrRevoked
+		}
 	}
 	var old []byte
 	var result graph.AppendResult

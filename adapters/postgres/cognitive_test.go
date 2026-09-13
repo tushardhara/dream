@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tushardhara/dream/adapters/model"
+	"github.com/tushardhara/dream/adapters/telemetry"
 	"github.com/tushardhara/dream/app/graph"
 	"github.com/tushardhara/dream/app/hws"
 	"github.com/tushardhara/dream/core"
@@ -44,7 +45,7 @@ func TestCognitiveIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	store := New(db)
-	for _, name := range []string{"recorded", "disclosure", "revoked_during_plan", "forged_operational", "outage", "refused"} {
+	for _, name := range []string{"recorded", "disclosure", "revoked_during_plan", "forged_operational", "outage", "refused", "wait"} {
 		t.Run(name, func(t *testing.T) {
 			m := runtimeManifest(t, "cognitive-"+name)
 			if _, e = store.CreateRun(ctx, m); e != nil {
@@ -54,7 +55,8 @@ func TestCognitiveIntegration(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			runtime := hws.Runtime{Store: store}
+			signals := &telemetry.Recorder{}
+			runtime := hws.Runtime{Store: store, Observer: signals}
 			if _, e = runtime.Execute(ctx, m.Scope, lease, "resume", rt.Command{Kind: "resume"}); e != nil {
 				t.Fatal(e)
 			}
@@ -115,6 +117,9 @@ func TestCognitiveIntegration(t *testing.T) {
 				}
 				p, _ := (appraisalPerception{}).Perceive(i)
 				f := hws.CognitiveFrame{Situation: behavior.Situation{Perceived: p, Horizon: 80, Offers: []behavior.Offer{{Kind: behavior.Ask, Recipient: "a", Duration: 1}}}}
+				if name == "wait" {
+					f.Situation.Offers = nil
+				}
 				if name == "disclosure" {
 					f.Situation.Offers = []behavior.Offer{{Kind: behavior.SelfDisclose, Recipient: "a", Duration: 1}}
 				}
@@ -162,6 +167,18 @@ func TestCognitiveIntegration(t *testing.T) {
 			}
 			if checkpoint.Last.Actor != "b" || (name != "outage" && checkpoint.ModelHash != artifact.Hash) || len(checkpoint.Outcomes) != 1 || checkpoint.Actors[1].State.Applied[0].Event != "e1" {
 				t.Fatal("missing persisted cognitive record")
+			}
+			if name == "wait" {
+				counts := signals.Counts()
+				if counts[hws.CognitiveCommit][hws.BehavioralWait] != 1 || counts[hws.CognitiveCommit][hws.ProviderOutage] != 0 {
+					t.Fatal("behavioral WAIT misclassified", counts)
+				}
+			}
+			if name == "outage" {
+				counts := signals.Counts()
+				if counts[hws.CognitiveCommit][hws.ProviderOutage] != 1 || counts[hws.CognitiveCommit][hws.BehavioralWait] != 0 {
+					t.Fatal("outage presented as behavior", counts)
+				}
 			}
 			// Crash/restart uses the durable runtime operation receipt, no generation.
 			if name == "outage" {

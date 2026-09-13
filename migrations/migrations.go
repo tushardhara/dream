@@ -29,3 +29,8 @@ var Models string
 //
 //go:embed 005_snapshots.sql
 var Snapshots string
+
+// Operations adds append-only observed usage facts without refunding reservations.
+//
+//go:embed 006_operations.sql
+var Operations string

@@ -18,6 +18,8 @@ func (s *Store) RuntimeReady(ctx context.Context) error {
 	}
 	var safe bool
 	err := s.db.QueryRow(ctx, `SELECT current_user=session_user
+ AND (SELECT ready FROM dream.recovery_gate WHERE singleton)
+ AND (SELECT max(version) FROM dream.schema_versions)=6
  AND pg_has_role(session_user,'dream_writer','USAGE')
  AND NOT EXISTS(SELECT 1 FROM pg_roles r WHERE pg_has_role(session_user,r.oid,'MEMBER') AND (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb))
  AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='dream' AND pg_has_role(session_user,c.relowner,'MEMBER'))

@@ -26,12 +26,12 @@ try:
     else:
         raise RuntimeError("disposable Postgres did not become ready")
     port = command("docker", "port", name, "5432/tcp").rsplit(":", 1)[1]
-    env = dict(os.environ, DREAM_TEST_DSN=f"postgres://postgres:disposable_local_only@127.0.0.1:{port}/postgres?sslmode=disable")
+    env = dict(os.environ, DREAM_TEST_CONTAINER=name, DREAM_TEST_DSN=f"postgres://postgres:disposable_local_only@127.0.0.1:{port}/postgres?sslmode=disable")
     subprocess.run(["go", "test", "-race", "-count=1", "-timeout=120s", "-v", "./adapters/postgres"], env=env, check=True, timeout=150)
     dump = command("docker", "exec", name, "pg_dump", "-U", "postgres", "-d", "postgres", "--schema=dream")
     command("docker", "exec", name, "createdb", "-U", "postgres", "dream_restore")
     command("docker", "exec", "-i", name, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "dream_restore", input=dump)
-    query = """SELECT (SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3,4,5))=5 AND (SELECT max(version) FROM dream.schema_versions)=5
+    query = """SELECT (SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3,4,5,6))=6 AND (SELECT max(version) FROM dream.schema_versions)=6
       AND (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='dream' AND c.relname IN ('observable_payloads','private_payloads','research_payloads','runtime_payloads','reader_scopes','model_payloads','snapshot_payloads') AND c.relrowsecurity AND c.relforcerowsecurity)=7
       AND (SELECT count(*) FROM dream.tombstones)>0

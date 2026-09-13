@@ -133,7 +133,7 @@ func (s *Store) LoadRun(ctx context.Context, sc hws.Scope) (hws.Snapshot, error)
 	if err := sc.Validate(); err != nil {
 		return hws.Snapshot{}, err
 	}
-	tx, err := s.db.Begin(ctx)
+	tx, err := s.beginRead(ctx)
 	if err != nil {
 		return hws.Snapshot{}, err
 	}
@@ -160,7 +160,7 @@ func (s *Store) lease(ctx context.Context, sc hws.Scope, l hws.Lease, ttl time.D
 	if err := validTTL(l.Holder, ttl); err != nil {
 		return hws.Lease{}, err
 	}
-	tx, err := s.db.Begin(ctx)
+	tx, err := s.beginRead(ctx)
 	if err != nil {
 		return hws.Lease{}, err
 	}
@@ -230,7 +230,7 @@ func (s *Store) Operation(ctx context.Context, sc hws.Scope, key core.ID) (*hws.
 	if err := key.Validate(); err != nil {
 		return nil, err
 	}
-	tx, err := s.db.Begin(ctx)
+	tx, err := s.beginRead(ctx)
 	if err != nil {
 		return nil, err
 	}

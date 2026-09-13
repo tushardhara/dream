@@ -215,7 +215,8 @@ func (s *Store) FinishModel(ctx context.Context, a hws.ModelAttempt, artifact *h
 	var fence, version int64
 	var storedDigest, currentStatus string
 	var active bool
-	err = tx.QueryRow(ctx, `SELECT event_id,fence,event_version,digest,status,expires>clock_timestamp() FROM dream.model_requests WHERE actor=$1 AND namespace=$2 AND run=$3 AND key=$4`, sc.Actor, sc.Namespace, sc.Run, i.Key).Scan(&eventID, &fence, &version, &storedDigest, &currentStatus, &active)
+	var storedAttempt int
+	err = tx.QueryRow(ctx, `SELECT event_id,fence,event_version,digest,status,expires>clock_timestamp(),attempt FROM dream.model_requests WHERE actor=$1 AND namespace=$2 AND run=$3 AND key=$4`, sc.Actor, sc.Namespace, sc.Run, i.Key).Scan(&eventID, &fence, &version, &storedDigest, &currentStatus, &active, &storedAttempt)
 	if err != nil {
 		return err
 	}
@@ -232,7 +233,7 @@ func (s *Store) FinishModel(ctx context.Context, a hws.ModelAttempt, artifact *h
 			return err
 		}
 	}
-	if a.Fence != fence || digest != storedDigest || currentStatus != "running" {
+	if a.Number != storedAttempt || a.Fence != fence || digest != storedDigest || currentStatus != "running" {
 		return hws.ErrConflict
 	}
 	if _, err = readModelPayload(ctx, tx, i.Principal, i.MemoryScope.Namespace, eventID); err != nil {
@@ -253,6 +254,16 @@ func (s *Store) FinishModel(ctx context.Context, a hws.ModelAttempt, artifact *h
 	if _, err = tx.Exec(ctx, `INSERT INTO dream.model_payloads VALUES($1,$2,$3,$4)`, i.Principal, i.MemoryScope.Namespace, result.EventID, raw); err != nil {
 		return err
 	}
+	// Unknown/failed usage stays NULL; it is never represented as zero or refunded.
+	var inputTokens, outputTokens *int64
+	if artifact != nil {
+		inputTokens = &artifact.Response.InputTokens
+		outputTokens = &artifact.Response.OutputTokens
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO dream.model_usage(actor,namespace,run,key,attempt,principal,memory_namespace,event_id,status,input_tokens,output_tokens) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, sc.Actor, sc.Namespace, sc.Run, i.Key, a.Number, i.Principal, i.MemoryScope.Namespace, result.EventID, label, inputTokens, outputTokens); err != nil {
+		return err
+	}
+
 	if _, err = tx.Exec(ctx, `UPDATE dream.model_requests SET event_id=$5,status=$6,event_version=$7 WHERE actor=$1 AND namespace=$2 AND run=$3 AND key=$4`, sc.Actor, sc.Namespace, sc.Run, i.Key, result.EventID, label, version+1); err != nil {
 		return err
 	}

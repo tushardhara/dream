@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	osexec "os/exec"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -335,6 +338,7 @@ func TestAuthenticatedServerPostgresOperationsAndExport(t *testing.T) {
 		service := hws.CognitiveService{Gateway: gateway, Views: views, Runtime: hws.Runtime{Store: store, BeforeCommit: before}, Planner: planner}
 		return service.Step(ctx, hws.ModelRequest{Scope: sc, Principal: "a", Key: key, Capability: hws.ModelInterpretation, Permit: permit, Approved: approved}, lease, key, nil)
 	}
+	latencyStart := time.Now()
 	var simultaneous sync.WaitGroup
 	replies := make([]*pb.Document, 12)
 	failures := make([]error, 12)
@@ -346,6 +350,7 @@ func TestAuthenticatedServerPostgresOperationsAndExport(t *testing.T) {
 		}(i)
 	}
 	simultaneous.Wait()
+	t.Logf("workload=12 simultaneous duplicate model-step RPCs elapsed=%s environment=%s/%s GOMAXPROCS=%d PostgreSQL=18.6 fixture_cpu_cap=2 fixture_memory=512MiB provider=fake", time.Since(latencyStart), runtime.GOOS, runtime.GOARCH, runtime.GOMAXPROCS(0))
 	for i := range replies {
 		if failures[i] != nil || !proto.Equal(replies[0], replies[i]) {
 			t.Fatal("concurrent model operation retry", i, failures[i])
@@ -353,6 +358,84 @@ func TestAuthenticatedServerPostgresOperationsAndExport(t *testing.T) {
 	}
 	if modelCalls.Load() != 1 {
 		t.Fatal("concurrent retry regenerated model", modelCalls.Load())
+	}
+
+	var committed hws.Receipt
+	if json.Unmarshal(replies[0].CanonicalJson, &committed) != nil {
+		t.Fatal("model receipt decode")
+	}
+	auditQuery := &pb.Query{Scope: wire, AuditSource: snapshot, AuditThroughRevision: committed.Revision}
+	auditDoc, err := client.ResearchView(research, auditQuery)
+	if err != nil {
+		_, detail := store.ReadAudit(ctx, hws.SnapshotKey{Scope: manifest.Scope, ID: core.ID(snapshot.Key), Hash: snapshot.Hash}, committed.Revision)
+		t.Fatal("audit query", err, detail)
+	}
+	var packet hws.AuditPacket
+	if json.Unmarshal(auditDoc.CanonicalJson, &packet) != nil || hws.VerifyAudit(packet, packet.Hash) != nil || len(packet.Models) != 1 || len(packet.Policies) == 0 {
+		t.Fatal("unverified or incomplete audit packet")
+	}
+	verifier := filepath.Join(t.TempDir(), "hws")
+	buildVerifier := osexec.CommandContext(ctx, "go", "build", "-trimpath", "-o", verifier, "./cmd/hws")
+	buildVerifier.Dir = "../.."
+	if raw, e := buildVerifier.CombinedOutput(); e != nil {
+		t.Fatalf("verifier build: %v %s", e, raw)
+	}
+	for _, expected := range []string{packet.Hash, "wrong-independent-hash"} {
+		command := osexec.CommandContext(ctx, verifier, "audit", "verify", "-", "--sha256", expected)
+		command.Stdin = bytes.NewReader(auditDoc.CanonicalJson)
+		raw, e := command.CombinedOutput()
+		if (e == nil) != (expected == packet.Hash) {
+			t.Fatal("offline audit command verification mismatch")
+		}
+		if bytes.Contains(raw, []byte("SYNTHETIC_")) {
+			t.Fatal("offline verifier leaked payload")
+		}
+	}
+	usageDoc, e := client.ResearchView(research, &pb.Query{Scope: wire, ModelUsage: true})
+	var usage hws.ModelUsage
+	if e != nil || json.Unmarshal(usageDoc.CanonicalJson, &usage) != nil || usage.KnownAttempts != 1 || usage.ReservedTokens != 60000 {
+		t.Fatal("authorized usage query", e, usage)
+	}
+	if _, err = client.ResearchView(actor, auditQuery); err == nil {
+		t.Fatal("actor obtained research audit")
+	}
+	badAudit := proto.Clone(auditQuery).(*pb.Query)
+	badAudit.AuditSource.Scope = childWire
+	if _, err = client.ResearchView(research, badAudit); err == nil {
+		t.Fatal("audit nested scope IDOR")
+	}
+	for _, mutate := range []func(*hws.AuditPacket){func(p *hws.AuditPacket) { p.Models = nil }, func(p *hws.AuditPacket) { p.Policies = nil }, func(p *hws.AuditPacket) { p.Models[0].Intent.Input.Context[0].Text = "tampered" }, func(p *hws.AuditPacket) { p.Replay.Frames[0].After = "corrupt" }} {
+		var bad hws.AuditPacket
+		_ = json.Unmarshal(auditDoc.CanonicalJson, &bad)
+		mutate(&bad)
+		if hws.VerifyAudit(bad, packet.Hash) == nil {
+			t.Fatal("audit mutation passed external hash")
+		}
+		if _, err = hws.SealAudit(bad); err == nil {
+			t.Fatal("audit mutation could be resealed as valid")
+		}
+	}
+	if _, err = client.SubmitExport(research, &pb.ExportRequest{Scope: wire, ExportId: "audit-export", Kind: "audit", Source: snapshot, ThroughRevision: committed.Revision}); err != nil {
+		t.Fatal("audit export", err)
+	}
+	page, err = client.DownloadExport(research, &pb.DownloadRequest{Scope: wire, ExportId: "audit-export", PageSize: 128})
+	if err != nil || page.NextCursor == "" {
+		t.Fatal("partial audit export", err)
+	}
+	// Revoke the model evidence after a partial download; retained cursor/hash
+	// cannot restore authority or obtain the rest of the previously valid packet.
+	revokedEvidence := evidence.Event
+	revokedEvidence.Type = "revoke"
+	revokedEvidence.Meta.ID = "revoke-audit-e2"
+	revokedEvidence.Meta.Rights = core.Rights{Resource: revokedEvidence.Meta.ID}
+	if _, err = graph.RevokeMemory(ctx, store, memoryScope, revokedEvidence.Meta.ID, 1, revokedEvidence, "e2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.DownloadExport(research, &pb.DownloadRequest{Scope: wire, ExportId: "audit-export", PageSize: 128, Cursor: page.NextCursor}); err == nil {
+		t.Fatal("partial export resurrected revoked context")
+	}
+	if _, err = client.ResearchView(research, auditQuery); err == nil {
+		t.Fatal("audit query resurrected revoked context")
 	}
 	permit, err := views.Permit("researcher", grants[0].Realm, hws.ResearchViewKind, "research")
 	if err != nil {

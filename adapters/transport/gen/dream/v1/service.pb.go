@@ -100,10 +100,13 @@ func (x *Scope) GetRun() string {
 }
 
 type Query struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scope         *Scope                 `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Scope                *Scope                 `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	AuditSource          *SnapshotHandle        `protobuf:"bytes,2,opt,name=audit_source,json=auditSource,proto3" json:"audit_source,omitempty"`
+	AuditThroughRevision int64                  `protobuf:"varint,3,opt,name=audit_through_revision,json=auditThroughRevision,proto3" json:"audit_through_revision,omitempty"`
+	ModelUsage           bool                   `protobuf:"varint,4,opt,name=model_usage,json=modelUsage,proto3" json:"model_usage,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Query) Reset() {
@@ -141,6 +144,27 @@ func (x *Query) GetScope() *Scope {
 		return x.Scope
 	}
 	return nil
+}
+
+func (x *Query) GetAuditSource() *SnapshotHandle {
+	if x != nil {
+		return x.AuditSource
+	}
+	return nil
+}
+
+func (x *Query) GetAuditThroughRevision() int64 {
+	if x != nil {
+		return x.AuditThroughRevision
+	}
+	return 0
+}
+
+func (x *Query) GetModelUsage() bool {
+	if x != nil {
+		return x.ModelUsage
+	}
+	return false
 }
 
 type ScenarioRequest struct {
@@ -1140,9 +1164,13 @@ const file_dream_v1_service_proto_rawDesc = "" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05world\x18\x03 \x01(\tR\x05world\x12\x16\n" +
 	"\x06branch\x18\x04 \x01(\tR\x06branch\x12\x10\n" +
-	"\x03run\x18\x05 \x01(\tR\x03run\".\n" +
+	"\x03run\x18\x05 \x01(\tR\x03run\"\xc2\x01\n" +
 	"\x05Query\x12%\n" +
-	"\x05scope\x18\x01 \x01(\v2\x0f.dream.v1.ScopeR\x05scope\"L\n" +
+	"\x05scope\x18\x01 \x01(\v2\x0f.dream.v1.ScopeR\x05scope\x12;\n" +
+	"\faudit_source\x18\x02 \x01(\v2\x18.dream.v1.SnapshotHandleR\vauditSource\x124\n" +
+	"\x16audit_through_revision\x18\x03 \x01(\x03R\x14auditThroughRevision\x12\x1f\n" +
+	"\vmodel_usage\x18\x04 \x01(\bR\n" +
+	"modelUsage\"L\n" +
 	"\x0fScenarioRequest\x12%\n" +
 	"\x05scope\x18\x01 \x01(\v2\x0f.dream.v1.ScopeR\x05scope\x12\x12\n" +
 	"\x04yaml\x18\x02 \x01(\tR\x04yaml\"\xd7\x01\n" +
@@ -1271,52 +1299,53 @@ var file_dream_v1_service_proto_goTypes = []any{
 }
 var file_dream_v1_service_proto_depIdxs = []int32{
 	0,  // 0: dream.v1.Query.scope:type_name -> dream.v1.Scope
-	0,  // 1: dream.v1.ScenarioRequest.scope:type_name -> dream.v1.Scope
-	0,  // 2: dream.v1.CreateWorldRequest.scope:type_name -> dream.v1.Scope
-	0,  // 3: dream.v1.ControlRequest.scope:type_name -> dream.v1.Scope
-	4,  // 4: dream.v1.ControlRequest.input:type_name -> dream.v1.Input
-	0,  // 5: dream.v1.OperationRequest.scope:type_name -> dream.v1.Scope
-	0,  // 6: dream.v1.SnapshotRequest.scope:type_name -> dream.v1.Scope
-	0,  // 7: dream.v1.SnapshotHandle.scope:type_name -> dream.v1.Scope
-	8,  // 8: dream.v1.ForkRequest.source:type_name -> dream.v1.SnapshotHandle
-	0,  // 9: dream.v1.ForkRequest.child:type_name -> dream.v1.Scope
-	4,  // 10: dream.v1.ForkRequest.alternative:type_name -> dream.v1.Input
-	8,  // 11: dream.v1.ReplayRequest.source:type_name -> dream.v1.SnapshotHandle
-	0,  // 12: dream.v1.ExternalRequest.scope:type_name -> dream.v1.Scope
-	0,  // 13: dream.v1.ExportRequest.scope:type_name -> dream.v1.Scope
-	8,  // 14: dream.v1.ExportRequest.source:type_name -> dream.v1.SnapshotHandle
-	0,  // 15: dream.v1.DownloadRequest.scope:type_name -> dream.v1.Scope
-	2,  // 16: dream.v1.Research.ValidateScenario:input_type -> dream.v1.ScenarioRequest
-	3,  // 17: dream.v1.Research.CreateWorld:input_type -> dream.v1.CreateWorldRequest
-	5,  // 18: dream.v1.Research.Control:input_type -> dream.v1.ControlRequest
-	6,  // 19: dream.v1.Research.GetOperation:input_type -> dream.v1.OperationRequest
-	7,  // 20: dream.v1.Research.CaptureSnapshot:input_type -> dream.v1.SnapshotRequest
-	9,  // 21: dream.v1.Research.Fork:input_type -> dream.v1.ForkRequest
-	10, // 22: dream.v1.Research.Replay:input_type -> dream.v1.ReplayRequest
-	1,  // 23: dream.v1.Research.ActorView:input_type -> dream.v1.Query
-	1,  // 24: dream.v1.Research.ResearchView:input_type -> dream.v1.Query
-	11, // 25: dream.v1.Research.ExternalObserve:input_type -> dream.v1.ExternalRequest
-	5,  // 26: dream.v1.Research.ExternalAct:input_type -> dream.v1.ControlRequest
-	12, // 27: dream.v1.Research.SubmitExport:input_type -> dream.v1.ExportRequest
-	13, // 28: dream.v1.Research.DownloadExport:input_type -> dream.v1.DownloadRequest
-	14, // 29: dream.v1.Research.ValidateScenario:output_type -> dream.v1.Document
-	14, // 30: dream.v1.Research.CreateWorld:output_type -> dream.v1.Document
-	14, // 31: dream.v1.Research.Control:output_type -> dream.v1.Document
-	14, // 32: dream.v1.Research.GetOperation:output_type -> dream.v1.Document
-	8,  // 33: dream.v1.Research.CaptureSnapshot:output_type -> dream.v1.SnapshotHandle
-	14, // 34: dream.v1.Research.Fork:output_type -> dream.v1.Document
-	14, // 35: dream.v1.Research.Replay:output_type -> dream.v1.Document
-	14, // 36: dream.v1.Research.ActorView:output_type -> dream.v1.Document
-	14, // 37: dream.v1.Research.ResearchView:output_type -> dream.v1.Document
-	14, // 38: dream.v1.Research.ExternalObserve:output_type -> dream.v1.Document
-	14, // 39: dream.v1.Research.ExternalAct:output_type -> dream.v1.Document
-	14, // 40: dream.v1.Research.SubmitExport:output_type -> dream.v1.Document
-	15, // 41: dream.v1.Research.DownloadExport:output_type -> dream.v1.ExportPage
-	29, // [29:42] is the sub-list for method output_type
-	16, // [16:29] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	8,  // 1: dream.v1.Query.audit_source:type_name -> dream.v1.SnapshotHandle
+	0,  // 2: dream.v1.ScenarioRequest.scope:type_name -> dream.v1.Scope
+	0,  // 3: dream.v1.CreateWorldRequest.scope:type_name -> dream.v1.Scope
+	0,  // 4: dream.v1.ControlRequest.scope:type_name -> dream.v1.Scope
+	4,  // 5: dream.v1.ControlRequest.input:type_name -> dream.v1.Input
+	0,  // 6: dream.v1.OperationRequest.scope:type_name -> dream.v1.Scope
+	0,  // 7: dream.v1.SnapshotRequest.scope:type_name -> dream.v1.Scope
+	0,  // 8: dream.v1.SnapshotHandle.scope:type_name -> dream.v1.Scope
+	8,  // 9: dream.v1.ForkRequest.source:type_name -> dream.v1.SnapshotHandle
+	0,  // 10: dream.v1.ForkRequest.child:type_name -> dream.v1.Scope
+	4,  // 11: dream.v1.ForkRequest.alternative:type_name -> dream.v1.Input
+	8,  // 12: dream.v1.ReplayRequest.source:type_name -> dream.v1.SnapshotHandle
+	0,  // 13: dream.v1.ExternalRequest.scope:type_name -> dream.v1.Scope
+	0,  // 14: dream.v1.ExportRequest.scope:type_name -> dream.v1.Scope
+	8,  // 15: dream.v1.ExportRequest.source:type_name -> dream.v1.SnapshotHandle
+	0,  // 16: dream.v1.DownloadRequest.scope:type_name -> dream.v1.Scope
+	2,  // 17: dream.v1.Research.ValidateScenario:input_type -> dream.v1.ScenarioRequest
+	3,  // 18: dream.v1.Research.CreateWorld:input_type -> dream.v1.CreateWorldRequest
+	5,  // 19: dream.v1.Research.Control:input_type -> dream.v1.ControlRequest
+	6,  // 20: dream.v1.Research.GetOperation:input_type -> dream.v1.OperationRequest
+	7,  // 21: dream.v1.Research.CaptureSnapshot:input_type -> dream.v1.SnapshotRequest
+	9,  // 22: dream.v1.Research.Fork:input_type -> dream.v1.ForkRequest
+	10, // 23: dream.v1.Research.Replay:input_type -> dream.v1.ReplayRequest
+	1,  // 24: dream.v1.Research.ActorView:input_type -> dream.v1.Query
+	1,  // 25: dream.v1.Research.ResearchView:input_type -> dream.v1.Query
+	11, // 26: dream.v1.Research.ExternalObserve:input_type -> dream.v1.ExternalRequest
+	5,  // 27: dream.v1.Research.ExternalAct:input_type -> dream.v1.ControlRequest
+	12, // 28: dream.v1.Research.SubmitExport:input_type -> dream.v1.ExportRequest
+	13, // 29: dream.v1.Research.DownloadExport:input_type -> dream.v1.DownloadRequest
+	14, // 30: dream.v1.Research.ValidateScenario:output_type -> dream.v1.Document
+	14, // 31: dream.v1.Research.CreateWorld:output_type -> dream.v1.Document
+	14, // 32: dream.v1.Research.Control:output_type -> dream.v1.Document
+	14, // 33: dream.v1.Research.GetOperation:output_type -> dream.v1.Document
+	8,  // 34: dream.v1.Research.CaptureSnapshot:output_type -> dream.v1.SnapshotHandle
+	14, // 35: dream.v1.Research.Fork:output_type -> dream.v1.Document
+	14, // 36: dream.v1.Research.Replay:output_type -> dream.v1.Document
+	14, // 37: dream.v1.Research.ActorView:output_type -> dream.v1.Document
+	14, // 38: dream.v1.Research.ResearchView:output_type -> dream.v1.Document
+	14, // 39: dream.v1.Research.ExternalObserve:output_type -> dream.v1.Document
+	14, // 40: dream.v1.Research.ExternalAct:output_type -> dream.v1.Document
+	14, // 41: dream.v1.Research.SubmitExport:output_type -> dream.v1.Document
+	15, // 42: dream.v1.Research.DownloadExport:output_type -> dream.v1.ExportPage
+	30, // [30:43] is the sub-list for method output_type
+	17, // [17:30] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_dream_v1_service_proto_init() }
