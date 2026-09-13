@@ -231,7 +231,7 @@ func (s *Store) CommitRun(ctx context.Context, c hws.Commit) (hws.Receipt, error
 	if err := c.Key.Validate(); err != nil {
 		return hws.Receipt{}, err
 	}
-	digest, err := hws.CommandDigest(c.Command)
+	digest, err := hws.RuntimeCommandDigest(c.Command, c.Model)
 	if err != nil {
 		return hws.Receipt{}, err
 	}
@@ -268,6 +268,11 @@ func (s *Store) CommitRun(ctx context.Context, c hws.Commit) (hws.Receipt, error
 	snap, parent, manifest, err := loadRuntime(ctx, tx, sc)
 	if err != nil {
 		return hws.Receipt{}, err
+	}
+	if c.Model != nil {
+		if err = validateModelUse(ctx, tx, sc, *c.Model); err != nil {
+			return hws.Receipt{}, err
+		}
 	}
 	oldGenesis, _ := json.Marshal(snap.State.Genesis)
 	newGenesis, _ := json.Marshal(c.State.Genesis)
@@ -312,6 +317,11 @@ func (s *Store) CommitRun(ctx context.Context, c hws.Commit) (hws.Receipt, error
 	result, err := s.append(ctx, tx, runtimeEvent(sc, revision, c.State.At, parent, hash))
 	if err != nil {
 		return hws.Receipt{}, err
+	}
+	if c.Model != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO dream.model_applications VALUES($1,$2,$3,$4,$5)`, sc.Actor, sc.Namespace, sc.Run, c.Model.Key, result.EventID); err != nil {
+			return hws.Receipt{}, err
+		}
 	}
 	payload, err := json.Marshal(runtimePayload{Manifest: manifest, State: c.State, Transition: c.Transition})
 	if err != nil {

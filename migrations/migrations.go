@@ -19,3 +19,8 @@ var Runtime string
 //
 //go:embed 003_reader_scopes.sql
 var ReaderScopes string
+
+// Models adds version 4 durable reservations and restricted response artifacts.
+//
+//go:embed 004_models.sql
+var Models string
