@@ -74,6 +74,9 @@ func (s *Store) begin(ctx context.Context) (pgx.Tx, error) {
 	return tx, nil
 }
 func (s *Store) Append(ctx context.Context, c graph.AppendCommand) (graph.AppendResult, error) {
+	if c.Event.Type == "revoke" {
+		return graph.AppendResult{}, fmt.Errorf("use Revoke for revocation events")
+	}
 	tx, err := s.begin(ctx)
 	if err != nil {
 		return graph.AppendResult{}, err
@@ -137,6 +140,11 @@ func (s *Store) append(ctx context.Context, tx pgx.Tx, c graph.AppendCommand) (g
 		}
 		if parent.Meta.Sensitivity == core.Restricted && c.Event.Meta.Sensitivity != core.Restricted {
 			return result, fmt.Errorf("source sensitivity broadened")
+		}
+		if c.Event.Type != "revoke" {
+			if c.DerivationContext == nil || c.DerivationContext.Operation != core.Derive || c.DerivationContext.Actor != c.Actor || !parent.Meta.Rights.Allows(core.PermissionRequest{Resource: parent.Meta.ID, Context: *c.DerivationContext}) {
+				return result, fmt.Errorf("source derivation not authorized")
+			}
 		}
 		for _, g := range c.Event.Meta.Rights.Grants {
 			if !parent.Meta.Rights.Allows(core.PermissionRequest{Resource: parent.Meta.ID, Context: g}) {

@@ -127,3 +127,22 @@ access to complete traceability without publishing originals or private data.
 
 See ADR-0002 for exact codec and validation boundaries. Source-section traceability
 above remains UNVERIFIED; contract tests do not substitute for unavailable originals.
+
+## Issue #4 storage evidence
+
+| Criterion | Real-Postgres evidence |
+| --- | --- |
+| Generic events plus separate simulator/job/artifact references | migration 001; simulator learned-at/learner rows tested separately from events |
+| Atomic expected-version/idempotency/outbox effects | AtomicIdempotencyAndConcurrency; eight duplicate callers and two competing versions |
+| Actor/namespace/operation key scope; no wall-clock logical hash | ScopedKeysAndWallTimeIndependentDigest; graph TestDigestCanonicalSetsAndZero |
+| Interrupted transaction rollback | InterruptedAppendRollsBack, TemporalCorrectionProjectionRecovery, RevocationRollback |
+| Valid-at/known-as-of late correction and rebuild | TemporalCorrectionProjectionRecovery; old row remains in prior system-time view |
+| Restricted table grants and actor isolation | DatabaseGrantsAndActorIsolation; real actor login and reader-role negatives |
+| Source permission/class restrictions | PayloadClassCannotBroaden (red/green regression); append validates trusted stored provenance |
+| Purge, tombstones and snapshot/export/rebuild invalidation | RevocationPurgeAndArtifacts, ArtifactRevocationRace; already-purged pg_dump/restore |
+| Schema forward/rerun/version dispatch | Migrate initial/rerun, TestPayloadVersionDispatch, mandatory migration-check |
+
+See ADR-0003 for backup/WAL limits, internal trusted-scope requirements and deferred
+upcasters for future schemas. No complete #12 privacy gate or #13 snapshot engine
+is claimed. Earlier N/A migration statements describe bootstrap history only;
+current make verify runs the real disposable Postgres gate.

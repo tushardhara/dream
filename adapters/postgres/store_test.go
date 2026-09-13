@@ -17,7 +17,7 @@ import (
 )
 
 func command(namespace, id core.ID, expected int64) graph.AppendCommand {
-	return graph.AppendCommand{Actor: "alice", Namespace: namespace, Operation: "append", Key: id, ExpectedVersion: expected, Class: graph.PrivatePayload, Payload: graph.Payload{Version: 1, Text: "synthetic private observation"}, Event: core.Event{Version: 1, Stream: "journal", Type: "observation", Subject: core.Subject{Principal: "alice"}, OccurredAt: 5, Meta: core.Metadata{ID: id, Observer: "alice", Source: "alice", Sensitivity: core.Restricted, Confidence: .5, Valid: core.Interval{Start: 10}, RecordedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Rights: core.Rights{Resource: id}}}}
+	return graph.AppendCommand{DerivationContext: &core.Grant{Actor: "alice", Recipient: "alice", Purpose: namespace, Operation: core.Derive}, Actor: "alice", Namespace: namespace, Operation: "append", Key: id, ExpectedVersion: expected, Class: graph.PrivatePayload, Payload: graph.Payload{Version: 1, Text: "synthetic private observation"}, Event: core.Event{Version: 1, Stream: "journal", Type: "observation", Subject: core.Subject{Principal: "alice"}, OccurredAt: 5, Meta: core.Metadata{ID: id, Observer: "alice", Source: "alice", Sensitivity: core.Restricted, Confidence: .5, Valid: core.Interval{Start: 10}, RecordedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Rights: core.Rights{Resource: id, Grants: []core.Grant{{Actor: "alice", Recipient: "alice", Purpose: namespace, Operation: core.Derive}}}}}}
 }
 func exec(t *testing.T, db *pgxpool.Pool, sql string, args ...any) {
 	t.Helper()
@@ -64,6 +64,13 @@ func TestIntegration(t *testing.T) {
 	}
 	defer db.Close()
 	store := New(db)
+	t.Run("UnknownDatabaseVersionDenies", func(t *testing.T) {
+		exec(t, admin, "INSERT INTO dream.schema_versions VALUES(2)")
+		if err := Migrate(ctx, admin); err == nil {
+			t.Fatal("unknown schema accepted")
+		}
+		exec(t, admin, "DELETE FROM dream.schema_versions WHERE version=2")
+	})
 	t.Run("AtomicIdempotencyAndConcurrency", func(t *testing.T) {
 		c := command("duplicates", "event", 0)
 		var wg sync.WaitGroup
@@ -148,6 +155,8 @@ func TestIntegration(t *testing.T) {
 	})
 	t.Run("TemporalCorrectionProjectionRecovery", func(t *testing.T) {
 		old := command("temporal", "old", 0)
+		validEnd := core.LogicalTime(100)
+		old.Event.Meta.Valid.End = &validEnd
 		if _, err := store.Append(ctx, old); err != nil {
 			t.Fatal(err)
 		}
@@ -183,6 +192,9 @@ func TestIntegration(t *testing.T) {
 		id, err := store.Query(ctx, "alice", "temporal", old.Event.Subject, 10, before)
 		if err != nil || id != "old" {
 			t.Fatalf("historical read: %s %v", id, err)
+		}
+		if _, err := store.Query(ctx, "alice", "temporal", old.Event.Subject, 100, before); !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatal("half-open end ignored", err)
 		}
 		id, err = store.Query(ctx, "alice", "temporal", old.Event.Subject, 10, time.Now().Add(time.Second))
 		if err != nil || id != "correction" {
@@ -269,6 +281,48 @@ func TestIntegration(t *testing.T) {
 			t.Fatal("audit envelopes lost")
 		}
 	})
+	t.Run("RevocationRollback", func(t *testing.T) {
+		root := command("revoke-rollback", "root", 0)
+		if _, err := store.Append(ctx, root); err != nil {
+			t.Fatal(err)
+		}
+		exec(t, admin, `CREATE FUNCTION dream.fail_purge() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.namespace='revoke-rollback' THEN RAISE EXCEPTION 'injected purge failure'; END IF; RETURN OLD; END $$; CREATE TRIGGER fail_purge BEFORE DELETE ON dream.private_payloads FOR EACH ROW EXECUTE FUNCTION dream.fail_purge()`)
+		c := command("revoke-rollback", "revoke", 1)
+		c.Event.Type = "revoke"
+		c.Operation = "revoke"
+		if _, err := store.Revoke(ctx, c, "root"); err == nil {
+			t.Fatal("purge failure ignored")
+		}
+		if count(t, admin, "SELECT count(*) FROM dream.tombstones WHERE namespace='revoke-rollback'") != 0 || count(t, admin, "SELECT count(*) FROM dream.events WHERE namespace='revoke-rollback'") != 1 {
+			t.Fatal("partial revocation committed")
+		}
+		if _, err := store.ReadPayload(ctx, "alice", "revoke-rollback", "root"); err != nil {
+			t.Fatal("rollback lost original payload", err)
+		}
+		exec(t, admin, `DROP TRIGGER fail_purge ON dream.private_payloads; DROP FUNCTION dream.fail_purge()`)
+		if _, err := store.Revoke(ctx, c, "root"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("SourceDerivationRequiresGrant", func(t *testing.T) {
+		root := command("derive-deny", "root", 0)
+		root.Event.Meta.Rights.Grants = nil
+		if _, err := store.Append(ctx, root); err != nil {
+			t.Fatal(err)
+		}
+		child := command("derive-deny", "child", 1)
+		child.Event.Meta.Parents = []core.ID{"root"}
+		child.Event.Meta.Rights.Grants = nil
+		if _, err := store.Append(ctx, child); err == nil {
+			t.Fatal("source without derive rights was used")
+		}
+		revoke := command("derive-deny", "revoke", 1)
+		revoke.Event.Type = "revoke"
+		revoke.Event.Meta.Rights.Grants = nil
+		if _, err := store.Revoke(ctx, revoke, "root"); err != nil {
+			t.Fatal("owner revocation incorrectly needs derive grant", err)
+		}
+	})
 	t.Run("PayloadClassCannotBroaden", func(t *testing.T) {
 		source := command("class-boundary", "source", 0)
 		source.Class = graph.ResearchPayload
@@ -320,8 +374,59 @@ func TestIntegration(t *testing.T) {
 		if n := count(t, actor, "SELECT count(*) FROM dream.observable_payloads WHERE namespace='observable'"); n != 1 {
 			t.Fatal("actor row isolation failed", n)
 		}
+		for _, role := range []string{"dream_private_reader", "dream_research_reader"} {
+			conn, err := admin.Acquire(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = conn.Exec(ctx, "SET ROLE "+role); err != nil {
+				conn.Release()
+				t.Fatal(err)
+			}
+			denied := "research_payloads"
+			allowed := "private_payloads"
+			if role == "dream_research_reader" {
+				denied, allowed = allowed, denied
+			}
+			if _, err = conn.Exec(ctx, "SELECT * FROM dream."+denied); err == nil {
+				t.Fatal("reader crossed role boundary", role)
+			}
+			if _, err = conn.Exec(ctx, "SELECT * FROM dream."+allowed); err != nil {
+				t.Fatal("reader lacks own class", role, err)
+			}
+			if _, err = conn.Exec(ctx, "RESET ROLE"); err != nil {
+				t.Fatal(err)
+			}
+			conn.Release()
+		}
 		if _, err := db.Exec(ctx, "UPDATE dream.events SET occurred_at=0"); err == nil {
 			t.Fatal("writer can rewrite immutable events")
+		}
+	})
+	t.Run("ArtifactRevocationRace", func(t *testing.T) {
+		if _, err := store.Append(ctx, command("artifact-race", "root", 0)); err != nil {
+			t.Fatal(err)
+		}
+		c := command("artifact-race", "revoke", 1)
+		c.Event.Type = "revoke"
+		c.Operation = "revoke"
+		errs := make(chan error, 2)
+		go func() {
+			errs <- store.RegisterArtifact(ctx, "alice", "artifact-race", "snapshot", "snapshot", []core.ID{"root"})
+		}()
+		go func() { _, err := store.Revoke(ctx, c, "root"); errs <- err }()
+		for i := 0; i < 2; i++ {
+			err := <-errs
+			if err != nil && !errors.Is(err, ErrRevoked) {
+				t.Fatal(err)
+			}
+		}
+		valid, err := store.ArtifactValid(ctx, "alice", "artifact-race", "snapshot")
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatal(err)
+		}
+		if valid {
+			t.Fatal("racing snapshot resurrected source")
 		}
 	})
 	t.Run("ScopedKeysAndWallTimeIndependentDigest", func(t *testing.T) {
@@ -336,6 +441,30 @@ func TestIntegration(t *testing.T) {
 		d3, _ := a.Digest()
 		if d1 == d3 {
 			t.Fatal("logical time excluded")
+		}
+		one := command("operation-scope", "one", 0)
+		one.Key = "shared"
+		one.Operation = "first"
+		if _, err := store.Append(ctx, one); err != nil {
+			t.Fatal(err)
+		}
+		two := command("operation-scope", "two", 1)
+		two.Key = "shared"
+		two.Operation = "second"
+		if _, err := store.Append(ctx, two); err != nil {
+			t.Fatal("operation scope collision", err)
+		}
+		bob := one
+		bob.Actor = "bob"
+		bob.Event.Meta.Observer = "bob"
+		bob.Event.Meta.Source = "bob"
+		bob.Event.Subject.Principal = "bob"
+		if _, err := store.Append(ctx, bob); err != nil {
+			t.Fatal("actor scope collision", err)
+		}
+		exec(t, admin, `INSERT INTO dream.simulator_associations VALUES('alice','operation-scope','one','run','branch','alice',11),('alice','operation-scope','one','run','branch','bob',20)`)
+		if count(t, admin, "SELECT count(DISTINCT learned_at) FROM dream.simulator_associations") != 2 {
+			t.Fatal("actor learned times collapsed")
 		}
 		for i := 0; i < 3; i++ {
 			c := command(core.ID(fmt.Sprintf("scope%d", i)), "same-key", 0)

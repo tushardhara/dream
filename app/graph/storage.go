@@ -35,15 +35,16 @@ func (p Payload) Validate() error {
 }
 
 type AppendCommand struct {
-	Actor           core.ID
-	Namespace       core.ID
-	Operation       core.ID
-	Key             core.ID
-	ExpectedVersion int64
-	Event           core.Event
-	Class           PayloadClass
-	Payload         Payload
-	Supersedes      core.ID
+	Actor             core.ID
+	Namespace         core.ID
+	Operation         core.ID
+	Key               core.ID
+	ExpectedVersion   int64
+	Event             core.Event
+	Class             PayloadClass
+	Payload           Payload
+	Supersedes        core.ID
+	DerivationContext *core.Grant
 }
 
 func (c AppendCommand) Validate() error {
