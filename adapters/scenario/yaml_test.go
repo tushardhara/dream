@@ -75,8 +75,12 @@ func TestYAMLRejects(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := Parse(strings.NewReader(in))
 			var e *domain.Error
+			wantCode := map[string]string{"alias": "alias", "recursive": "alias", "depth": "limit", "nodes": "limit", "size": "limit"}[name]
 			if !errors.As(err, &e) || e.Path == "" || e.Code == "" {
 				t.Fatalf("expected structured error, got %v", err)
+			}
+			if wantCode != "" && e.Code != wantCode {
+				t.Fatalf("guard code: got %s want %s", e.Code, wantCode)
 			}
 		})
 	}

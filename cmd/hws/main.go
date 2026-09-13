@@ -14,7 +14,7 @@ import (
 func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
-		fmt.Fprintln(out, "Usage: hws scenario validate <file.yaml|->\nOffline strict v1 validation; JSON result, no database or model credentials.\nExit: 0 valid, 1 invalid/input error, 2 usage. No simulation runtime implemented.")
+		fmt.Fprintln(out, "Usage: hws scenario validate <file.yaml|->\nOffline strict v1 validation; JSON result, no database or model credentials.\nExit: 0 valid, 1 invalid/input error, 2 usage. Validation only; no execution command is exposed.")
 		return 0
 	}
 	if len(args) != 3 || args[0] != "scenario" || args[1] != "validate" {

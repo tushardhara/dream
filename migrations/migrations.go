@@ -9,3 +9,8 @@ import _ "embed"
 //
 //go:embed 001_initial.sql
 var Initial string
+
+// Runtime adds schema version 2, applied atomically after version 1.
+//
+//go:embed 002_runtime.sql
+var Runtime string
