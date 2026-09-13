@@ -28,7 +28,7 @@ func New(db *pgxpool.Pool) *Store { return &Store{db: db} }
 var _ graph.EventWriter = (*Store)(nil)
 
 // Migrate requires dedicated migration authority. Runtime writers cannot create
-// schemas/roles. Supports empty, v1 (forward upgrade), or the current v2 ledger.
+// schemas/roles. Supports empty, v1 (forward upgrade), or the current v3 ledger.
 func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -47,11 +47,16 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 		if err = tx.QueryRow(ctx, "SELECT count(*),coalesce(max(version),0) FROM dream.schema_versions").Scan(&count, &version); err != nil {
 			return err
 		}
-		if !((count == 1 && version == 1) || (count == 2 && version == 2)) {
+		if !(count == version && version >= 1 && version <= 3) {
 			return fmt.Errorf("unsupported database schema")
 		}
 		if version == 1 {
 			if _, err = tx.Exec(ctx, migrations.Runtime); err != nil {
+				return err
+			}
+		}
+		if version < 3 {
+			if _, err = tx.Exec(ctx, migrations.ReaderScopes); err != nil {
 				return err
 			}
 		}
@@ -60,6 +65,9 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 			return err
 		}
 		if _, err = tx.Exec(ctx, migrations.Runtime); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, migrations.ReaderScopes); err != nil {
 			return err
 		}
 	}
