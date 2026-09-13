@@ -112,38 +112,9 @@ func (h AppraisalHandler) Transition(current rt.State, input rt.Input, clock rt.
 			return rt.Output{}, err
 		}
 	} else {
-		checkpoint = AppraisalCheckpoint{Version: 1, Model: dynamics.ModelVersion, Actors: []dynamics.State{}}
-		for _, a := range sc.Public.Humans {
-			s, e := dynamics.New(a.ID, 0, dynamics.DefaultSubstrate())
-			if e != nil {
-				return rt.Output{}, e
-			}
-			s.Causes = []core.ID{core.ID("genesis:" + current.Genesis.ScenarioHash)}
-			checkpoint.Actors = append(checkpoint.Actors, s)
-		}
-		for _, latent := range sc.Research.Latent {
-			if latent.Emotion.Valence != 0 || latent.Emotion.Arousal != 0 {
-				return rt.Output{}, fmt.Errorf("appraisal.v1 has no emotion-parameter mapping; refusing to ignore nonneutral initial emotion")
-			}
-			for _, drive := range latent.Drives {
-				index := -1
-				for i, d := range dynamics.Registry() {
-					if d.ID == drive.Kind {
-						index = i
-					}
-				}
-				if index < 0 {
-					return rt.Output{}, fmt.Errorf("initial drive is outside ticket7-subset.v1")
-				}
-				for i, s := range checkpoint.Actors {
-					if s.Actor == latent.Actor {
-						v := &s.Variables[index]
-						v.Level = drive.Strength
-						v.Anchor = drive.Strength
-						checkpoint.Actors[i] = s
-					}
-				}
-			}
+		checkpoint, err = initialAppraisal(sc, current.Genesis.ScenarioHash)
+		if err != nil {
+			return rt.Output{}, err
 		}
 	}
 	if len(checkpoint.Actors) != len(sc.Public.Humans) {
@@ -191,4 +162,42 @@ func (h AppraisalHandler) Transition(current rt.State, input rt.Input, clock rt.
 		return rt.Output{}, err
 	}
 	return rt.Output{Data: string(b), Events: []rt.Input{}}, nil
+}
+
+func initialAppraisal(sc scenario.Scenario, hash string) (AppraisalCheckpoint, error) {
+	var checkpoint AppraisalCheckpoint
+	checkpoint = AppraisalCheckpoint{Version: 1, Model: dynamics.ModelVersion, Actors: []dynamics.State{}}
+	for _, a := range sc.Public.Humans {
+		s, e := dynamics.New(a.ID, 0, dynamics.DefaultSubstrate())
+		if e != nil {
+			return AppraisalCheckpoint{}, e
+		}
+		s.Causes = []core.ID{core.ID("genesis:" + hash)}
+		checkpoint.Actors = append(checkpoint.Actors, s)
+	}
+	for _, latent := range sc.Research.Latent {
+		if latent.Emotion.Valence != 0 || latent.Emotion.Arousal != 0 {
+			return AppraisalCheckpoint{}, fmt.Errorf("appraisal.v1 has no emotion-parameter mapping; refusing to ignore nonneutral initial emotion")
+		}
+		for _, drive := range latent.Drives {
+			index := -1
+			for i, d := range dynamics.Registry() {
+				if d.ID == drive.Kind {
+					index = i
+				}
+			}
+			if index < 0 {
+				return AppraisalCheckpoint{}, fmt.Errorf("initial drive is outside ticket7-subset.v1")
+			}
+			for i, s := range checkpoint.Actors {
+				if s.Actor == latent.Actor {
+					v := &s.Variables[index]
+					v.Level = drive.Strength
+					v.Anchor = drive.Strength
+					checkpoint.Actors[i] = s
+				}
+			}
+		}
+	}
+	return checkpoint, nil
 }

@@ -366,3 +366,50 @@ func CompareRelation(before, after RelationProjection) (RelationDelta, error) {
 	}
 	return out, nil
 }
+
+// SafeRelation is a typed projection of an already-approved context item. It
+// adds no permissions and preserves the original observer and source identity.
+type SafeRelation struct {
+	Source   core.ID
+	Observer core.ID
+	State    RelationState
+}
+
+func (s SafeContext) Relations() ([]SafeRelation, error) {
+	out := []SafeRelation{}
+	for _, item := range s.items {
+		if item.Kind != RelationshipMemory {
+			continue
+		}
+		if !strings.HasPrefix(item.Text, relationPrefix) {
+			return nil, fmt.Errorf("unknown safe relation encoding")
+		}
+		var state RelationState
+		d := json.NewDecoder(strings.NewReader(strings.TrimPrefix(item.Text, relationPrefix)))
+		d.DisallowUnknownFields()
+		if err := d.Decode(&state); err != nil {
+			return nil, err
+		}
+		encoded, err := EncodeRelation(state, item.Observer)
+		if err != nil || encoded != item.Text || !sameSubject(relationSubject(state), item.Subject) {
+			return nil, fmt.Errorf("safe relation envelope")
+		}
+		sources := map[core.ID]bool{}
+		for _, ids := range [][]core.ID{item.Parents, item.Supporting, item.Contradicting} {
+			for _, id := range ids {
+				sources[id] = true
+			}
+		}
+		refs := append(append([]core.ID{}, state.Commitments...), state.OpenLoops...)
+		for _, p := range state.Patterns {
+			refs = append(refs, p.Evidence...)
+		}
+		for _, id := range refs {
+			if !sources[id] {
+				return nil, fmt.Errorf("safe relation provenance")
+			}
+		}
+		out = append(out, SafeRelation{item.Source, item.Observer, state})
+	}
+	return out, nil
+}

@@ -251,3 +251,16 @@ replay preserves bytes with no fallback; fresh generation is explicitly stochast
 Live provider choice, credentials/prices and paid runs remain owner-configured and
 NOT RUN. #11 owns actions and sizing; #14 owns network authentication. Existing
 scientific/source gaps and privacy limitations are not waived by this engineering gate.
+
+## Issue #11 cognitive/action evidence
+
+ADR-0011 maps the typed single-owner cognitive pipeline, versioned synthetic action
+registry, normalized recorded selection, safe delivery/resource effects, own-fiction
+disclosure and delayed observer-specific outcomes to unit/race and real PostgreSQL
+evidence. Operational WAIT requires durable exhausted retryable failure evidence;
+refusals and permission errors cannot masquerade as human behavior. Appraisal
+receipts and the runtime 4096-byte cap remain hard limits. The bounded four-actor
+codec and ticket-named action registry do not claim complete unavailable HWS source
+coverage, large studies or validated human realism. Pure internal planner/handler
+ports are not network authentication. See ADR-0011 for recovery, privacy and sizing
+limits and later-ticket responsibilities.
