@@ -33,10 +33,12 @@ type Backend struct {
 	Store   RuntimePersistence
 	Views   *hws.ViewService
 	Handler rt.Handler
+	// StepExecutor composes a trusted cognitive/model service outside SQL transactions.
+	StepExecutor func(context.Context, hws.Scope, hws.Lease, core.ID, func(context.Context) error) (hws.Receipt, error)
 }
 
 func (b *Backend) identity(ctx context.Context, method string, r any) (Credential, error) {
-	if b == nil || b.Auth == nil || b.Store == nil || b.Views == nil || b.Handler == nil {
+	if b == nil || b.Auth == nil || b.Store == nil || b.Views == nil {
 		return Credential{}, ErrDenied
 	}
 	if err := authorizeWire(ctx, b.Auth, method, r); err != nil {
@@ -124,6 +126,9 @@ func (b *Backend) Control(ctx context.Context, r *pb.ControlRequest) (*pb.Docume
 	}
 	if _, err = b.Views.Research(ctx, permit); err != nil {
 		return nil, err
+	}
+	if (r.Command == "step" && b.Handler == nil && b.StepExecutor == nil) || (r.Command == "run-until" && b.Handler == nil) {
+		return nil, ErrDenied
 	}
 	command := rt.Command{Kind: r.Command, Until: core.LogicalTime(r.Until), Input: input(r.Input)}
 	if command.Validate() != nil || core.ID(r.OperationId).Validate() != nil {
@@ -299,6 +304,11 @@ func (b *Backend) ExternalAct(ctx context.Context, r *pb.ControlRequest) (*pb.Do
 	}
 	event := input(r.Input)
 	event.Text = "external requested intent: " + event.Text
+	event.Priority = 1 // canonical observation priority; the client cannot choose it.
+	if current.State.At >= current.State.Budget.Horizon {
+		return nil, ErrLimited
+	}
+	event.At = current.State.At + 1 // a requested intent takes effect at the next boundary.
 	runtime := hws.Runtime{Store: b.Store, Handler: b.Handler, BeforeCommit: func(ctx context.Context) error {
 		if _, err := CurrentIdentity(ctx, b.Auth); err != nil {
 			return err
@@ -329,7 +339,15 @@ func (b *Backend) execute(ctx context.Context, runtime hws.Runtime, c Credential
 		return hws.Receipt{}, err
 	}
 	if op != nil && op.Receipt.Done {
-		return runtime.Execute(ctx, c.Scope, hws.Lease{}, key, command)
+		original, err := hws.CommandDigest(op.Command)
+		if err != nil {
+			return hws.Receipt{}, err
+		}
+		requested, err := hws.CommandDigest(command)
+		if err != nil || original != requested {
+			return hws.Receipt{}, hws.ErrCommand
+		}
+		return op.Receipt, nil
 	}
 	if b.leases == nil {
 		b.leases = map[hws.Scope]hws.Lease{}
@@ -348,5 +366,8 @@ func (b *Backend) execute(ctx context.Context, runtime hws.Runtime, c Credential
 		return hws.Receipt{}, err
 	}
 	b.leases[c.Scope] = lease
+	if command.Kind == "step" && b.StepExecutor != nil {
+		return b.StepExecutor(ctx, c.Scope, lease, key, runtime.BeforeCommit)
+	}
 	return runtime.Execute(ctx, c.Scope, lease, key, command)
 }

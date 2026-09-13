@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"strings"
 
 	pb "github.com/tushardhara/dream/adapters/transport/gen/dream/v1"
@@ -176,6 +177,10 @@ func (b *Backend) DownloadExport(ctx context.Context, r *pb.DownloadRequest) (*p
 		d := json.NewDecoder(strings.NewReader(string(encoded)))
 		d.DisallowUnknownFields()
 		if d.Decode(&cursor) != nil || cursor.Manifest != manifestHash || cursor.Offset < 0 || cursor.Offset >= len(raw) {
+			return nil, ErrDenied
+		}
+		var extra any
+		if d.Decode(&extra) != io.EOF {
 			return nil, ErrDenied
 		}
 	}

@@ -1,6 +1,6 @@
 # ADR-0013: authenticated transport boundary (implementation in progress)
 
-Status: draft for #14. Not an acceptance PASS or deployment authorization.
+Status: proposed for #14, subject to independent exact-SHA review. Not deployment authorization.
 
 The versioned dream.v1 protobuf service generates Go DTOs, gRPC, a direct
 HTTP/JSON gateway and OpenAPI v2. DTO translation stays in adapters/transport.
@@ -79,18 +79,45 @@ execution remain trusted host composition; client payloads cannot select them.
 - Full make verify passes, including generated drift, all normal/race tests,
   disposable PostgreSQL, migrations/purge-aware restore and existing binary help.
 
-## Remaining engineering gates (not yet PASS)
+## Executable composition and execution limits
 
-- Wire cmd/hws-api composition/configuration and its fail-closed startup tests;
-  the existing command currently remains a non-listening scaffold.
-- Add transport integration coverage for private export and source revocation,
-  external dummy/HWM/IHG usage and child fork authorization; exercise a fake model
-  gateway through the configured handler boundary rather than equating a fake
-  runtime handler with a provider gateway.
-- Strengthen negative compatibility/generation probes and export cursor/filter
-  tests; finish requirement mapping and independent exact-SHA review evidence.
-- No READY_FOR_CLAUDE until these gates and final full verification are complete.
+`hws-api --config <file>` strictly loads a bounded trusted JSON configuration,
+requires the actual non-owner runtime database role and explicit credentials/view
+grants, and opens the configured gRPC/HTTP listeners. No migrations or credentials
+are provisioned. Unknown/missing configuration fails before listening. Production
+connections require TLS for the server and PostgreSQL (or a local Unix socket).
+The real command starts, rejects unauthenticated requests, serves authenticated
+research queries and stops cleanly in TestAPICommandStartsAuthenticatedAndStops.
 
-No paid/model runs, deployment, real credential provisioning, main changes or
+The standalone profile is explicitly `management-only`: lifecycle controls,
+queries, snapshots, forks and exports are available, but step/run-until cannot
+silently select a fake simulation policy. Execution hosts embed Backend with a
+trusted Handler, or StepExecutor for the cognitive/model service. Transport tests
+exercise bounded run-until and a real gateway/cognitive commit with a fake provider;
+concurrent retries generate once and return the original durable receipt. This
+profile is not an autonomous simulation worker or a live-provider deployment.
+Worker admission/operational composition remains #15. Scientific validation and
+missing source-registry completeness remain unverified.
+
+Private exports and external observations are tested before/after source purge.
+The external dummy/HWM/IHG port denies future evidence and GodState and records
+only wait/observe/ask requested intents at the next logical boundary. Actor and
+research exports have distinct authorization; arbitrary URL/file destinations
+are absent. Child forks require a separately configured target mapping: a parent
+token cannot read the child, and inventing a target scope fails. Cursors reject
+malformed, cross-manifest, out-of-range and trailing data. Time filters apply to
+trajectory frames; the authorized base snapshot remains the reconstruction
+boundary, not a claim that pending schedules have been redacted.
+
+Credential/view configuration is trusted host authority. In-memory revocation is
+immediate for the running process; permanent revocation must also remove the grant
+from host configuration before restart. Source tombstones and quota totals remain
+durable in PostgreSQL. Returned credentials never include token digests.
+
+Five restored mutation probes were caught: generated OpenAPI drift, incompatible
+protobuf JSON field naming, skipped gateway return-time revocation, role bypass
+and disabled durable total quota. Compiler errors were not counted as catches.
+
+No live/paid provider runs, deployment, real credential provisioning, main changes or
 scientific-validity claims are introduced. The local 24-hour supervisor remains
 BLOCKED_PREFLIGHT; this implementation is not a persistent worker service.

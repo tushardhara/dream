@@ -42,7 +42,10 @@ def tools():
   binary=CACHE/name
   expected=module.rsplit('@',1)
   info=subprocess.run(['go','version','-m',str(binary)],capture_output=True,text=True)
-  if info.returncode or not any(line.split()[1:3]==expected for line in info.stdout.splitlines() if line.strip().startswith('mod')):
+  lines=[line.split() for line in info.stdout.splitlines()]
+  package_ok=any(parts==['path',expected[0]] for parts in lines)
+  version_ok=any(len(parts)>=3 and parts[0]=='mod' and parts[2]==expected[1] for parts in lines)
+  if info.returncode or not package_ok or not version_ok:
    run('go','install',module,env=env)
  return compiler
 

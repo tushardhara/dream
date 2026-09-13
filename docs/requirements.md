@@ -277,11 +277,11 @@ model and runtime caps remain; no permission, budget, receipt or time reset is
 hidden inside a fork. Large/live studies and network authentication remain later
 gates, not implied by snapshot/replay engineering evidence.
 
-## #14 work in progress
+## #14 authenticated transport
 
-Versioned gRPC/HTTP/OpenAPI, configured scope/role authentication, non-owner runtime
-startup validation, durable admission, runtime/view/snapshot adapters and
-revalidated paged exports are under implementation on codex/14-authenticated-apis.
-See ADR0013 for passing evidence and remaining command-composition, external,
-private-export, fake-gateway and adversarial coverage gates. This is not an
-INTEGRATED or READY_FOR_CLAUDE claim.
+Versioned gRPC/HTTP/OpenAPI, exact configured scopes/roles, non-owner runtime
+startup, durable admission, runtime/view/snapshot adapters and revalidated paged
+exports are implemented. ADR0013 maps verification and states the management-only
+standalone executable versus embedded execution-host distinction. Engineering
+integration still requires independent exact-SHA review, green CI and an
+INTEGRATED record; implementation is not a main release or deployment.
