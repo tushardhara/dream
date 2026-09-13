@@ -295,3 +295,14 @@ actual pre-revocation backup restore drill. Schema 6 adds a quarantine gate and
 retained revoked IDs; no administrator-proof erasure or automatic journal freshness
 is claimed. The product maintenance worker is not an agent supervisor. Engineering
 acceptance still requires full checks and independent exact-SHA review/integration.
+
+## #16 independent evaluation
+
+ADR-0015 and docs/evaluation.md map the independent evaluator process, frozen
+family/person/group/time splits, label-blind generation, consented synthetic imports,
+proper scoring/missingness, clustered uncertainty, conditional forecasts and
+separately owner-signed batch authorization protocol. All reports keep real-human
+validity and cross-model transfer NOT TESTED; complete original HWS falsifier and
+registry traceability remain UNVERIFIED. No production defaults or owner adequacy
+thresholds are changed. Engineering integration still requires exact-SHA review
+and passing complete checks.

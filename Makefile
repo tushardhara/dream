@@ -25,12 +25,16 @@ build:
 	go build -trimpath -o bin/hws-api ./cmd/hws-api
 	go build -trimpath -o bin/hws-worker ./cmd/hws-worker
 	go build -trimpath -o bin/hws-admin ./cmd/hws-admin
+	go build -trimpath -o bin/hws-eval ./cmd/hws-eval
+	go build -trimpath -o bin/hws-generate ./cmd/hws-generate
 help-check: build
 	./bin/hws --help
 	./bin/hws-api --help
 	./bin/hws-worker --help
 	./bin/hws-admin --help
-verify: fmt-check lint test test-race generated-check migration-check help-check container-check
+	./bin/hws-eval --help
+	./bin/hws-generate --help
+verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check
 live-provider soak:
 	@echo "BLOCKED: requires explicit owner authorization, provider/budget/infrastructure configuration and a later implemented runner."; exit 1
 
@@ -45,3 +49,6 @@ container-build:
 
 container-check:
 	python3 scripts/container-check.py
+
+evaluation-check:
+	python3 scripts/evaluation-check.py
