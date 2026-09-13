@@ -17,6 +17,12 @@ func within(path, prefix string) bool { return path == prefix || strings.HasPref
 
 func forbidden(from, target string) bool {
 	local := strings.TrimPrefix(target, module)
+	// Labels/judge outputs and their store may only be imported by the evaluator
+	// and its explicit host. This also closes an adapter-mediated reverse import.
+	if strings.HasPrefix(target, module) && (within(local, "evals") || within(local, "adapters/evaluation")) {
+		return !within(from, "evals") && !within(from, "adapters/evaluation") && !within(from, "cmd/hws-eval")
+	}
+
 	if within(from, "core") {
 		// Core has no external libraries or transport. Local helpers must live in core,
 		// so an indirect dependency cannot tunnel through another local package.
