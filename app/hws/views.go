@@ -413,3 +413,13 @@ func (v *ViewService) ModelContext(ctx context.Context, permit ViewPermit, appro
 	}
 	return safe, nil
 }
+
+// CheckOperation revalidates a host permit and its explicit operation without
+// returning a raw research snapshot to transport callers.
+func (v *ViewService) CheckOperation(ctx context.Context, permit ViewPermit, operation core.Operation) error {
+	_, g, err := v.snapshot(ctx, permit)
+	if err != nil || !permitsOperation(g, operation) {
+		return ErrViewDenied
+	}
+	return nil
+}
