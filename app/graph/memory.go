@@ -345,9 +345,13 @@ func (x *MemoryIndex) LogicalHash() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err = json.Unmarshal(raw, &entries[i].Event); err != nil {
+		// entries is only a shallow copy; decoding over its event would reuse
+		// the index's backing slices and make concurrent readers race.
+		var normalized core.Event
+		if err = json.Unmarshal(raw, &normalized); err != nil {
 			return "", err
 		}
+		entries[i].Event = normalized
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Event.Meta.ID < entries[j].Event.Meta.ID })
 	raw, err := json.Marshal(entries)
