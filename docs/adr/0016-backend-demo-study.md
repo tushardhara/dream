@@ -14,10 +14,10 @@ injections/forks fail closed; no hidden history eviction or online training occu
 
 The study is a separate evaluator-owned real-time protocol. A fixed 30-day plan
 and strict reservation/report journal preserve scope, baseline, seed/variant,
-provider bindings, quotas, uncertainty and restart identity. The per-study CAS gate
-wraps the existing idempotent journal append and rejects stale reservations rather
-than treating an idempotent receipt as authorization to generate twice. The gate
-is released before providers run. No new table or private label store is added;
+provider bindings, quotas, uncertainty and restart identity. The strict fresh-append path uses the existing locked journal transaction and
+rejects stale/repeated reservations rather than treating an idempotent receipt as
+authorization to generate twice. It uses one pool connection and commits before
+providers run; ordinary idempotent append consumers retain their retry semantics. No new table or private label store is added;
 only plan/operational metadata and result hashes are journaled. Provenance links
 preserve revocation. Generator processes retain #16's no-label/no-network boundary.
 

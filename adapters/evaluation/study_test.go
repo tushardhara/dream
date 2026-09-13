@@ -53,7 +53,7 @@ func TestStudyJournalIntegration(t *testing.T) {
 	}
 	cfg.ConnConfig.User = "dream_study_test"
 	cfg.ConnConfig.Password = "disposable_study_only"
-	cfg.MaxConns = 6
+	cfg.MaxConns = 1
 	db, e := pgxpool.NewWithConfig(ctx, cfg)
 	if e != nil {
 		t.Fatal(e)
@@ -69,6 +69,27 @@ func TestStudyJournalIntegration(t *testing.T) {
 	second.ID = "fake-second"
 	baseline, _ := evals.Digest("synthetic protocol baseline")
 	plan := evals.StudyPlan{Seed: 11, Variant: experiment.Stateful, Version: "study-protocol.v1", Scope: evals.StudyScope{Owner: "evaluator", Namespace: "study-test", ID: "frozen"}, StartUTC: clock.at, Days: 30, FrozenBaselineHash: baseline, CandidateVersion: experiment.Version, Providers: [2]evals.StudyProviderRef{first, second}, DailyPredictions: 2, TotalPredictions: 60}
+	// Multiple independent journals share a one-connection pool. No operation
+	// may hold it while waiting for a second connection or a provider callback.
+	parallelCtx, parallelCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer parallelCancel()
+	registered := make(chan error, 8)
+	for i := range 8 {
+		go func(i int) {
+			other := plan
+			other.Scope.ID = core.ID(fmt.Sprintf("parallel:%d", i))
+			j, err := NewStudyJournal(db)
+			if err == nil {
+				_, err = (evals.StudyController{Journal: j, Clock: clock}).Register(parallelCtx, other)
+			}
+			registered <- err
+		}(i)
+	}
+	for range 8 {
+		if err := <-registered; err != nil {
+			t.Fatal("bounded pool concurrent registration", err)
+		}
+	}
 	controller := evals.StudyController{Journal: journal, Clock: clock, Providers: [2]evals.StudyProvider{{Ref: first, Generator: experiment.Generator{}}, {Ref: second, Generator: experiment.Generator{}}}}
 	if _, e = controller.Register(ctx, plan); e != nil {
 		t.Fatal(e)

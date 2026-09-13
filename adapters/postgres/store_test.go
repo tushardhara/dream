@@ -130,6 +130,36 @@ func TestIntegration(t *testing.T) {
 			t.Fatal("non-atomic append")
 		}
 	})
+	t.Run("FreshAppendReservationIsNotIdempotentPermission", func(t *testing.T) {
+		c := command("fresh-reservations", "one", 0)
+		errs := make(chan error, 8)
+		for range 8 {
+			go func() { _, e := store.AppendNew(ctx, c); errs <- e }()
+		}
+		success, rejected := 0, 0
+		for range 8 {
+			e := <-errs
+			if e == nil {
+				success++
+			} else if errors.Is(e, ErrIdempotency) {
+				rejected++
+			} else {
+				t.Fatal(e)
+			}
+		}
+		if success != 1 || rejected != 7 {
+			t.Fatalf("fresh winners=%d rejected=%d", success, rejected)
+		}
+		if _, e := store.Append(ctx, c); e != nil {
+			t.Fatal("ordinary idempotent receipt changed", e)
+		}
+		if _, e := store.AppendNew(ctx, command("fresh-reservations", "stale", 0)); !errors.Is(e, ErrVersion) {
+			t.Fatal("stale stream version", e)
+		}
+		if count(t, admin, `SELECT count(*) FROM dream.events WHERE namespace='fresh-reservations'`) != 1 {
+			t.Fatal("duplicate reservation effects")
+		}
+	})
 	t.Run("InterruptedAppendRollsBack", func(t *testing.T) {
 		exec(t, admin, `CREATE FUNCTION dream.interrupt_append() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.namespace='interrupt' THEN PERFORM pg_sleep(2); END IF; RETURN NEW; END $$; CREATE TRIGGER interrupt_append BEFORE INSERT ON dream.outbox FOR EACH ROW EXECUTE FUNCTION dream.interrupt_append();`)
 		short, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
