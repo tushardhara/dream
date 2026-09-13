@@ -10,6 +10,7 @@ import (
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/migrations"
 	"github.com/tushardhara/dream/simulator"
+	"github.com/tushardhara/dream/simulator/drives"
 	"github.com/tushardhara/dream/simulator/dynamics"
 	rt "github.com/tushardhara/dream/simulator/runtime"
 	"github.com/tushardhara/dream/simulator/scenario"
@@ -25,6 +26,17 @@ type appraisalPerception struct{}
 
 func (appraisalPerception) Perceive(i rt.Input) (dynamics.Perceived, error) {
 	return dynamics.Perceived{Event: i.ID, Actor: i.Actor, OccurredAt: i.At, LearnedAt: i.At, Confidence: .8, Signals: dynamics.Signals{Effort: .5, OtherNeed: .7}, Rights: core.Rights{Resource: i.ID, Grants: []core.Grant{{Actor: i.Actor, Recipient: i.Actor, Purpose: "simulation", Operation: core.Read}, {Actor: i.Actor, Recipient: i.Actor, Purpose: "simulation", Operation: core.Derive}}}}, nil
+}
+
+type drivePerception struct{}
+
+func (drivePerception) PerceiveDrives(i rt.Input) (drives.Observation, error) {
+	p, e := (appraisalPerception{}).Perceive(i)
+	o := drives.Observation{Event: p}
+	for j := range o.Context {
+		o.Context[j] = drives.Cue{Evidence: p, Value: .4}
+	}
+	return o, e
 }
 
 type futureClock struct{}
@@ -400,6 +412,49 @@ func TestRuntimeIntegration(t *testing.T) {
 		}
 		if applied != 2 {
 			t.Fatal("double appraisal after restart", applied)
+		}
+	})
+	t.Run("DriveRegistryPersistenceAndVersionIsolation", func(t *testing.T) {
+		m, l := start("drive-registry")
+		app := hws.Runtime{Store: store, Handler: hws.DriveAppraisalHandler{Source: drivePerception{}}}
+		first, e := app.Execute(ctx, m.Scope, l, "drive-first", rt.Command{Kind: "step"})
+		if e != nil {
+			t.Fatal(e)
+		}
+		snap, e := store.LoadRun(ctx, m.Scope)
+		if e != nil {
+			t.Fatal(e)
+		}
+		c, e := hws.DecodeDriveCheckpoint(snap.State.Data)
+		if e != nil || c.Model != drives.ModelVersion || len(c.Actors[0].Variables) != 22 {
+			t.Fatal("persisted registry", e)
+		}
+		resumed := hws.Runtime{Store: New(db), Handler: hws.DriveAppraisalHandler{Source: drivePerception{}}}
+		repeated, e := resumed.Execute(ctx, m.Scope, l, "drive-first", rt.Command{Kind: "step"})
+		if e != nil || first != repeated {
+			t.Fatal("drive receipt replay", e)
+		}
+		legacy := hws.Runtime{Store: New(db), Handler: hws.AppraisalHandler{Source: appraisalPerception{}}}
+		if _, e := legacy.Execute(ctx, m.Scope, l, "wrong-version", rt.Command{Kind: "step"}); e == nil {
+			t.Fatal("new state decoded by old registry")
+		}
+		if _, e := resumed.Execute(ctx, m.Scope, l, "drive-second", rt.Command{Kind: "step"}); e != nil {
+			t.Fatal(e)
+		}
+		after, e := store.LoadRun(ctx, m.Scope)
+		if e != nil {
+			t.Fatal(e)
+		}
+		c, e = hws.DecodeDriveCheckpoint(after.State.Data)
+		if e != nil {
+			t.Fatal(e)
+		}
+		n := 0
+		for _, actor := range c.Actors {
+			n += len(actor.Applied)
+		}
+		if n != 2 {
+			t.Fatal("repeated appraisal", n)
 		}
 	})
 	t.Run("RevocationPurgesAndPreventsResume", func(t *testing.T) {

@@ -7,7 +7,7 @@ import "github.com/tushardhara/dream/core"
 const Version = 1
 const ModelVersion = "appraisal.v1"
 const RegistryVersion = "ticket7-subset.v1"
-const RegistryCompleteness = "UNVERIFIED: complete HWS PRD section 6 unavailable"
+const RegistryCompleteness = "LEGACY SUBSET: complete owner-supplied registry is simulator/drives hws-section6.v1"
 const Count = 6
 const Hour core.LogicalTime = 3600 * 1e9
 const (
