@@ -33,11 +33,15 @@ func (s *Store) Revoke(ctx context.Context, c graph.AppendCommand, root core.ID)
 		return result, err
 	}
 
-	// Model artifacts have ordinary same-scope source lineage. Applications link
-	// that lineage to simulator checkpoints without widening source read rights.
-	if _, err = tx.Exec(ctx, `WITH RECURSIVE affected(actor,namespace,id) AS (
- SELECT a.actor,a.namespace,a.event_id FROM dream.model_applications a JOIN dream.model_requests r USING(actor,namespace,run,key) JOIN dream.tombstones t ON (r.principal,r.memory_namespace,r.event_id)=(t.actor,t.namespace,t.event_id)
- UNION SELECT l.actor,l.namespace,l.child FROM dream.lineage l JOIN affected a ON (l.actor,l.namespace,l.parent)=(a.actor,a.namespace,a.id)
+	// Propagate both ordinary lineage and immutable cross-scope snapshot/fork
+	// provenance in one closure, including model application links.
+	if _, err = tx.Exec(ctx, `WITH RECURSIVE edges(actor,namespace,id,pa,pn,pid) AS (
+  SELECT actor,namespace,child,actor,namespace,parent FROM dream.lineage
+  UNION ALL SELECT actor,namespace,event_id,source_actor,source_namespace,source_event FROM dream.derived_sources
+  UNION ALL SELECT a.actor,a.namespace,a.event_id,r.principal,r.memory_namespace,r.event_id FROM dream.model_applications a JOIN dream.model_requests r USING(actor,namespace,run,key)
+ ), affected(actor,namespace,id) AS (
+  SELECT actor,namespace,event_id FROM dream.tombstones
+  UNION SELECT e.actor,e.namespace,e.id FROM edges e JOIN affected a ON(e.pa,e.pn,e.pid)=(a.actor,a.namespace,a.id)
  ) INSERT INTO dream.tombstones SELECT actor,namespace,id,clock_timestamp() FROM affected ON CONFLICT DO NOTHING`); err != nil {
 		return result, err
 	}
@@ -51,12 +55,12 @@ func (s *Store) Revoke(ctx context.Context, c graph.AppendCommand, root core.ID)
 	if _, err = tx.Exec(ctx, `DELETE FROM dream.runtime_operations o USING dream.runtime_heads h,dream.tombstones t WHERE (o.actor,o.namespace,o.run)=(h.actor,h.namespace,h.run) AND (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id)`); err != nil {
 		return result, err
 	}
-	for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "model_payloads", "projections"} {
+	for _, table := range []string{"observable_payloads", "private_payloads", "research_payloads", "runtime_payloads", "model_payloads", "snapshot_payloads", "projections"} {
 		if _, err = tx.Exec(ctx, `DELETE FROM dream.`+table+` p USING dream.tombstones t WHERE(p.actor,p.namespace,p.event_id)=(t.actor,t.namespace,t.event_id)`); err != nil {
 			return result, err
 		}
 	}
-	if _, err = tx.Exec(ctx, `UPDATE dream.artifact_refs a SET invalidated=true WHERE EXISTS(SELECT 1 FROM dream.artifact_sources src JOIN dream.tombstones t USING(actor,namespace,event_id) WHERE(src.actor,src.namespace,src.artifact_id)=(a.actor,a.namespace,a.id))`); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE dream.artifact_refs a SET invalidated=true WHERE EXISTS(SELECT 1 FROM dream.tombstones t WHERE(t.actor,t.namespace,t.event_id)=(a.actor,a.namespace,a.id)) OR EXISTS(SELECT 1 FROM dream.artifact_sources src JOIN dream.tombstones t USING(actor,namespace,event_id) WHERE(src.actor,src.namespace,src.artifact_id)=(a.actor,a.namespace,a.id))`); err != nil {
 		return result, err
 	}
 	return result, tx.Commit(ctx)

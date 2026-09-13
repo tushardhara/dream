@@ -24,3 +24,8 @@ var ReaderScopes string
 //
 //go:embed 004_models.sql
 var Models string
+
+// Snapshots adds version 5 restricted frozen states and cross-scope provenance.
+//
+//go:embed 005_snapshots.sql
+var Snapshots string

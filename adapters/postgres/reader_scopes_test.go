@@ -140,7 +140,7 @@ func TestScopedReaderIntegration(t *testing.T) {
 		if err = Migrate(ctx, old); err != nil {
 			t.Fatal(err)
 		}
-		if count(t, old, `SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3,4)`) != 4 || count(t, old, `SELECT count(*) FROM dream.private_payloads WHERE namespace='reader-upgrade'`) != 1 {
+		if count(t, old, `SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3,4,5)`) != 5 || count(t, old, `SELECT count(*) FROM dream.private_payloads WHERE namespace='reader-upgrade'`) != 1 {
 			t.Fatal("v2 upgrade lost ledger/payload")
 		}
 	})

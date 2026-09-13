@@ -31,15 +31,16 @@ try:
     dump = command("docker", "exec", name, "pg_dump", "-U", "postgres", "-d", "postgres", "--schema=dream")
     command("docker", "exec", name, "createdb", "-U", "postgres", "dream_restore")
     command("docker", "exec", "-i", name, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "dream_restore", input=dump)
-    query = """SELECT (SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3,4))=4 AND (SELECT max(version) FROM dream.schema_versions)=4
+    query = """SELECT (SELECT count(*) FROM dream.schema_versions WHERE version IN (1,2,3,4,5))=5 AND (SELECT max(version) FROM dream.schema_versions)=5
       AND (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='dream' AND c.relname IN ('observable_payloads','private_payloads','research_payloads','runtime_payloads','reader_scopes','model_payloads') AND c.relrowsecurity AND c.relforcerowsecurity)=6
+        WHERE n.nspname='dream' AND c.relname IN ('observable_payloads','private_payloads','research_payloads','runtime_payloads','reader_scopes','model_payloads','snapshot_payloads') AND c.relrowsecurity AND c.relforcerowsecurity)=7
       AND (SELECT count(*) FROM dream.tombstones)>0
       AND NOT EXISTS(SELECT 1 FROM (SELECT actor,namespace,event_id FROM dream.observable_payloads
       UNION ALL SELECT actor,namespace,event_id FROM dream.private_payloads
       UNION ALL SELECT actor,namespace,event_id FROM dream.research_payloads
       UNION ALL SELECT actor,namespace,event_id FROM dream.runtime_payloads
-      UNION ALL SELECT actor,namespace,event_id FROM dream.model_payloads) p
+      UNION ALL SELECT actor,namespace,event_id FROM dream.model_payloads
+      UNION ALL SELECT actor,namespace,event_id FROM dream.snapshot_payloads) p
       JOIN dream.tombstones t USING(actor,namespace,event_id))
       AND NOT EXISTS(SELECT 1 FROM dream.runtime_operations o JOIN dream.runtime_heads h USING(actor,namespace,run)
       JOIN dream.tombstones t ON (h.actor,h.namespace,h.event_id)=(t.actor,t.namespace,t.event_id));"""

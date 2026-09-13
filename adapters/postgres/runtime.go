@@ -19,9 +19,14 @@ import (
 var _ hws.RuntimeStore = (*Store)(nil)
 
 type runtimePayload struct {
-	Manifest   *hws.Manifest  `json:"manifest,omitempty"`
-	State      rt.State       `json:"state"`
-	Transition *rt.Transition `json:"transition,omitempty"`
+	Fork            *hws.ForkSpec  `json:"fork,omitempty"`
+	Command         *rt.Command    `json:"command,omitempty"`
+	Model           *hws.ModelUse  `json:"model,omitempty"`
+	Before          string         `json:"before,omitempty"`
+	OperationalStop bool           `json:"operational_stop,omitempty"`
+	Manifest        *hws.Manifest  `json:"manifest,omitempty"`
+	State           rt.State       `json:"state"`
+	Transition      *rt.Transition `json:"transition,omitempty"`
 }
 
 func runtimeID(run string, revision int64) core.ID {
@@ -114,6 +119,14 @@ func loadRuntime(ctx context.Context, tx pgx.Tx, sc hws.Scope) (hws.Snapshot, co
 		return snap, "", nil, err
 	}
 	snap.State = payload.State
+	if snap.State.Engine == rt.BranchEngineVersion {
+		label := &hws.ExperimentLabel{}
+		err = tx.QueryRow(ctx, `SELECT b.mode,b.coupling,h.actor,h.namespace,h.world,h.branch,h.run,h.id,h.hash FROM dream.branch_origins b JOIN dream.snapshot_heads h ON(h.actor,h.namespace,h.event_id)=(b.actor,b.namespace,b.snapshot_event) WHERE b.actor=$1 AND b.namespace=$2 AND b.run=$3`, sc.Actor, sc.Namespace, sc.Run).Scan(&label.Mode, &label.Coupling, &label.Source.Scope.Actor, &label.Source.Scope.Namespace, &label.Source.Scope.World, &label.Source.Scope.Branch, &label.Source.Scope.Run, &label.Source.ID, &label.Source.Hash)
+		if err != nil || label.Mode != hws.FreshSimulation {
+			return snap, "", nil, fmt.Errorf("missing branch experiment manifest")
+		}
+		snap.Experiment = label
+	}
 	return snap, id, payload.Manifest, snap.State.Validate()
 }
 func (s *Store) LoadRun(ctx context.Context, sc hws.Scope) (hws.Snapshot, error) {
@@ -276,7 +289,7 @@ func (s *Store) CommitRun(ctx context.Context, c hws.Commit) (hws.Receipt, error
 	}
 	oldGenesis, _ := json.Marshal(snap.State.Genesis)
 	newGenesis, _ := json.Marshal(c.State.Genesis)
-	if !bytes.Equal(oldGenesis, newGenesis) || c.State.Budget != snap.State.Budget || c.State.Engine != snap.State.Engine || c.State.RNG != snap.State.RNG || c.State.At < snap.State.At || c.State.Step < snap.State.Step || c.State.Step > snap.State.Step+1 || c.State.Events < snap.State.Events || c.State.Events > snap.State.Events+1 {
+	if !bytes.Equal(oldGenesis, newGenesis) || c.State.Budget != snap.State.Budget || c.State.Engine != snap.State.Engine || c.State.RNG != snap.State.RNG || c.State.RandomDomain != snap.State.RandomDomain || c.State.ExogenousDomain != snap.State.ExogenousDomain || c.State.Coupled != snap.State.Coupled || c.State.At < snap.State.At || c.State.Step < snap.State.Step || c.State.Step > snap.State.Step+1 || c.State.Events < snap.State.Events || c.State.Events > snap.State.Events+1 {
 		return hws.Receipt{}, fmt.Errorf("invalid immutable or monotonic transition")
 	}
 	if snap.Revision != c.Expected {
@@ -323,7 +336,8 @@ func (s *Store) CommitRun(ctx context.Context, c hws.Commit) (hws.Receipt, error
 			return hws.Receipt{}, err
 		}
 	}
-	payload, err := json.Marshal(runtimePayload{Manifest: manifest, State: c.State, Transition: c.Transition})
+	before, _ := snap.State.Hash()
+	payload, err := json.Marshal(runtimePayload{Manifest: manifest, State: c.State, Transition: c.Transition, Command: &c.Command, Model: c.Model, Before: before, OperationalStop: !now.Before(snap.Deadline)})
 	if err != nil {
 		return hws.Receipt{}, err
 	}

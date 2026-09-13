@@ -198,6 +198,14 @@ func TestCognitiveIntegration(t *testing.T) {
 			if name == "outage" && deliveries != 0 {
 				t.Fatal("outage delivered behavior")
 			}
+			snapshotKey, e := store.CaptureSnapshot(ctx, request.Scope, "after-cognition", receipt.Revision)
+			if e != nil {
+				t.Fatal(e)
+			}
+			frozen, e := store.ReadSnapshot(ctx, snapshotKey)
+			if e != nil || len(frozen.Models) != 1 || frozen.Models[0] != use {
+				t.Fatal("snapshot lost exact model reference", e)
+			}
 			// The ordinary source revocation mechanism reaches model-derived cognition,
 			// including compressed state and queued own-fiction disclosure.
 			revoke := record.Event
@@ -206,6 +214,9 @@ func TestCognitiveIntegration(t *testing.T) {
 			revoke.Type = "revoke"
 			if _, e = graph.RevokeMemory(ctx, store, scope, "revoke", 1, revoke, "e1"); e != nil {
 				t.Fatal(e)
+			}
+			if _, e = store.ReadSnapshot(ctx, snapshotKey); e == nil {
+				t.Fatal("revoked cognition snapshot survived")
 			}
 			if _, e = store.LoadRun(ctx, m.Scope); e == nil {
 				t.Fatal("revoked cognition resurrected")
