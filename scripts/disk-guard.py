@@ -34,15 +34,33 @@ def preflight(paths, role=None):
                                 s.f_bavail*s.f_frsize, s.f_files, s.f_ffree))
         if problem:
             raise RuntimeError(str(path) + ': ' + problem)
-    size = int(subprocess.check_output(['du', '-scB1', *map(str, paths)], text=True,
-                                      timeout=30).splitlines()[-1].split()[0])
+    try:
+        size = int(subprocess.check_output(['du', '-scB1', *map(str, paths)], text=True,
+                                          stderr=subprocess.STDOUT, timeout=30).splitlines()[-1].split()[0])
+    except subprocess.SubprocessError as error:
+        raise RuntimeError('role footprint scan unavailable (failed or exceeded 30s)') from error
     if role and shutil.which('docker'):
-        images = subprocess.check_output(['docker', 'images', '-q', '--filter', 'label=dream.test.role='+role], text=True, timeout=30).split()
-        for image in set(images):
-            size += int(subprocess.check_output(['docker', 'image', 'inspect', '--format={{.Size}}', image], text=True, timeout=30))
+        try:
+            images = subprocess.check_output(['docker', 'images', '-q', '--filter', 'label=dream.test.role='+role], text=True, stderr=subprocess.STDOUT, timeout=30).split()
+            for image in set(images):
+                size += int(subprocess.check_output(['docker', 'image', 'inspect', '--format={{.Size}}', image], text=True, stderr=subprocess.STDOUT, timeout=30))
+        except subprocess.SubprocessError as error:
+            # Skipping an unreachable daemon could hide retained role images.
+            raise RuntimeError('Docker footprint inventory unavailable; cannot enforce role accounting') from error
     if size >= 10 * GIB:
         raise RuntimeError('role accounted footprint reached 10 GiB')
     return size
+
+
+def deny(root, command, error, owns_lock):
+    # A rejected second caller must not overwrite the running owner's checkpoint.
+    path = root/('checkpoint.json' if owns_lock else 'denied.json')
+    record = {'status': 'blocked', 'phase': 'preflight' if owns_lock else 'lock',
+              'exit_code': 1, 'blocker': str(error), 'command': command,
+              'finished_at': time.time()}
+    path.write_text(json.dumps(record))
+    print('Guard: blocked:', str(error), 'checkpoint='+str(path), flush=True)
+    return 1
 
 
 def main():
@@ -60,12 +78,18 @@ def main():
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     # Same role cannot run two guarded commands, including from another checkout.
     with (root/'exclusive.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            return deny(root, command, 'role lock unavailable: '+str(error), False)
         work = pathlib.Path.cwd().resolve()
         paths = [root, work, pathlib.Path.home()/'go'] + [pathlib.Path(p).resolve() for p in args.account]
         # Avoid counting descendants twice; shared caches are conservatively charged.
         paths = [p for p in dict.fromkeys(paths) if not any(q != p and q in p.parents for q in paths)]
-        preflight(paths, args.role)
+        try:
+            preflight(paths, args.role)
+        except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+            return deny(root, command, error, True)
         cache = root/'go-build'
         cache.mkdir(exist_ok=True)
         (root/'tool-cache').mkdir(exist_ok=True)

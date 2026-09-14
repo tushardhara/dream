@@ -51,3 +51,15 @@ that unavailable safeguard rather than asserting this wrapper provides it.
 
 CI still runs the full `make verify`; local agents must wrap it. The guard changes
 resource handling, never test assertions, timeouts, fixture limits or acceptance.
+
+Preflight failures write a blocked `checkpoint.json` before any child launches.
+A competing caller writes bounded latest `denied.json` instead, preserving the
+active owner's checkpoint. If the Docker CLI exists but daemon inventory fails,
+the guard reports unavailable role accounting and denies; it never silently skips
+that inventory. A sandbox unable to meet the absolute 30 GiB floor remains blocked;
+there is no relative floor or role override. Independent required Docker/PG checks
+remain unrun where the daemon is unavailable, regardless of CI status elsewhere.
+
+For a busy shared host, local agents may set `GOMAXPROCS=2 GOFLAGS=-p=2` to bound Go
+build/runtime parallelism. This does not change tests, assertions, resource ceilings
+or command timeouts. A footprint scan still fails closed if it exceeds 30 seconds.

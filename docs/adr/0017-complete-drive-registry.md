@@ -128,3 +128,10 @@ BranchBudgetAndDeadlineDoNotReset test pins inherited deadline, runtime counts
 and reserved model tokens/spend. A future adopted migration must enforce binding
 and accounting at the host/persistence boundary; this constructor does not
 provide that future integration. No bypass was established by this review.
+
+Latest review pins: TestRetainedFactorResponseSensitivity varies each retained
+factor alone and requires its documented Rest/Wait consequence. Separate fatigue,
+residue and scarcity substitutions are mutation controls. Saved legacy appraisal
+input/output additionally pin active appraisal gains, not just decay; expectation
+bytes were generated with the unchanged baseline implementation from the actual
+saved checkpoint (see testdata/README.md). The duplicate replay must preserve them.

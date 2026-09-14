@@ -273,3 +273,61 @@ func TestRetainedFactorWireVersion(t *testing.T) {
 		t.Fatal("integrated legacy rejected", e)
 	}
 }
+
+func TestRetainedFactorResponseSensitivity(t *testing.T) {
+	for i, name := range []string{"fatigue", "scarcity_opportunity", "slow_residue"} {
+		t.Run(name, func(t *testing.T) {
+			low, high := initial(t), initial(t)
+			low.Factors.Variables[i] = Variable{[4]float64{.05, .05, 1, 1}, 0}
+			high.Factors.Variables[i] = Variable{[4]float64{.95, .95, 1, 1}, 0}
+			a, e := Response(low)
+			if e != nil {
+				t.Fatal(e)
+			}
+			b, e := Response(high)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if i == ScarcityOpportunity {
+				if b.Wait <= a.Wait {
+					t.Fatal("scarcity/opportunity lost its wait consequence")
+				}
+			} else if b.Rest <= a.Rest {
+				t.Fatal("retained factor lost its rest consequence")
+			}
+		})
+	}
+}
+
+//go:embed testdata/legacy-appraisal-input.json
+var savedLegacyAppraisalInput []byte
+
+//go:embed testdata/legacy-appraisal-output.json
+var savedLegacyAppraisalOutput []byte
+
+func TestSavedLegacyAppraisalContinuation(t *testing.T) {
+	recorded, e := DecodeRecorded(savedLegacy)
+	if e != nil || recorded.Legacy == nil {
+		t.Fatal(e)
+	}
+	var input dynamics.Perceived
+	if e := json.Unmarshal(savedLegacyAppraisalInput, &input); e != nil {
+		t.Fatal(e)
+	}
+	next, _, duplicate, e := dynamics.Appraise(*recorded.Legacy, input, input.LearnedAt)
+	if e != nil || duplicate {
+		t.Fatal("legacy appraisal failed", e)
+	}
+	raw, e := next.Canonical()
+	if e != nil || !bytes.Equal(raw, savedLegacyAppraisalOutput) {
+		t.Fatal("frozen legacy appraisal bytes/gains changed", e)
+	}
+	again, _, duplicate, e := dynamics.Appraise(next, input, input.LearnedAt)
+	if e != nil || !duplicate {
+		t.Fatal("legacy receipt replay failed", e)
+	}
+	raw, e = again.Canonical()
+	if e != nil || !bytes.Equal(raw, savedLegacyAppraisalOutput) {
+		t.Fatal("legacy duplicate changed state", e)
+	}
+}

@@ -12,3 +12,15 @@ logical hash and the 12-hour continuation hash were calculated with the OLD
 baseline implementation, not the new drives package. The test pins both hashes.
 The full original saved artifact is also replayed by TestSavedLegacyDemoReplay.
 All people, notes and labels are fictional; no private PRD or real data is included.
+
+legacy-appraisal-input.json and legacy-appraisal-output.json freeze an additional
+synthetic compatibility experiment recorded September 14, 2026. Starting from the
+same actual saved legacy-state.json above, the unchanged clean baseline checkout
+54b7ab079723af9b96b5312cb7983652d92e5ba9 appraised the explicit, self-permitted input
+one virtual hour later. This is a newly recorded compatibility probe, not a claim
+that this event occurred in the September 13 demo. No new drives code generated
+the expectation. The output logical hash is
+3f13c8336f476e427efe5492d27ce07cd89fb07d62bc9285ee0908ef8fce4405.
+TestSavedLegacyAppraisalContinuation compares exact output bytes and duplicate
+receipt replay; changing the frozen fatigue appraisal gain must fail. Inputs
+exercise nonzero appraisal rather than testing only decay of a quiescent state.
