@@ -357,3 +357,87 @@ func TestHistoryDoesNotRevealFutureAndDuplicateValidatesEnvelope(t *testing.T) {
 		}
 	}
 }
+
+func TestReplayCannotOverrideDisabledOrSimpleArm(t *testing.T) {
+	ctx := context.Background()
+	for _, arm := range []assistance.Arm{assistance.None, assistance.Simple} {
+		for _, stored := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/stored=%v", arm, stored), func(t *testing.T) {
+				l, r := Fixture(arm, assistance.Coordinate)
+				out, e := l.Host(assistance.FakePlanner{}).Execute(ctx, r, nil)
+				if e != nil {
+					t.Fatal(e)
+				}
+				rec := copyValue(out)
+				if arm == assistance.None {
+					rec.Result = assistance.ExplicitPreference(r.Goal, r.User)
+					rec.Delivered = true
+				} else {
+					c := rec.Result.Candidates
+					rec.Result = assistance.Result{Version: assistance.Version, Candidates: []assistance.Candidate{c[1], c[0]}, Selected: 0}
+				}
+				if stored {
+					l.history[0] = rec
+					before := l.Deliveries()
+					if _, e := l.Host(nil).Execute(ctx, r, nil); e == nil || l.Deliveries() != before {
+						t.Fatal("stored record bypassed arm policy")
+					}
+				} else {
+					fresh, request := Fixture(arm, assistance.Coordinate)
+					if _, e := fresh.Host(nil).Execute(ctx, request, &rec); e == nil || fresh.Deliveries() != 0 {
+						t.Fatal("recorded result bypassed arm policy")
+					}
+				}
+			})
+		}
+	}
+}
+func TestPlannerHistoryScrubsPriorEvidence(t *testing.T) {
+	ctx := context.Background()
+	l, r := Fixture(assistance.Multi, assistance.Coordinate)
+	first, e := l.Host(assistance.FakePlanner{}).Execute(ctx, r, nil)
+	if e != nil || len(first.Result.Candidates[1].Evidence) != 2 {
+		t.Fatal("missing positive history control", e)
+	}
+	next := copyValue(r)
+	next.ID = "next"
+	next.At++
+	next.Contexts = nil
+	next.Arm = assistance.Single
+	if e := l.Register(next); e != nil {
+		t.Fatal(e)
+	}
+	called := false
+	_, e = l.Host(planFunc(func(ctx context.Context, in assistance.Input) (assistance.Result, error) {
+		called = true
+		if len(in.History) != 1 || len(in.Context) != 0 {
+			t.Fatal("history/control context lost")
+		}
+		for _, old := range in.History {
+			if old.RequestHash != "" || old.EvidenceHash != "" {
+				t.Fatal("prior evidence hashes exposed")
+			}
+			for _, c := range old.Result.Candidates {
+				if len(c.Evidence) != 0 {
+					t.Fatal("prior evidence refs exposed")
+				}
+			}
+		}
+		return (assistance.FakePlanner{}).Plan(ctx, in)
+	})).Execute(ctx, next, nil)
+	if e != nil || !called {
+		t.Fatal("planner path not exercised", e)
+	}
+}
+func TestRequestSourceBudgetIsGlobal(t *testing.T) {
+	_, r := Fixture(assistance.Multi, assistance.Coordinate)
+	for i := range r.Contexts {
+		r.Contexts[i].Sources = nil
+		for j := 0; j < 9; j++ {
+			r.Contexts[i].Sources = append(r.Contexts[i].Sources, core.ID(fmt.Sprintf("source-%d", j)))
+		}
+	}
+	if r.Validate() == nil {
+		t.Fatal("accepted more sources than host can consume")
+	}
+}

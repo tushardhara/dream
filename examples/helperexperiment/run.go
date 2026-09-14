@@ -42,7 +42,7 @@ func (s *steps) Step(ctx context.Context, i int, at core.LogicalTime, seed uint6
 func World() hws.AssistanceWorld {
 	a, _ := behavior.NewActionActor("alice", 0)
 	b, _ := behavior.NewActionActor("bob", 0)
-	w := hws.AssistanceWorld{Actors: []behavior.ActionActor{a, b}}
+	w := hws.AssistanceWorld{Actors: []behavior.ActionActor{a, b}, Exogenous: []hws.ExogenousResource{{Frame: 4, Resource: "time", MinUnits: 0, MaxUnits: 1}, {Frame: 5, Resource: "time", MinUnits: 0, MaxUnits: 1}}}
 	kinds := []behavior.Kind{behavior.Say, behavior.Argue, behavior.Help, behavior.Wait}
 	for i := 0; i < 8; i++ {
 		actor, other := core.ID("alice"), core.ID("bob")

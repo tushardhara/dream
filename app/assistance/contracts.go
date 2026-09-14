@@ -87,7 +87,12 @@ func (r Request) Validate() error {
 		return ErrInvalid
 	}
 	owners := map[core.ID]bool{}
+	totalSources := 0
 	for _, p := range r.Contexts {
+		totalSources += len(p.Sources)
+		if totalSources > 16 {
+			return ErrInvalid
+		}
 		if p.Version != 1 || p.Query.Validate() != nil || p.Binding != r.ID || p.Query.Actor != r.Helper || p.Recipient != r.Helper || p.Query.Purpose != r.Purpose || p.Mode != graph.ExternalContext || p.Operation != core.Read || p.Query.KnownAt != r.At || p.Query.ValidAt != r.At || !seen[p.Query.Scope.Owner] || owners[p.Query.Scope.Owner] || len(p.Sources) < 1 || len(p.Sources) > 16 {
 			return ErrInvalid
 		}
@@ -181,7 +186,16 @@ func (o Result) validate(r Request, items []graph.SafeContextItem) bool {
 		}
 		wait = wait || c.Action == Wait
 	}
-	return wait
+	if !wait {
+		return false
+	}
+	if r.Arm == None && o.Candidates[o.Selected].Action != Wait {
+		return false
+	}
+	if r.Arm == Simple && Digest(o) != Digest(ExplicitPreference(r.Goal, r.User)) {
+		return false
+	}
+	return true
 }
 func DecodeResult(b []byte) (Result, error) {
 	var out Result

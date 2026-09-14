@@ -150,12 +150,6 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 		return Interaction{}, ErrInvalid
 	}
 	selected := result.Candidates[result.Selected]
-	if r.Arm == None && selected.Action != Wait {
-		return Interaction{}, ErrInvalid
-	}
-	if r.Arm == Simple && Digest(result) != Digest(ExplicitPreference(r.Goal, r.User)) {
-		return Interaction{}, ErrInvalid
-	}
 	if revalidate(ctx, selected) != nil {
 		return Interaction{}, ErrDenied
 	}

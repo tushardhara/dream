@@ -24,15 +24,31 @@ type HumanFrame struct {
 	At        core.LogicalTime
 	Situation behavior.ActionSituation
 }
+
+// ExogenousResource is a bounded external availability shock, fixed before any
+// human/helper decision. It is simulator-only and never passed to the helper.
+type ExogenousResource struct {
+	Frame              int
+	Resource           core.ID
+	MinUnits, MaxUnits int64
+}
+type RealizedResource struct {
+	Frame    int
+	Resource core.ID
+	Units    int64
+	Draw     uint64
+}
 type AssistanceWorld struct {
-	Actors []behavior.ActionActor
-	Frames []HumanFrame
+	Exogenous []ExogenousResource
+	Actors    []behavior.ActionActor
+	Frames    []HumanFrame
 }
 type AssistanceRun struct {
-	Manifest AssistanceManifest
-	Humans   []behavior.ActionDecision
-	Helper   []assistance.Interaction
-	Final    []behavior.ActionActor
+	Exogenous []RealizedResource
+	Manifest  AssistanceManifest
+	Humans    []behavior.ActionDecision
+	Helper    []assistance.Interaction
+	Final     []behavior.ActionActor
 	// Index of the first human frame offered an actual delivered intervention.
 	// -1 means no delivered coordination proposal; divergence is not presumed.
 	FirstIntervention int
@@ -56,7 +72,7 @@ func NewAssistanceManifest(world AssistanceWorld, arm assistance.Arm, seed uint6
 // no-assistant. A coordination proposal adds an affordance to its recipient's next
 // frame; it neither selects their action nor supplies an observed positive outcome.
 func RunAssistance(ctx context.Context, world AssistanceWorld, m AssistanceManifest, helper AssistanceStep, recorded *AssistanceRun) (AssistanceRun, error) {
-	if m.Version != AssistanceExperimentVersion || m.WorldVersion != behavior.ActionPolicy || m.HelperVersion != assistance.Version || !m.Arm.Valid() || m.FixtureHash != assistance.Digest(world) || len(world.Actors) < 2 || len(world.Actors) > 8 || len(world.Frames) < 1 || len(world.Frames) > 16 || helper == nil {
+	if m.Version != AssistanceExperimentVersion || m.WorldVersion != behavior.ActionPolicy || m.HelperVersion != assistance.Version || !m.Arm.Valid() || m.FixtureHash != assistance.Digest(world) || len(world.Actors) < 2 || len(world.Actors) > 8 || len(world.Frames) < 1 || len(world.Frames) > 16 || len(world.Exogenous) > 16 || helper == nil {
 		return AssistanceRun{}, assistance.ErrInvalid
 	}
 	if recorded != nil && (assistance.Digest(recorded.Manifest) != assistance.Digest(m) || len(recorded.Helper) != len(world.Frames)) {
@@ -76,6 +92,27 @@ func RunAssistance(ctx context.Context, world AssistanceWorld, m AssistanceManif
 		actors[a.Drives.Actor] = i
 	}
 	out := AssistanceRun{Manifest: m, FirstIntervention: -1}
+	seenExogenous := map[struct {
+		Frame    int
+		Resource core.ID
+	}]bool{}
+	for i, event := range owned.Exogenous {
+		key := struct {
+			Frame    int
+			Resource core.ID
+		}{event.Frame, event.Resource}
+		if event.Frame < 0 || event.Frame >= len(owned.Frames) || event.Resource.Validate() != nil || event.MinUnits < 0 || event.MaxUnits < event.MinUnits || event.MaxUnits > 1000000 || seenExogenous[key] {
+			return AssistanceRun{}, assistance.ErrInvalid
+		}
+		seenExogenous[key] = true
+		draw := streamDraw("exogenous-resource.v1", m.ExogenousSeed, i)
+		units := event.MinUnits + int64(draw%uint64(event.MaxUnits-event.MinUnits+1))
+		if owned.Frames[event.Frame].Situation.Resources == nil {
+			owned.Frames[event.Frame].Situation.Resources = map[core.ID]int64{}
+		}
+		owned.Frames[event.Frame].Situation.Resources[event.Resource] = units
+		out.Exogenous = append(out.Exogenous, RealizedResource{Frame: event.Frame, Resource: event.Resource, Units: units, Draw: draw})
+	}
 	pending := map[core.ID]bool{}
 	var previous core.LogicalTime
 	for i, f := range owned.Frames {

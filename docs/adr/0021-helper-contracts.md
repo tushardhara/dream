@@ -65,15 +65,21 @@ to the user's next turn; it does not choose the human action or mark it successf
 The first affected frame is recorded separately from actual decision divergence.
 
 The manifest pins world/helper versions, fixture digest, arm and independent human,
-exogenous and helper seeds. The initial exogenous event schedule is frozen in the
-fixture, rather than generated through interleaved actor/helper RNG consumption.
+exogenous and helper seeds. The fixture supplies two bounded external resource-availability events. Their
+units are realized from ExogenousSeed before any human/helper decision, recorded
+separately, and applied to the human situation resource map. Matched arms assert
+identical realized events. Changing only that seed changes availability and the
+actual eligibility of Help while the human/helper seeds remain fixed.
 Human/helper draws are keyed by domain and ordinal, so extra helper draws cannot
 shift human draws. A recorded run must match the complete manifest, request/evidence
 digests (including approved source contents) and reconstructed final transcript. Every helper replay path rechecks
 current graph rights; purged sources cannot be resurrected. Duplicate delivery IDs
 also validate the complete recorded envelope. Historical requests see only helper
 interactions at or before their own clock; old source refs/hashes are omitted from
-planner history. The reference host retains at most32 interactions and1024 sanitized
+planner history. Recorded and stored results use the same arm validator: disabled
+arms cannot deliver and simple arms cannot replace the explicit-preference template.
+Pre-commit checking is deliberately repeated inside atomic journal validation.
+The reference host retains at most32 interactions and1024 sanitized
 policy audit records, denying new work at capacity.
 
 New opt-in types and a new CLI require no migration of schemas1–6, cognitive.v1/v3,
@@ -93,7 +99,7 @@ outcome. Later #53 adds recipient-generated outcome consumers and corrections.
 | Bounded explicit goal, candidates/WAIT, independent history | Request/Result validation, Host.Execute, ExplicitPreference; TestSecondHostAndArms, TestOutageUnknownPauseAndInjection |
 | Per-participant outcome distinction | Outcome.Validate; TestOutcomeDoesNotInventBenefit |
 | Four arms with humans continuing | hws.RunAssistance; TestMatchedArmsReplayAndHumanActivity |
-| Independent streams and matched exogenous events | AssistanceManifest, domain-keyed draws; pre-intervention equality and WAIT-arm equality tests |
+| Independent streams and matched exogenous events | AssistanceManifest, realized seeded resource events; TestExogenousSeedControlsActualHumanResources, pre-intervention and WAIT-arm equality |
 | No latent/future/label/foreign claims | Only graph SafeContextItem enters Input; forbidden-source/time/mode negatives before planner |
 | Same normal/error/replay privacy gates | TestCurrentAccessNormalErrorReplay; source capability revalidation at commit |
 | WAIT / eligibility / outage | Zero delivery for WAIT/outage; refusal and invalid recipient/evidence negatives |
@@ -103,3 +109,5 @@ outcome. Later #53 adds recipient-generated outcome consumers and corrections.
 Local verification and CI results, including failed attempts, are recorded in the
 SHA-bound PR evidence. Synthetic fixtures verify engineering behavior; real-human
 validity, live-provider semantic competence and scientific uplift remain NOT_TESTED.
+
+Review follow-ups add TestPlannerHistoryScrubsPriorEvidence for old source references/hashes and arm-policy negatives for both recorded and stored results. Request.Validate enforces the same total16-source bound as the consuming host. All tests run through actual consumers; app/assistance intentionally has no separate mirror-only test suite.
