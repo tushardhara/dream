@@ -168,8 +168,19 @@ func TestAll27ActionsExecuteBoundedEffects(t *testing.T) {
 	}
 }
 func TestActionPromiseActualFulfillmentAndBreach(t *testing.T) {
-	for _, status := range []string{"fulfilled", "broken"} {
-		t.Run(status, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, status      string
+		learned, occurred core.LogicalTime
+		reject            bool
+	}{
+		{"fulfilled", "fulfilled", 15, 15, false},
+		{"broken", "broken", 15, 15, false},
+		{"late_fulfilled", "fulfilled", 45, 45, true},
+		{"learned_after_due", "fulfilled", 45, 30, false},
+		{"late_broken", "broken", 45, 45, false},
+	} {
+		status := tc.status
+		t.Run(tc.name, func(t *testing.T) {
 			s := cognitiveWorld(t)
 			input := s.Queue[0]
 			step := func(i rt.Input, f CognitiveFrame) ActionCheckpoint {
@@ -202,9 +213,20 @@ func TestActionPromiseActualFulfillmentAndBreach(t *testing.T) {
 				t.Fatal("resource use fabricated fulfillment")
 			}
 			input.ID = "later-response"
-			input.At = 15
+			input.At = tc.learned
 			f = actionFrame(input)
+			f.Situation.Perceived.OccurredAt = tc.occurred
 			f.Response = &CognitiveResponse{Decision: decision, Other: "b", Code: "supportive", CommitmentStatus: status}
+			if tc.reject {
+				h := CognitiveHandler{Policy: behavior.ActionPolicy, Source: cognitiveFunc(func(rt.Input) (CognitiveFrame, error) { return f, nil })}
+				before, _ := s.Hash()
+				_, err := h.Transition(s, input, rt.Clock{At: input.At}, selectingRandom(t, input.Actor))
+				after, _ := s.Hash()
+				if err == nil || !strings.Contains(err.Error(), "late fulfillment is not established") || before != after {
+					t.Fatal("post-deadline fulfillment was not atomically rejected for its occurrence time", err)
+				}
+				return
+			}
 			c = step(input, f)
 			if c.Commitments[0].Status != status || c.Outcomes[1].ObservationStage != "done" || c.Outcomes[1].LearningStage != "done" || len(c.Actors[0].Memory) != 1 {
 				t.Fatal("actual later result not recorded")

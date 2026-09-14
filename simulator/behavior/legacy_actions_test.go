@@ -24,9 +24,9 @@ type record struct {
 var legacyActionBytes []byte
 
 func TestFrozenLegacyActionsV1(t *testing.T) {
-	verifyLegacyChoices(t, legacyActionBytes, "dd5344f2c8df187f610a59ce91e727c822beb2535d1328b1cf5951b7e109ca6a", false)
+	verifyLegacyChoices(t, legacyActionBytes, "dd5344f2c8df187f610a59ce91e727c822beb2535d1328b1cf5951b7e109ca6a", false, false)
 }
-func verifyLegacyChoices(t *testing.T, raw []byte, expectedHash string, contextual bool) {
+func verifyLegacyChoices(t *testing.T, raw []byte, expectedHash string, contextual, competing bool) {
 	t.Helper()
 	h := sha256.Sum256(raw)
 	if hex.EncodeToString(h[:]) != expectedHash {
@@ -60,7 +60,16 @@ func verifyLegacyChoices(t *testing.T, raw []byte, expectedHash string, contextu
 			s.Beliefs = []behavior.Belief{{Source: id, Observer: "a", Code: "uncertain", Value: .4, Confidence: .8}}
 		}
 		s.Offers = []behavior.Offer{o}
-		n, d, e := behavior.Choose(a, s, 1, math.MaxUint64)
+		draw := uint64(math.MaxUint64)
+		if competing {
+			alternative := behavior.Offer{Kind: behavior.Ask, Recipient: "b", Duration: 1}
+			if k == behavior.Ask {
+				alternative = behavior.Offer{Kind: behavior.Observe, Duration: 1}
+			}
+			s.Offers = append(s.Offers, alternative)
+			draw /= 2
+		}
+		n, d, e := behavior.Choose(a, s, 1, draw)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -89,5 +98,12 @@ func verifyLegacyChoices(t *testing.T, raw []byte, expectedHash string, contextu
 var legacyContextActionBytes []byte
 
 func TestFrozenLegacyContextActionsV1(t *testing.T) {
-	verifyLegacyChoices(t, legacyContextActionBytes, "2ecd36eff74bb09b0fb7b8e2cd25f4c70e5a5a6d37a5847bbfec3a9972deccf9", true)
+	verifyLegacyChoices(t, legacyContextActionBytes, "2ecd36eff74bb09b0fb7b8e2cd25f4c70e5a5a6d37a5847bbfec3a9972deccf9", true, false)
+}
+
+//go:embed testdata/legacy-competing-actions-v1.json
+var legacyCompetingActionBytes []byte
+
+func TestFrozenLegacyCompetingActionsV1(t *testing.T) {
+	verifyLegacyChoices(t, legacyCompetingActionBytes, "4573c0a70c00d327873b0e73a2b7d6f3697ff0a0d333fe5c1986ea26c5439ff6", true, true)
 }

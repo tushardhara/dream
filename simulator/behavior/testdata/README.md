@@ -17,3 +17,10 @@ and beliefs. The original fixture bytes above remain unchanged. Its explicit
 inputs are the contextual branch of verifyLegacyChoices; coefficient mutations
 for trust, disclosure and beliefs must change the frozen decisions. These pins
 exercise behavior, not just decoder acceptance or a codec size boundary.
+
+`legacy-competing-actions-v1.json` adds an eligible Ask (or Observe when Ask is
+already primary), alongside WAIT and the primary offer, using the same nonzero
+context. A midpoint draw replaces the forced upper-tail draw. It was generated
+against the same unchanged baseline; both earlier fixture files remain intact.
+The frozen bytes pin scores, probabilities, selected actions and resulting state.
+A 0.4-to-0.9 self-disclosure trust-coefficient mutation is explicitly caught.

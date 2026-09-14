@@ -19,6 +19,8 @@ if not os.environ.get("DREAM_TEST_RUN"):
 logs = root / "bin" / "action-mutations" / os.environ["DREAM_TEST_RUN"]
 logs.mkdir(parents=True, exist_ok=False)
 probes = [
+    ("late-fulfillment", "app/hws/action_cognitive.go", "s.Observation.Event.OccurredAt > p.Due && frame.Response.CommitmentStatus == \"fulfilled\"", "false && s.Observation.Event.OccurredAt > p.Due && frame.Response.CommitmentStatus == \"fulfilled\"", "TestActionPromiseActualFulfillmentAndBreach"),
+    ("legacy-competing-score", "simulator/behavior/behavior.go", "score = .2 + t.Approach + .4*trust + .3*disclosure", "score = .2 + t.Approach + .9*trust + .3*disclosure", "TestFrozenLegacyCompetingActionsV1"),
     ("legacy-trust", "simulator/behavior/behavior.go", "score = .2 + t.Support + .3*trust", "score = .2 + t.Support + .4*trust", "TestFrozenLegacyContextActionsV1"),
     ("legacy-belief", "simulator/behavior/behavior.go", "score = .2 + t.Approach + .2*belief", "score = .2 + t.Approach + .3*belief", "TestFrozenLegacyContextActionsV1"),
     ("legacy-disclosure", "simulator/behavior/behavior.go", "score = .2 + t.Approach + .4*trust + .3*disclosure", "score = .2 + t.Approach + .4*trust + .4*disclosure", "TestFrozenLegacyContextActionsV1"),
