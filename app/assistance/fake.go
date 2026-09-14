@@ -38,6 +38,7 @@ func (FakePlanner) Plan(ctx context.Context, in Input) (Result, error) {
 		return Result{}, ctx.Err()
 	}
 	out := ExplicitPreference(in.Goal, in.User)
+	out.Version = in.Version
 	if out.Selected != 0 {
 		for _, item := range in.Context {
 			out.Candidates[out.Selected].Evidence = append(out.Candidates[out.Selected].Evidence, EvidenceRef{item.Observer, item.Source})

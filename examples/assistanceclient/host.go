@@ -16,6 +16,8 @@ import (
 // reacquiring that lock. Planning occurs outside this critical section.
 // This example is not durable storage and performs no external delivery.
 type Local struct {
+	boundaries   []core.Boundary
+	now          core.LogicalTime
 	audits       []graph.PolicyAudit
 	mu           sync.Mutex
 	helper, user core.ID
@@ -55,6 +57,14 @@ func (l *Local) Register(r assistance.Request) error {
 	}
 	if old, ok := l.requests[r.ID]; ok && assistance.Digest(old) != assistance.Digest(r) {
 		return assistance.ErrInvalid
+	}
+	if r.Version == assistance.ScopedVersion {
+		if _, exists := l.requests[r.ID]; !exists && r.At < l.now {
+			return assistance.ErrDenied
+		}
+		if r.At > l.now {
+			l.now = r.At
+		}
 	}
 	l.requests[r.ID] = copyValue(r)
 	return nil
@@ -135,7 +145,7 @@ func (l *Local) RecordPolicyDecision(ctx context.Context, audit graph.PolicyAudi
 	return nil
 }
 func (l *Local) Host(planner assistance.Planner) assistance.Host {
-	return assistance.Host{Policy: graph.NewPolicyService(l, l, l), Eligibility: l, Journal: l, Planner: planner}
+	return assistance.Host{Policy: graph.NewPolicyService(l, l, l), Eligibility: &assistance.BoundaryGate{Auth: l, Source: l, History: l}, Journal: l, Planner: planner}
 }
 func Run(ctx context.Context) (assistance.Interaction, error) {
 	local := New("helper", "person", assistance.Listen)
