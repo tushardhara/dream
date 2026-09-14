@@ -28,6 +28,7 @@ build:
 	go build -trimpath -o bin/hws-eval ./cmd/hws-eval
 	go build -trimpath -o bin/hws-generate ./cmd/hws-generate
 	go build -trimpath -o bin/hws-demo ./cmd/hws-demo
+	go build -trimpath -o bin/hws-assistance ./cmd/hws-assistance
 help-check: build
 	./bin/hws --help
 	./bin/hws-api --help
@@ -36,6 +37,7 @@ help-check: build
 	./bin/hws-eval --help
 	./bin/hws-generate --help
 	./bin/hws-demo --help
+	./bin/hws-assistance --help
 verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check demo-check
 live-provider soak:
 	@echo "BLOCKED: requires explicit owner authorization, provider/budget/infrastructure configuration and a later implemented runner."; exit 1

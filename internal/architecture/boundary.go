@@ -33,6 +33,10 @@ func forbidden(from, target string) bool {
 	}
 	allowed := []string(nil)
 	switch {
+	case within(from, "app/assistance"):
+		allowed = []string{"core", "app/graph", "app/assistance"}
+	case within(from, "examples/assistanceclient"):
+		allowed = []string{"core", "app/graph", "app/assistance", "examples/assistanceclient"}
 	case within(from, "app/graph"):
 		allowed = []string{"core", "app/graph"}
 	case within(from, "examples/graphclient"):
@@ -40,7 +44,7 @@ func forbidden(from, target string) bool {
 	case within(from, "simulator"):
 		allowed = []string{"core", "simulator"}
 	case within(from, "app/hws"):
-		allowed = []string{"core", "simulator", "app/graph", "app/hws"}
+		allowed = []string{"core", "simulator", "app/graph", "app/assistance", "app/hws"}
 	default:
 		return false
 	}
