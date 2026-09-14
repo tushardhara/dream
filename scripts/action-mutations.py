@@ -19,6 +19,11 @@ if not os.environ.get("DREAM_TEST_RUN"):
 logs = root / "bin" / "action-mutations" / os.environ["DREAM_TEST_RUN"]
 logs.mkdir(parents=True, exist_ok=False)
 probes = [
+    ("legacy-trust", "simulator/behavior/behavior.go", "score = .2 + t.Support + .3*trust", "score = .2 + t.Support + .4*trust", "TestFrozenLegacyContextActionsV1"),
+    ("legacy-belief", "simulator/behavior/behavior.go", "score = .2 + t.Approach + .2*belief", "score = .2 + t.Approach + .3*belief", "TestFrozenLegacyContextActionsV1"),
+    ("legacy-disclosure", "simulator/behavior/behavior.go", "score = .2 + t.Approach + .4*trust + .3*disclosure", "score = .2 + t.Approach + .4*trust + .4*disclosure", "TestFrozenLegacyContextActionsV1"),
+    ("wait-no-effect", "simulator/behavior/action_choice.go", 'if selected.Kind != Wait {\n\t\tnext.AvailableAt', 'if true {\n\t\tnext.AvailableAt', "TestWaitHasNoAvailabilityOrContactEffect"),
+    ("softened-semantics", "app/graph/fiction.go", '\"I feel a little \" + feeling + \"' + ", though I'm not ready to say more." + '\"', '\"Let\'s change the topic.\"', "TestTypedFictionModesAndAssistantBoundary"),
     ("registry-order", "simulator/behavior/actions.go", '"say"', '"statement"', "TestExact27ActionRegistry"),
     ("context-role", "simulator/behavior/action_choice.go", ".1*c.RoleExpectation.weighted()", "0*c.RoleExpectation.weighted()", "TestActionContextSensitivityUnknownAndForeignEvidence"),
     ("delivery-time", "simulator/behavior/action_choice.go", "e.OccurredAt < o.EffectAt", "false", "TestActionCannotLearnBeforeDelivery"),

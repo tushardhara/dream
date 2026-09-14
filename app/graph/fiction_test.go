@@ -8,6 +8,19 @@ import (
 )
 
 func TestTypedFictionModesAndAssistantBoundary(t *testing.T) {
+	// Distinct semantic contracts: substituting one mode's content for another
+	// must fail even when both are nonempty and carry valid provenance.
+	expected := map[string]string{
+		"full":         "I feel very worried.",
+		"partial":      "I've been having a difficult time.",
+		"softened":     "I feel a little worried, though I'm not ready to say more.",
+		"joke":         "My feeling-worried meter is working overtime.",
+		"deflection":   "I'd rather talk about something else.",
+		"lie":          "I do not feel worried.",
+		"omission":     "There is more to this, but I am keeping part private.",
+		"topic_change": "Let's change the topic.",
+		"silence":      "",
+	}
 	for _, mode := range []string{"full", "partial", "softened", "joke", "deflection", "lie", "omission", "topic_change", "silence"} {
 		t.Run(mode, func(t *testing.T) {
 			f, p := policyFixture()
@@ -24,6 +37,9 @@ func TestTypedFictionModesAndAssistantBoundary(t *testing.T) {
 			out, d, e := policy.Write(context.Background(), cap, p.Binding, writer)
 			if e != nil || !d.Allowed || out.FictionMode != mode || len(out.Sources) != 1 || out.Sources[0] != "own" || len(out.Evidence) != 1 {
 				t.Fatal(out, d, e)
+			}
+			if out.Text != expected[mode] {
+				t.Fatalf("%s semantics: got %q, want %q", mode, out.Text, expected[mode])
 			}
 			if mode == "silence" {
 				if out.Text != "" {

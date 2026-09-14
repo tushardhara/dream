@@ -24,9 +24,12 @@ type record struct {
 var legacyActionBytes []byte
 
 func TestFrozenLegacyActionsV1(t *testing.T) {
-	raw := legacyActionBytes
+	verifyLegacyChoices(t, legacyActionBytes, "dd5344f2c8df187f610a59ce91e727c822beb2535d1328b1cf5951b7e109ca6a", false)
+}
+func verifyLegacyChoices(t *testing.T, raw []byte, expectedHash string, contextual bool) {
+	t.Helper()
 	h := sha256.Sum256(raw)
-	if hex.EncodeToString(h[:]) != "dd5344f2c8df187f610a59ce91e727c822beb2535d1328b1cf5951b7e109ca6a" {
+	if hex.EncodeToString(h[:]) != expectedHash {
 		t.Fatal("legacy fixture modified")
 	}
 	all := []record{}
@@ -50,6 +53,11 @@ func TestFrozenLegacyActionsV1(t *testing.T) {
 		if k == behavior.BreakPromise {
 			o.Commitment = "promise"
 			s.Commitments = []behavior.Commitment{{ID: "promise", Actor: "a", Recipient: "b", Resource: "time", Units: 1, Due: 10, Status: "pending"}}
+		}
+		if contextual {
+			a.Memory = []behavior.Memory{{Other: "b", Trust: .2, Disclosure: .15, Evidence: []core.ID{"saved-history"}}}
+			s.Relationships = []behavior.Memory{{Other: "b", Trust: -.1, Disclosure: .05, Evidence: []core.ID{"saved-relation"}}}
+			s.Beliefs = []behavior.Belief{{Source: id, Observer: "a", Code: "uncertain", Value: .4, Confidence: .8}}
 		}
 		s.Offers = []behavior.Offer{o}
 		n, d, e := behavior.Choose(a, s, 1, math.MaxUint64)
@@ -75,4 +83,11 @@ func TestFrozenLegacyActionsV1(t *testing.T) {
 			t.Fatal("saved v1 record rejected")
 		}
 	}
+}
+
+//go:embed testdata/legacy-context-actions-v1.json
+var legacyContextActionBytes []byte
+
+func TestFrozenLegacyContextActionsV1(t *testing.T) {
+	verifyLegacyChoices(t, legacyContextActionBytes, "2ecd36eff74bb09b0fb7b8e2cd25f4c70e5a5a6d37a5847bbfec3a9972deccf9", true)
 }

@@ -328,3 +328,24 @@ func TestActionCannotLearnBeforeDelivery(t *testing.T) {
 		t.Fatal("later observation denied", e)
 	}
 }
+
+func TestWaitHasNoAvailabilityOrContactEffect(t *testing.T) {
+	for _, outage := range []bool{false, true} {
+		for _, contact := range []string{"engaged", "withdrawn", "left"} {
+			a, s := actionFixture(t)
+			a.AvailableAt = 10
+			a.Contact = contact
+			s.Outage = outage
+			next, d, e := ChooseAction(a, s, 1, math.MaxUint64)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if d.Candidates[d.Selected].Offer.Kind != Wait || next.AvailableAt != a.AvailableAt || next.Contact != a.Contact {
+				t.Fatal("WAIT changed availability/contact", outage, contact)
+			}
+			if d.Operational != outage {
+				t.Fatal("behavioral WAIT/outage conflated")
+			}
+		}
+	}
+}

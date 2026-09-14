@@ -132,6 +132,10 @@ func TestAll27ActionsExecuteBoundedEffects(t *testing.T) {
 				t.Fatal("no-delivery contract")
 			}
 			switch o.Kind {
+			case behavior.Wait:
+				if c.Actors[0].AvailableAt != 0 || c.Actors[0].Contact != "engaged" || len(c.Commitments) != 0 {
+					t.Fatal("WAIT had an availability/contact/commitment effect")
+				}
 			case behavior.Help:
 				if len(out.Consume) != 1 || out.Consume[0].Resource != "hours" || out.Consume[0].Units != 1 {
 					t.Fatal("help did not consume")
