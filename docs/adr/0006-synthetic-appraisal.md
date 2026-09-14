@@ -14,7 +14,7 @@ introduced. #11 consumes the appraisal stage; it must not repeat it.
 
 This document preserves the legacy `ticket7-subset.v1` implementation and its
 wire contract. The owner has now supplied all22 HWS section6 drive names in
-issue40. `simulator/drives`, codec2/registry `hws-section6.v1`, implements that
+issue40. `simulator/drives`, codec3/registry `hws-section6.v1`, implements that
 complete registry; see ADR0017. This six-variable model remains available for
 old recorded state/replay only and does not substitute for the new registry.
 

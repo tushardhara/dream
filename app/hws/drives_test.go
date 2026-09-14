@@ -1,15 +1,20 @@
 package hws
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/simulator"
+	"github.com/tushardhara/dream/simulator/behavior"
 	"github.com/tushardhara/dream/simulator/drives"
+	"github.com/tushardhara/dream/simulator/dynamics"
 	rt "github.com/tushardhara/dream/simulator/runtime"
 	"github.com/tushardhara/dream/simulator/scenario"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 type drivePerception struct{ deny bool }
@@ -106,5 +111,85 @@ func TestDriveInitialRegistryAndCheckpointBudget(t *testing.T) {
 	}
 	if _, e := c.Canonical(); e == nil {
 		t.Fatal("runtime checkpoint byte cap removed")
+	}
+}
+
+func TestUpgradeLegacyIsNotBranchAuthority(t *testing.T) {
+	old, e := dynamics.New("a", 0, dynamics.DefaultSubstrate())
+	if e != nil {
+		t.Fatal(e)
+	}
+	upgrade, e := drives.UpgradeLegacy(old, "claimed-child")
+	if e != nil {
+		t.Fatal(e)
+	}
+	// A well-formed provenance string grants no Derive right, even when it is
+	// used as the requested branch ID. The authenticated service never reaches DB.
+	runtime, journal, realm, grants := viewFixture(t)
+	views, e := NewViewService(runtime, journal, viewClock{}, grants, viewAudit{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	permit, e := views.Permit("researcher", realm, ResearchViewKind, "research")
+	if e != nil {
+		t.Fatal(e)
+	}
+	port := &snapshotPort{}
+	svc := SnapshotService{Store: port, Views: views}
+	childScope := realm.Scope
+	childScope.Branch, childScope.Run = simulator.BranchID(upgrade.Upgrade.NewBranch), "claimed-run"
+	spec := ForkSpec{Version: 1, Source: SnapshotKey{Scope: realm.Scope, ID: "snapshot", Hash: strings.Repeat("a", 64)}, Child: childScope, Mode: FreshSimulation, Policy: behavior.Policy, MaxDuration: time.Minute}
+	if e := spec.Validate(); e != nil {
+		t.Fatal("invalid negative control", e)
+	}
+	if _, e = svc.Fork(context.Background(), permit, spec); e == nil || port.calls != 0 {
+		t.Fatal("upgrade provenance granted fork authority", e)
+	}
+	// The existing fork only supports the frozen cognitive policy. An actor
+	// conversion cannot select a new runtime policy or replace a frozen snapshot.
+	parent := syntheticRuntime(t)
+	frozen := frozenFixture(t, parent)
+	spec.Source = SnapshotKey{Scope: frozen.Scope, ID: "snapshot", Hash: frozen.Hash}
+	spec.Child = frozen.Scope
+	spec.Child.Branch, spec.Child.Run = simulator.BranchID(upgrade.Upgrade.NewBranch), "claimed-run"
+	spec.Policy = drives.ModelVersion
+	if _, e := ForkState(frozen, spec); e == nil {
+		t.Fatal("drive upgrade silently selected fork policy")
+	}
+	spec.Policy = behavior.Policy
+	child, e := ForkState(frozen, spec)
+	if e != nil {
+		t.Fatal("authorized-policy pure fork control", e)
+	}
+	if child.Budget != parent.Budget || child.Step != parent.Step || child.Events != parent.Events || child.At != parent.At || child.Data != parent.Data || !reflect.DeepEqual(child.Available, parent.Available) {
+		t.Fatal("pure fork reset runtime accounting")
+	}
+	// Even a trusted host manually installing an upgraded actor payload cannot
+	// replenish the enclosing runtime's step/event/horizon ceilings.
+	raw, e := upgrade.Canonical()
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, ceiling := range []string{"steps", "events", "horizon"} {
+		s := parent
+		s.Data = string(raw)
+		switch ceiling {
+		case "steps":
+			s.Step = s.Budget.Steps
+		case "events":
+			s.Events = s.Budget.Events
+		case "horizon":
+			if _, _, _, e := rt.Apply(s, rt.Command{Kind: "run-until", Until: s.Budget.Horizon + 1}, DriveAppraisalHandler{Source: drivePerception{}}); e == nil {
+				t.Fatal("upgrade bypassed horizon")
+			}
+			continue
+		}
+		n, tr, _, e := rt.Apply(s, rt.Command{Kind: "step"}, DriveAppraisalHandler{Source: drivePerception{}})
+		if e != nil || n.Status != "budget" || tr != nil || n.Step != s.Step || n.Events != s.Events {
+			t.Fatal("upgrade bypassed "+ceiling, e)
+		}
+	}
+	if _, e := DecodeDriveCheckpoint(string(raw)); e == nil {
+		t.Fatal("actor conversion accepted as runtime checkpoint")
 	}
 }

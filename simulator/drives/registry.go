@@ -10,9 +10,10 @@ import (
 	"github.com/tushardhara/dream/core"
 )
 
-const Version = 2
+// Version 2 was an unintegrated draft without the retained-factor contract.
+const Version = 3
 const RegistryVersion = "hws-section6.v1"
-const ModelVersion = "appraisal.drives.v1"
+const ModelVersion = "appraisal.drives.v2"
 const Count = 22
 const Hour core.LogicalTime = 3600 * 1e9
 const (

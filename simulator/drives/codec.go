@@ -114,5 +114,5 @@ func DecodeRecorded(raw []byte) (RecordedState, error) {
 		}
 		return RecordedState{Current: &s}, nil
 	}
-	return RecordedState{}, fmt.Errorf("supported state versions: 1/ticket7-subset.v1 or 2/hws-section6.v1; no implicit ordinal migration")
+	return RecordedState{}, fmt.Errorf("supported state versions: 1/ticket7-subset.v1 or 3/hws-section6.v1; no implicit ordinal migration")
 }

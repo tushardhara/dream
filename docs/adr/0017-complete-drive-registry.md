@@ -4,8 +4,8 @@ Authority: owner-supplied extracted registry in issue #40, alignment epic #39.
 Raw PRDs remain private. The 22 names and order are now available; this closes
 only the drive-name registry gap, not the action or falsifier source gaps.
 
-`simulator/drives` implements state codec2, registry `hws-section6.v1` and model
-`appraisal.drives.v1`. Registry() returns an immutable value copy. RegistryHash
+`simulator/drives` implements state codec3, registry `hws-section6.v1` and model
+`appraisal.drives.v2`. Registry() returns an immutable value copy. RegistryHash
 pins the entire ordered definition array, including baseline/gain/half-life.
 Names have exactly the order in issue40; they are research categories, not
 psychological facts, diagnoses, sin labels or fixed personality assignments.
@@ -38,7 +38,7 @@ it neither selects an intervention nor maximizes attachment/engagement.
 
 Compatibility uses explicit version-aware decoding and a separately invoked
 upgrade; replay never invokes an upgrade. `DecodeRecorded` accepts canonical old codec1/ticket7-subset.v1 with
-its frozen dynamics implementation, or new codec2/hws-section6.v1. It returns a
+its frozen dynamics implementation, or new codec3/hws-section6.v1. It returns a
 tagged result, never copying old array ordinals to new drives. Old fatigue is
 NOT acquisition and old slow residue is NOT loss avoidance. Old bytes/hash and
 old replay remain unchanged. Cross-version checkpoints deny with supported-version
@@ -46,7 +46,7 @@ errors. To adopt the new model, create an explicitly selected new run; do not
 rewrite recorded events, baselines, receipts or resources.
 
 `app/hws.DriveAppraisalHandler` is the explicit new-model runtime host, with scoped
-perception and version2 checkpoints. It retains the4096-byte runtime data cap and
+perception and version3 checkpoints. It retains the4096-byte runtime data cap and
 rejects any actor/state size that exceeds it. Existing AppraisalHandler/behavior
 v1 remain frozen compatibility consumers. #41 owns the new27-action/14-stage loop;
 #42 owns relationship-specific behavior and new24-person demo adoption. This
@@ -101,3 +101,30 @@ TestSavedLegacyDemoReplay checks the original full replay and world hash.
 Source extract provenance: HWS PRD SHA-256
 f7ddaf8ff06587abd8f845a4b70e87894cb7442dd97dbafedb64df09c88e7037,
 owner revision-2 issues. This is not a full original-document audit.
+
+Review clarification: the registry ID identifies the ordered 22 definitions, not
+an entire serialized state. Those definitions/hash remain unchanged. State codec
+3 and model appraisal.drives.v2 identify the retained-factor format/equations;
+codec 2/model v1 were unintegrated PR drafts and are rejected, not silently
+reinterpreted. Integrated codec 1 replay remains supported byte for byte.
+TestRetainedFactorWireVersion pins current, legacy, draft and mixed headers.
+
+Appraisal is a simultaneous event transition: all equations read state decayed to
+the event time, before any deltas from that event. Factor updates affect the next
+appraisal, including at the same virtual time; Response sees the updated factors
+immediately. This is deliberate pre-event state dependence, not a time-step lag.
+TestRetainedFactorAppraisalOrdering isolates fatigue from effort avoidance and
+pins both first-event equality and next-event divergence; factor-order mutation
+must fail on same-event feedback.
+
+UpgradeLegacy is not an adoption endpoint. Its NewBranch field is an untrusted
+provenance claim, not a capability. Production code has no UpgradeLegacy caller;
+SnapshotService.Fork requires a current research Derive permit and accepts a
+stored snapshot key, not caller actor bytes. ForkSpec only supports the legacy
+behavior policy; current host checkpoints reject standalone actor payloads.
+TestUpgradeLegacyIsNotBranchAuthority exercises these boundaries and exhausted
+runtime step/event/horizon budgets with a converted payload. The real PostgreSQL
+BranchBudgetAndDeadlineDoNotReset test pins inherited deadline, runtime counts
+and reserved model tokens/spend. A future adopted migration must enforce binding
+and accounting at the host/persistence boundary; this constructor does not
+provide that future integration. No bypass was established by this review.

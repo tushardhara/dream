@@ -19,19 +19,30 @@ probes = [
  ('legacy-dispatch', 'simulator/drives/codec.go', 'header.Version == dynamics.Version &&', 'false && header.Version == dynamics.Version &&', '^TestNewCodecAndLegacyReplay$'),
  ('context-permission', 'simulator/drives/appraisal.go', 'if e := c.Evidence.Validate(actor, at); e != nil {', 'if e := c.Evidence.Validate(actor, at); false && e != nil {', '^TestDrivePermissionReceiptAndBounds$'),
  ('context-contribution', 'simulator/drives/appraisal.go', 'c[i] = cue.Value * float64(cue.Evidence.Confidence)', 'c[i] = 0 * cue.Value * float64(cue.Evidence.Confidence)', '^TestAllContextDimensionsAndCompetingTendencies$'),
+ ('factor-order', 'simulator/drives/appraisal.go', 'effortBurden :=', 'out.Factors = out.Factors.appraise(o.Event, out.Substrate, at); effortBurden :=', '^TestRetainedFactorAppraisalOrdering$'),
+ ('wire-version', 'simulator/drives/state.go', 's.Version != Version', 'false && s.Version != Version', '^TestRetainedFactorWireVersion$'),
+ ('upgrade-authority', 'app/hws/snapshots.go', 'if e := s.authorize(ctx, p, spec.Source.Scope, core.Derive); e != nil {', 'if e := s.authorize(ctx, p, spec.Source.Scope, core.Derive); false && e != nil {', '^TestUpgradeLegacyIsNotBranchAuthority$'),
  ('inert-drive', 'simulator/drives/appraisal.go', 'delta := math.Max(-1, math.Min(1, value)) * definitions[i].Gain * gain', 'delta := math.Max(-1, math.Min(1, value)) * definitions[i].Gain * gain; if i == Meaning { delta = 0 }', '^TestPerDriveSensitivity$'),
  ('legacy-policy', 'simulator/dynamics/registry.go', '168 * Hour, .08, .1', '169 * Hour, .08, .1', '^TestSavedLegacyCheckpointAndUpgrade$'),
  ('decay-anchor', 'simulator/drives/state.go', '(v.Values[1]-baseline)', '(v.Values[0]-baseline)', '^TestDriveDecayPartitionAndConfidence$'),
 ]
 for name, file, old, new, test in probes:
-    command = ['go', 'test', '-count=1', './simulator/drives', '-run', test]
+    package = './app/hws' if file.startswith('app/hws/') else './simulator/drives'
+    command = ['go', 'test', '-count=1', package, '-run', test]
     subprocess.run(command, cwd=root, check=True, timeout=120)
     path = root / file
     original = path.read_text()
     if original.count(old) != 1:
         raise RuntimeError(name + ': expected one guard')
     try:
-        path.write_text(original.replace(old, new))
+        mutated = original.replace(old, new)
+        if name == 'factor-order':
+            # Move the update, do not duplicate it and accidentally test doubling.
+            late = '\n\tout.Factors = out.Factors.appraise(o.Event, out.Substrate, at)\n'
+            if mutated.count(late) != 1:
+                raise RuntimeError('expected one late factor update')
+            mutated = mutated.replace(late, '\n')
+        path.write_text(mutated)
         result = subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=120)
         output = result.stdout + result.stderr
         (logs / (name + '.log')).write_text(output)
@@ -41,4 +52,4 @@ for name, file, old, new, test in probes:
     finally:
         path.write_text(original)
     subprocess.run(command, cwd=root, check=True, timeout=120)
-print('All seven controls caught; source restored and baselines green.')
+print(f'All {len(probes)} controls caught; source restored and baselines green.')

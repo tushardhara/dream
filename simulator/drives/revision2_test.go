@@ -3,6 +3,7 @@ package drives
 import (
 	"bytes"
 	_ "embed"
+	"encoding/json"
 	"github.com/tushardhara/dream/simulator/dynamics"
 	"reflect"
 	"testing"
@@ -182,5 +183,93 @@ func TestRetainedFactorsRemainDistinct(t *testing.T) {
 	}
 	if low.Variables[Care] == high.Variables[Care] {
 		t.Fatal("distinct fatigue no longer affects appraisal")
+	}
+}
+
+// Effort/rest have no direct input to approach desire or curiosity. Their current
+// fatigue delta must therefore influence the next event, not feed back within
+// this event. Moving factor appraisal ahead of effortBurden breaks this test.
+func TestRetainedFactorAppraisalOrdering(t *testing.T) {
+	s := initial(t)
+	effort, rest := observation(), observation()
+	effort.Event.Signals = dynamics.Signals{Effort: 1}
+	rest.Event.Signals = dynamics.Signals{Rest: 1}
+	a, _, _, e := Appraise(s, effort, Hour)
+	if e != nil {
+		t.Fatal(e)
+	}
+	b, _, _, e := Appraise(s, rest, Hour)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if a.Factors.Variables[Fatigue] == b.Factors.Variables[Fatigue] {
+		t.Fatal("control did not change fatigue")
+	}
+	for _, i := range []int{ApproachDesire, Curiosity} {
+		if a.Variables[i] != b.Variables[i] {
+			t.Fatal("same-event factor feedback", i)
+		}
+	}
+	// Isolate fatigue from the independently updated effort-avoidance drive.
+	b.Variables = a.Variables
+	next := observation()
+	next.Event.Event = "next"
+	next.Event.Rights.Resource = "next"
+	next.Event.Signals = dynamics.Signals{}
+	aa, _, _, e := Appraise(a, next, Hour)
+	if e != nil {
+		t.Fatal(e)
+	}
+	bb, _, _, e := Appraise(b, next, Hour)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, i := range []int{ApproachDesire, Curiosity} {
+		if aa.Variables[i] == bb.Variables[i] {
+			t.Fatal("prior fatigue did not affect next appraisal", i)
+		}
+	}
+}
+
+func TestRetainedFactorWireVersion(t *testing.T) {
+	raw, e := initial(t).Canonical()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if Version != 3 || ModelVersion != "appraisal.drives.v2" {
+		t.Fatal("retained-factor format/model version drift")
+	}
+	for _, change := range []func(map[string]any){
+		func(m map[string]any) { m["version"] = 2 },
+		func(m map[string]any) { m["model"] = "appraisal.drives.v1" },
+		func(m map[string]any) { delete(m, "factors") },
+		func(m map[string]any) { m["version"] = 2; m["model"] = "appraisal.drives.v1"; delete(m, "factors") },
+	} {
+		var m map[string]any
+		if e := json.Unmarshal(raw, &m); e != nil {
+			t.Fatal(e)
+		}
+		change(m)
+		bad, e := json.Marshal(m)
+		if e != nil {
+			t.Fatal(e)
+		}
+		var state State
+		if e := json.Unmarshal(bad, &state); e != nil {
+			t.Fatal(e)
+		}
+		// Do not let map key ordering/noncanonical JSON mask a missing version guard.
+		if e := state.Validate(); e == nil {
+			t.Fatal("draft or mixed state validates")
+		}
+		if _, e := DecodeRecorded(bad); e == nil {
+			t.Fatal("draft or mixed format accepted")
+		}
+	}
+	if r, e := DecodeRecorded(raw); e != nil || r.Current == nil {
+		t.Fatal("current format rejected", e)
+	}
+	if r, e := DecodeRecorded(savedLegacy); e != nil || r.Legacy == nil {
+		t.Fatal("integrated legacy rejected", e)
 	}
 }

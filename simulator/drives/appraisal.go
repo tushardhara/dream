@@ -144,6 +144,9 @@ func Appraise(s State, o Observation, at core.LogicalTime) (State, Rationale, bo
 	safe := c[Beliefs]
 	available := c[Resources]
 	opportunity := c[Setting]
+	// Simultaneous event transition: read the decayed pre-event factors/drives.
+	// This event updates both below; its fatigue delta affects the NEXT appraisal,
+	// while Response on the resulting state sees it immediately.
 	effortBurden := .7*out.Factors.Variables[Fatigue].Values[0] + .3*out.Variables[EffortAvoidance].Values[0]
 	threat := x.StatusThreat + x.Exclusion
 	raw := [Count]float64{

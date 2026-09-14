@@ -33,7 +33,7 @@ func observation() Observation {
 func TestExactRegistryWireContract(t *testing.T) {
 	want := strings.Split("acquisition comparison status_protection threat_response approach_desire effort_avoidance reward_seeking safety belonging autonomy competence care fairness reciprocity status identity_protection curiosity meaning certainty novelty attachment loss_avoidance", " ")
 	r := Registry()
-	if len(r) != 22 || RegistryVersion != "hws-section6.v1" || Version != 2 || ValidateRegistry() != nil {
+	if len(r) != 22 || RegistryVersion != "hws-section6.v1" || Version != 3 || ValidateRegistry() != nil {
 		t.Fatal("registry/version drift")
 	}
 	for i, d := range r {
@@ -89,7 +89,7 @@ func TestNewCodecAndLegacyReplay(t *testing.T) {
 	if ha != hb {
 		t.Fatal("legacy resumed replay changed")
 	}
-	for _, bad := range [][]byte{legacy, bytes.Replace(raw, []byte(RegistryVersion), []byte(dynamics.RegistryVersion), 1), bytes.Replace(raw, []byte(RegistryHash), []byte(strings.Repeat("0", 64)), 1), append(append([]byte{}, raw...), ' '), bytes.Replace(raw, []byte(`"version":2`), []byte(`"version":2,"version":2`), 1)} {
+	for _, bad := range [][]byte{legacy, bytes.Replace(raw, []byte(RegistryVersion), []byte(dynamics.RegistryVersion), 1), bytes.Replace(raw, []byte(RegistryHash), []byte(strings.Repeat("0", 64)), 1), append(append([]byte{}, raw...), ' '), bytes.Replace(raw, []byte(`"version":3`), []byte(`"version":3,"version":3`), 1)} {
 		if _, e := Decode(bad); e == nil {
 			t.Fatal("wrong registry/duplicate/noncanonical accepted")
 		}

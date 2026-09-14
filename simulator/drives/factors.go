@@ -88,9 +88,11 @@ type UpgradeRecord struct {
 	NewBranch      core.ID `json:"new_branch"`
 }
 
-// UpgradeLegacy creates a new versioned research state with explicit provenance.
-// It never writes history or resets receipts. The host must use the existing
-// authorized fork/new-run path to establish NewBranch and preserve run budgets.
+// UpgradeLegacy converts actor values only; NewBranch is a provenance claim,
+// not a capability or proof that a branch exists. It cannot create/persist a run,
+// authorize a fork, change a runtime budget/deadline, or select a replay policy.
+// No production caller currently adopts this result. A future host integration
+// must verify this claim through the authorized fork path and retain all budgets.
 func UpgradeLegacy(old dynamics.State, newBranch core.ID) (State, error) {
 	if e := old.Validate(); e != nil {
 		return State{}, e
