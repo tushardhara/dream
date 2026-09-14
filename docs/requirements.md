@@ -10,37 +10,34 @@ Between Us supplies intent, not additional implementation scope.
 
 These labels E1–E12 refer to epic correctness rules, not invented IHG source IDs.
 
-| Requirement | Engineering owner | #2 evidence / deferred gate |
+| Requirement | Implementation / evidence | Remaining scope |
 | --- | --- | --- |
-| Reusable core; no compulsory worlds; package ownership | #2, #3, #9 | TestRepositoryBoundaries, TestRules; second-host proof deferred #9 |
-| E1 versioned durable events, scoped idempotency | #3, #4 | DEFERRED; no persistence implemented |
-| E2 distinct occurred/valid/learned/recorded times and corrections | #3, #4, #8 | DEFERRED; temporal/as-of tests required |
-| E3 injected time/RNG, stable order, canonical hashes | #5, #6 | DEFERRED; deterministic fixtures/runtime tests |
-| E4 recorded/fake exact replay; fresh generation stochastic | #10, #13 | DEFERRED; no replay claim |
-| E5 fenced writer, crash-safe checkpoints, no provider calls in transactions | #4, #6, #10 | DEFERRED; recovery/duplicate-effect tests |
-| E6 auth/manifests/audit/budget negatives with first consumers; #12 before models | #4, #6, #12, #15 | workflow fixes dependency order; no consumers yet |
-| E7 fictional own-experience disclosure differs from IHG restricted-context policy | #12, #11 | DEFERRED; explicit policy tests |
-| E8 abstraction disabled by default; unknown evidence denies/WAITs | #12 | DEFERRED; no privacy guarantees claimed |
-| E9 immediate revocation and derivative invalidation; replay cannot resurrect purge | #4, #12, #13 | DEFERRED; retention/backups must be documented |
-| E10 trusted credentials; no exposed placeholder auth | #14 | command scaffolds open no network sockets; actual auth DEFERRED |
-| E11 bounded daily state; offline heldout candidate promotion | #7, #11, #16 | DEFERRED; no online training/promotion |
-| E12 explicit paid/live budget/infrastructure configuration | #10, #15, #17 | default CI has no live calls; optional targets fail closed |
-| Observer/evidence/uncertainty/time preserved; no global relationship truth or engagement objective | #3 onward | DEFERRED domain/behavior tests |
-| Independent evaluation; generation must not import evals | #2, #16 | TestRules forbids simulator/app/evals imports; research harness deferred |
-| Backend-only, PostgreSQL-only local compose | #2 | compose.yaml and explicit CLI scaffolds |
-| Negative architecture invariant including tagged/platform source | #2 | TestIllegalTaggedImport and TestPlatformFilesAndMalformedSource; testdata/illegal/core/bad.go |
-| Clean checkout, race/build/help, PR and integration CI | #2 | make verify, .github/workflows/verify.yml; remote results in PR |
-| Durable SHA-bound review/integration; owner-only main | #2 | AGENTS.md, agent-workflow.md, PR template; independent review pending |
-| 24 humans / 8 groups / 30+ edges after 2–4 actor fixtures | #5, #17 | DEFERRED; no simulation implemented |
-| 12-month virtual horizon distinct from real-time 30-day study | #17 | DEFERRED; live study NOT RUN |
-| 200 scenario families / 10,000+ scale; preregistered ablations/holdouts/calibration | #16, #17 / later research | DEFERRED research targets; not bootstrap acceptance |
-| Real-human transfer/validity; UI entry by owner engineering approval | #16, #17 / owner | NOT TESTED without real-human dataset; UI implementation excluded |
+| Reusable core; no compulsory worlds | `core`, `app/graph`, `examples/graphclient`; architecture and independent second-host tests | Full IHG product not claimed |
+| E1 durable versioned events and scoped idempotency | PostgreSQL event store, migrations and integration tests (#3/#4) | Source-wide private PRD audit unavailable |
+| E2 occurred/valid/learned/recorded time and correction | Temporal graph/memory queries, replay and correction tests | No global relationship truth |
+| E3 injected time/RNG, stable ordering and hashes | Runtime, dynamics, drives and action tests | Fresh model outputs remain stochastic |
+| E4 compatible recorded/fake replay | Recorded model operations and replay/branch tests | No exact reproduction claim for fresh calls |
+| E5 fencing, crash checkpoints, provider transaction boundary | Runtime leases, recovery and blocked-provider integration tests | Bounded single-host deployment design |
+| E6 authorization, manifests, audit and budgets | Application admission and PostgreSQL RLS/auth/budget negatives | No paid/live calls authorized |
+| E7 disclosure policies; E8 deny unknown, abstraction off by default | Separate fictional/strict policies and source-propagation tests | No covert persuasion or automated relationship advice |
+| E9 immediate revocation and derivative invalidation | Revocation, cache/export/replay races and purge-aware restore | Already delivered offline artifacts cannot be recalled |
+| E10 trusted credentials | Authenticated gRPC/HTTP management host, tenant/grant negatives | Execution needs configured embedding handler; no deployment |
+| E11 bounded state and offline owner promotion | Drive/action budgets; isolated evaluator with signed preregistration/holdout | No online weight updates or automatic activation |
+| E12 explicit paid/live configuration | Fake/recorded defaults; live/soak targets fail closed | Live research and infrastructure need later owner scope |
+| Observer/evidence/uncertainty/time | Claim, memory, relationship codecs and approved-context appraisal | Synthetic behavior is not human validity |
+| Independent evaluation | Import boundaries, isolated label-blind child, split/consent tests | Complete supplied source report is ADR0020; adequacy mostly unresolved |
+| Clean verification and operations | `make verify`, pinned generation, race/Postgres/restore/container/demo checks | Exact SHA-bound results and failures are in PR checkpoints |
+| Durable review and owner-only main | AGENTS.md, workflow, PR #38 | Engineering integration is not a released product |
+| 24 people / eight groups / relationships | Bounded demo: 104 directional reports; five-person contrast fixture | Operational smoke, not production capacity |
+| 12 model months versus 30 real days | 360 virtual days, 24 sparse observation periods; study clock gates | Real 30-day study NOT_RUN |
+| 200 families / 10,000 cases | Small bounded synthetic harness and split/holdout mechanisms | Research scale target NOT_RUN |
+| Real-human transfer and UI | Explicit NOT_TESTED scientific verdicts | No real data, UI or interventions authorized |
 
 ## Source reference register
 
-Except the drive registry explicitly supplied in #40, rows below remain missing-source gaps, not verified section-level interpretations.
-Ticket summaries constrain implementation in the interim; obtain authorized source
-access to complete traceability without publishing originals or private data.
+Tickets #40–#43 supply HWS §6, §7, §9, §19 and §20 extracts. Those extracts
+are mapped below and require no private HTML. All other missing original text
+remains a source gap; do not infer section-level completeness from ticket closure.
 
 | Document | Section / invariant ID | Status |
 | --- | --- | --- |
@@ -51,7 +48,7 @@ access to complete traceability without publishing originals or private data.
 | HWS PRD v0.1 | §6 drive registry | Owner-supplied exact22-name registry in #40; simulator/drives and ADR0017. Other original section text is not certified |
 | HWS PRD v0.1 | §7 | SUPPLIED SOURCE: #42 revision 2 provides relationship fields/principles; ADR-0019 maps bounded implementation and tests. Full private document remains unverified. |
 | HWS PRD v0.1 | §8 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §9 | SUPPLIED SOURCE: #41 revision 2 gives all27 actions and14-stage lifecycle; ADR-0018 maps implementation/tests. Full private document remains unverified. |
+| HWS PRD v0.1 | §9 | SUPPLIED SOURCE: #41 revision 2 gives all 27 actions and 14-stage lifecycle; ADR-0018 maps implementation/tests. Full private document remains unverified. |
 | HWS PRD v0.1 | §10 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §11 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §12 | UNVERIFIED: original text unavailable; summarized scope above |
@@ -61,8 +58,8 @@ access to complete traceability without publishing originals or private data.
 | HWS PRD v0.1 | §16 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §17 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §18 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §19 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §20 | UNVERIFIED: original text unavailable; summarized scope above |
+| HWS PRD v0.1 | §19 | SUPPLIED SOURCE: #43 revision 2, all 13 exit criteria; immutable registry and evidence report, ADR0020. |
+| HWS PRD v0.1 | §20 | SUPPLIED SOURCE: #43 revision 2, all 10 primary falsifiers; explicit unknown polarity and adequacy limits, ADR0020. |
 | IHG canonical PRD v1.1 | 5 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 14 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 15 | UNVERIFIED: original text unavailable; summarized invariants above |
@@ -303,27 +300,57 @@ ADR-0015 and docs/evaluation.md map the independent evaluator process, frozen
 family/person/group/time splits, label-blind generation, consented synthetic imports,
 proper scoring/missingness, clustered uncertainty, conditional forecasts and
 separately owner-signed batch authorization protocol. All reports keep real-human
-validity and cross-model transfer NOT TESTED; complete original HWS falsifier and
-registry traceability remain UNVERIFIED. No production defaults or owner adequacy
+validity and cross-model transfer NOT_TESTED. The complete supplied source
+falsifiers are now enumerated separately by ADR0020; unsupplied private-document
+traceability remains UNVERIFIED. No production defaults or owner adequacy
 thresholds are changed. Engineering integration still requires exact-SHA review
 and passing complete checks.
 
 ## #17 demo and separate study protocol
 
 ADR0016, docs/backend-demo.md and docs/study-protocol.md map the 24-person,
-eight-overlapping-group, 48-directed-edge sparse reference demo; actual fake
+eight-overlapping-group sparse reference demo (legacy 48 directed edges, current
+v2 104 directional reports); actual fake
 multi-seed run/replay/export/recovery measurements; and the evaluator-owned fixed
 30-real-day reservation/report protocol. Existing runtime/cognitive/receipt caps
 are retained. Engineering acceptance, synthetic behavioral evidence and human
 validity are separate fields. A real 30-day run, live independent frontier-model
-transfer, real-human validity and unavailable complete HWS falsifiers are NOT
-TESTED/NOT RUN. The backend console contract and UI backlog are owner-review
+transfer and real-human validity remain NOT_TESTED/NOT_RUN. The complete supplied
+HWS registry is represented separately in ADR0020, with evidence adequacy kept
+distinct from enumeration. The backend console contract and UI backlog are owner-review
 material only; no UI entry, deployment, model-weight update or main merge occurs.
 
 ## Alignment #40: full drive registry and explicit old-state compatibility
 
-ADR0017 maps the owner-supplied22-drive registry, bounded hypothesis parameters,
+ADR0017 maps the owner-supplied 22-drive registry, bounded hypothesis parameters,
 permitted context/history/resource/relationship/belief/uncertainty appraisal,
 version-aware decoder and isolated new runtime host. Legacy six-variable state
-and recorded policies are retained with their old wire semantics. Only this
-registry source gap is resolved; #41–#44 remain separate sequential work.
+and recorded policies are retained with their old wire semantics. This resolves
+the supplied drive-name gap; source coverage is bounded to the ticket extract.
+
+## Alignment #41–#43: actions, relationships and evidence
+
+ADR0018 maps all 27 supplied actions and 14 lifecycle stages to their owners,
+recipient/permission/evidence rules, duration/resources, effects, disclosure and
+outcome tracking. Legacy policy/codec dispatch stays explicit; new cognition
+consumes the complete drive/action engines rather than a disconnected registry.
+
+ADR0019 maps all supplied §7 relationship fields to observer-owned attributed
+contexts, relation.v2 lineage/codec checks, permissioned cognition and the shared
+five/24-person demo. Same-input label swaps are invariant; history/expectation/
+stress ablations and adverse-spouse/supportive-acquaintance reversal exercise
+context effects without assigning role-based stereotypes. Outcomes need observed
+recipient evidence; finite shared time is actually consumed.
+
+ADR0020 maps every supplied §19/§20 row, stable source ID and evidence requirement
+to a frozen, separately versioned report. It reuses #42 controlled inputs through
+an isolated label-blind child; exact retained source/config/model/dataset/seed
+and execution-time evidence is required by verification. A complete 23-row registry
+is engineering coverage, not 23 scientific passes. Real-data calibration readiness
+is unmet; human/model transfer remain NOT_TESTED and the real study NOT_RUN. Only
+bounded independent reproduction can earn the declared engineering PASS.
+
+The aggregate #44 milestone still requires exact final-base/head verification,
+criterion-by-criterion original ticket reconciliation and an independent fresh
+recommendation on owner-only PR #38. These extracts do not establish full private
+PRD traceability or a completed IHG end-user product.

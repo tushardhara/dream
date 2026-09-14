@@ -54,11 +54,24 @@ func run(args []string, out io.Writer) error {
 	synthetic := flags.Bool("synthetic", false, "use versioned synthetic format fixture")
 	dataset := flags.String("dataset", "", "owner-only synthetic dataset JSON")
 	config := flags.String("config", "", "owner-only frozen evaluator config JSON")
+	alignmentPlan := flags.String("alignment-plan", "", "owner-only frozen complete HWS registry experiment plan")
+	freezeAlignment := flags.String("freeze-alignment-plan", "", "write a new owner-only preregistration; performs no generation")
+	alignmentReceipt := flags.String("alignment-receipt", "", "new execution receipt for run; retained receipt for verification")
+	verifyAlignment := flags.String("verify-alignment-report", "", "owner-only complete registry report to verify without generation")
+	sourceRevision := flags.String("source-revision", "", "exact source commit for alignment preregistration")
+	sourceTree := flags.String("source-tree", "", "exact source tree for alignment preregistration")
 	studyPlan := flags.String("study-plan", "", "owner-only frozen 30-real-day study plan JSON")
 	study := flags.String("study-action", "", "explicit register/status/day/abandon-expired; no scheduler or live provider")
 	development := flags.Bool("development", false, "explicit disposable/local study database")
 	if e := flags.Parse(args); e != nil {
 		return e
+	}
+	alignment := alignmentOptions{*alignmentPlan, *freezeAlignment, *alignmentReceipt, *verifyAlignment, *sourceRevision, *sourceTree}
+	if alignment.used() {
+		if *studyPlan != "" || *study != "" || *development || *config != "" || flags.NArg() != 0 {
+			return fmt.Errorf("ambiguous alignment/study/evaluation options")
+		}
+		return alignmentCommand(alignment, *image, *synthetic, *dataset, out)
 	}
 	if *studyPlan != "" || *study != "" {
 		if flags.NArg() != 0 || *studyPlan == "" || *study == "" || *image != "" || *synthetic || *config != "" || (*study != "day" && *dataset != "") {

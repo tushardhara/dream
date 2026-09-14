@@ -1,0 +1,1026 @@
+{
+  "version": "relationship-comparisons.v1",
+  "at": 5,
+  "actor": {
+    "drives": {
+      "factors": {
+        "version": "legacy-factors.v1",
+        "baseline": [
+          0.2,
+          0.3,
+          0.1
+        ],
+        "variables": [
+          {
+            "v": [
+              0.2,
+              0.2,
+              0.5,
+              0.5
+            ],
+            "at": 0
+          },
+          {
+            "v": [
+              0.3,
+              0.3,
+              0.5,
+              0.5
+            ],
+            "at": 0
+          },
+          {
+            "v": [
+              0.1,
+              0.1,
+              0.5,
+              0.5
+            ],
+            "at": 0
+          }
+        ]
+      },
+      "version": 3,
+      "registry": "hws-section6.v1",
+      "registry_hash": "ed52b4d061de4ce17271f3949d173e830afe09053b00060461d2960d00191485",
+      "model": "appraisal.drives.v2",
+      "actor": "a",
+      "at": 0,
+      "substrate": {
+        "baseline": [
+          0.3,
+          0.2,
+          0.3,
+          0.2,
+          0.4,
+          0.2,
+          0.3,
+          0.5,
+          0.5,
+          0.5,
+          0.4,
+          0.5,
+          0.4,
+          0.4,
+          0.3,
+          0.4,
+          0.4,
+          0.4,
+          0.4,
+          0.3,
+          0.5,
+          0.3
+        ],
+        "reactivity": 0.5,
+        "plasticity": 0.5
+      },
+      "variables": [
+        {
+          "v": [
+            0.3,
+            0.3,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.2,
+            0.2,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.3,
+            0.3,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.2,
+            0.2,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.2,
+            0.2,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.3,
+            0.3,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.3,
+            0.3,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.4,
+            0.4,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.3,
+            0.3,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        },
+        {
+          "v": [
+            0.3,
+            0.3,
+            0.5,
+            0.5
+          ],
+          "at": 0
+        }
+      ],
+      "causes": [],
+      "applied": []
+    },
+    "available_at": 0,
+    "contact": "engaged",
+    "memory": [],
+    "beliefs": [],
+    "private": {
+      "appraisal": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "emotion": [
+        0,
+        0
+      ],
+      "active": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fear": 0,
+      "rationale": "initial"
+    }
+  },
+  "situation": {
+    "RelationshipEvidence": [
+      {
+        "event": "e",
+        "actor": "a",
+        "occurred_at": 1,
+        "learned_at": 1,
+        "confidence": 0.8,
+        "signals": {
+          "effort": 0,
+          "rest": 0,
+          "scarcity": 0,
+          "opportunity": 0,
+          "other_need": 0.7,
+          "support": 0,
+          "status_threat": 0,
+          "inclusion": 0,
+          "exclusion": 0
+        },
+        "rights": {
+          "resource": "e",
+          "revoked": false,
+          "grants": [
+            {
+              "actor": "a",
+              "recipient": "a",
+              "purpose": "simulation",
+              "operation": "read"
+            },
+            {
+              "actor": "a",
+              "recipient": "a",
+              "purpose": "simulation",
+              "operation": "derive"
+            }
+          ]
+        }
+      }
+    ],
+    "Observation": {
+      "event": {
+        "event": "e",
+        "actor": "a",
+        "occurred_at": 1,
+        "learned_at": 1,
+        "confidence": 0.8,
+        "signals": {
+          "effort": 0,
+          "rest": 0,
+          "scarcity": 0,
+          "opportunity": 0,
+          "other_need": 0.7,
+          "support": 0,
+          "status_threat": 0,
+          "inclusion": 0,
+          "exclusion": 0
+        },
+        "rights": {
+          "resource": "e",
+          "revoked": false,
+          "grants": [
+            {
+              "actor": "a",
+              "recipient": "a",
+              "purpose": "simulation",
+              "operation": "read"
+            },
+            {
+              "actor": "a",
+              "recipient": "a",
+              "purpose": "simulation",
+              "operation": "derive"
+            }
+          ]
+        }
+      },
+      "context": [
+        {
+          "evidence": {
+            "event": "e",
+            "actor": "a",
+            "occurred_at": 1,
+            "learned_at": 1,
+            "confidence": 0,
+            "signals": {
+              "effort": 0,
+              "rest": 0,
+              "scarcity": 0,
+              "opportunity": 0,
+              "other_need": 0,
+              "support": 0,
+              "status_threat": 0,
+              "inclusion": 0,
+              "exclusion": 0
+            },
+            "rights": {
+              "resource": "e",
+              "revoked": false,
+              "grants": [
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "read"
+                },
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "derive"
+                }
+              ]
+            }
+          },
+          "value": 0
+        },
+        {
+          "evidence": {
+            "event": "e",
+            "actor": "a",
+            "occurred_at": 1,
+            "learned_at": 1,
+            "confidence": 0,
+            "signals": {
+              "effort": 0,
+              "rest": 0,
+              "scarcity": 0,
+              "opportunity": 0,
+              "other_need": 0,
+              "support": 0,
+              "status_threat": 0,
+              "inclusion": 0,
+              "exclusion": 0
+            },
+            "rights": {
+              "resource": "e",
+              "revoked": false,
+              "grants": [
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "read"
+                },
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "derive"
+                }
+              ]
+            }
+          },
+          "value": 0
+        },
+        {
+          "evidence": {
+            "event": "e",
+            "actor": "a",
+            "occurred_at": 1,
+            "learned_at": 1,
+            "confidence": 0,
+            "signals": {
+              "effort": 0,
+              "rest": 0,
+              "scarcity": 0,
+              "opportunity": 0,
+              "other_need": 0,
+              "support": 0,
+              "status_threat": 0,
+              "inclusion": 0,
+              "exclusion": 0
+            },
+            "rights": {
+              "resource": "e",
+              "revoked": false,
+              "grants": [
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "read"
+                },
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "derive"
+                }
+              ]
+            }
+          },
+          "value": 0
+        },
+        {
+          "evidence": {
+            "event": "e",
+            "actor": "a",
+            "occurred_at": 1,
+            "learned_at": 1,
+            "confidence": 0,
+            "signals": {
+              "effort": 0,
+              "rest": 0,
+              "scarcity": 0,
+              "opportunity": 0,
+              "other_need": 0,
+              "support": 0,
+              "status_threat": 0,
+              "inclusion": 0,
+              "exclusion": 0
+            },
+            "rights": {
+              "resource": "e",
+              "revoked": false,
+              "grants": [
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "read"
+                },
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "derive"
+                }
+              ]
+            }
+          },
+          "value": 0
+        },
+        {
+          "evidence": {
+            "event": "e",
+            "actor": "a",
+            "occurred_at": 1,
+            "learned_at": 1,
+            "confidence": 0,
+            "signals": {
+              "effort": 0,
+              "rest": 0,
+              "scarcity": 0,
+              "opportunity": 0,
+              "other_need": 0,
+              "support": 0,
+              "status_threat": 0,
+              "inclusion": 0,
+              "exclusion": 0
+            },
+            "rights": {
+              "resource": "e",
+              "revoked": false,
+              "grants": [
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "read"
+                },
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "derive"
+                }
+              ]
+            }
+          },
+          "value": 0
+        },
+        {
+          "evidence": {
+            "event": "e",
+            "actor": "a",
+            "occurred_at": 1,
+            "learned_at": 1,
+            "confidence": 0,
+            "signals": {
+              "effort": 0,
+              "rest": 0,
+              "scarcity": 0,
+              "opportunity": 0,
+              "other_need": 0,
+              "support": 0,
+              "status_threat": 0,
+              "inclusion": 0,
+              "exclusion": 0
+            },
+            "rights": {
+              "resource": "e",
+              "revoked": false,
+              "grants": [
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "read"
+                },
+                {
+                  "actor": "a",
+                  "recipient": "a",
+                  "purpose": "simulation",
+                  "operation": "derive"
+                }
+              ]
+            }
+          },
+          "value": 0
+        }
+      ]
+    },
+    "Beliefs": null,
+    "Relationships": null,
+    "Offers": [
+      {
+        "kind": "ask",
+        "recipient": "b",
+        "evidence": [
+          "e"
+        ],
+        "duration": 1
+      },
+      {
+        "kind": "decline",
+        "recipient": "b",
+        "evidence": [
+          "e"
+        ],
+        "duration": 1
+      },
+      {
+        "kind": "reveal",
+        "recipient": "b",
+        "evidence": [
+          "e"
+        ],
+        "duration": 1,
+        "mode": "full"
+      }
+    ],
+    "Contexts": null,
+    "Sources": [
+      "e"
+    ],
+    "Present": [
+      "a",
+      "b",
+      "c"
+    ],
+    "Resources": {
+      "time": 2
+    },
+    "Commitments": null,
+    "Disclosure": {
+      "Recipient": "b",
+      "Mode": "full",
+      "Sources": [
+        "e"
+      ]
+    },
+    "Outage": false,
+    "Horizon": 20
+  },
+  "profiles": [
+    {
+      "name": "spouse",
+      "context": {
+        "version": 1,
+        "observer": "a",
+        "other": "b",
+        "types": [
+          "spouse"
+        ],
+        "valid": {
+          "start": 0
+        },
+        "details": [
+          {
+            "kind": "history",
+            "sources": [
+              "e"
+            ]
+          }
+        ],
+        "measures": [
+          {
+            "kind": "trust",
+            "value": 0.8,
+            "confidence": 0.8,
+            "source": "e"
+          },
+          {
+            "kind": "expectation",
+            "value": 0.7,
+            "confidence": 0.7,
+            "source": "e"
+          },
+          {
+            "kind": "prior_outcome",
+            "value": 0.6,
+            "confidence": 0.9,
+            "source": "e"
+          },
+          {
+            "kind": "expected_reaction",
+            "value": 0.5,
+            "confidence": 0.6,
+            "source": "e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sibling",
+      "context": {
+        "version": 1,
+        "observer": "a",
+        "other": "b",
+        "types": [
+          "sibling"
+        ],
+        "valid": {
+          "start": 0
+        },
+        "details": [
+          {
+            "kind": "history",
+            "sources": [
+              "e"
+            ]
+          }
+        ],
+        "measures": [
+          {
+            "kind": "trust",
+            "value": 0.1,
+            "confidence": 0.8,
+            "source": "e"
+          },
+          {
+            "kind": "expectation",
+            "value": -0.3,
+            "confidence": 0.7,
+            "source": "e"
+          },
+          {
+            "kind": "prior_outcome",
+            "value": -0.5,
+            "confidence": 0.9,
+            "source": "e"
+          },
+          {
+            "kind": "expected_reaction",
+            "value": 0.5,
+            "confidence": 0.6,
+            "source": "e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "friend",
+      "context": {
+        "version": 1,
+        "observer": "a",
+        "other": "b",
+        "types": [
+          "friend"
+        ],
+        "valid": {
+          "start": 0
+        },
+        "details": [
+          {
+            "kind": "history",
+            "sources": [
+              "e"
+            ]
+          }
+        ],
+        "measures": [
+          {
+            "kind": "trust",
+            "value": 0.5,
+            "confidence": 0.8,
+            "source": "e"
+          },
+          {
+            "kind": "expectation",
+            "value": 0.2,
+            "confidence": 0.7,
+            "source": "e"
+          },
+          {
+            "kind": "prior_outcome",
+            "value": 0.1,
+            "confidence": 0.9,
+            "source": "e"
+          },
+          {
+            "kind": "expected_reaction",
+            "value": 0.5,
+            "confidence": 0.6,
+            "source": "e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "acquaintance",
+      "context": {
+        "version": 1,
+        "observer": "a",
+        "other": "b",
+        "types": [
+          "acquaintance"
+        ],
+        "valid": {
+          "start": 0
+        },
+        "details": [
+          {
+            "kind": "history",
+            "sources": [
+              "e"
+            ]
+          }
+        ],
+        "measures": [
+          {
+            "kind": "trust",
+            "value": -0.2,
+            "confidence": 0.8,
+            "source": "e"
+          },
+          {
+            "kind": "expectation",
+            "value": -0.5,
+            "confidence": 0.7,
+            "source": "e"
+          },
+          {
+            "kind": "prior_outcome",
+            "value": -0.2,
+            "confidence": 0.9,
+            "source": "e"
+          },
+          {
+            "kind": "expected_reaction",
+            "value": 0.5,
+            "confidence": 0.6,
+            "source": "e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ablation_baseline",
+      "context": {
+        "version": 1,
+        "observer": "a",
+        "other": "b",
+        "types": [
+          "spouse"
+        ],
+        "valid": {
+          "start": 0
+        },
+        "details": [
+          {
+            "kind": "history",
+            "sources": [
+              "e"
+            ]
+          }
+        ],
+        "measures": [
+          {
+            "kind": "trust",
+            "value": 0.1,
+            "confidence": 0.8,
+            "source": "e"
+          },
+          {
+            "kind": "expectation",
+            "value": 0.2,
+            "confidence": 0.7,
+            "source": "e"
+          },
+          {
+            "kind": "prior_outcome",
+            "value": 0.1,
+            "confidence": 0.9,
+            "source": "e"
+          },
+          {
+            "kind": "expected_reaction",
+            "value": 0.5,
+            "confidence": 0.6,
+            "source": "e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hostile_spouse",
+      "context": {
+        "version": 1,
+        "observer": "a",
+        "other": "b",
+        "types": [
+          "spouse"
+        ],
+        "valid": {
+          "start": 0
+        },
+        "details": [
+          {
+            "kind": "history",
+            "sources": [
+              "e"
+            ]
+          }
+        ],
+        "measures": [
+          {
+            "kind": "trust",
+            "value": -0.9,
+            "confidence": 0.8,
+            "source": "e"
+          },
+          {
+            "kind": "expectation",
+            "value": 0.8,
+            "confidence": 0.7,
+            "source": "e"
+          },
+          {
+            "kind": "prior_outcome",
+            "value": -0.9,
+            "confidence": 0.9,
+            "source": "e"
+          },
+          {
+            "kind": "expected_reaction",
+            "value": 0.5,
+            "confidence": 0.6,
+            "source": "e"
+          }
+        ]
+      }
+    },
+    {
+      "name": "supportive_acquaintance",
+      "context": {
+        "version": 1,
+        "observer": "a",
+        "other": "b",
+        "types": [
+          "acquaintance"
+        ],
+        "valid": {
+          "start": 0
+        },
+        "details": [
+          {
+            "kind": "history",
+            "sources": [
+              "e"
+            ]
+          }
+        ],
+        "measures": [
+          {
+            "kind": "trust",
+            "value": 0.9,
+            "confidence": 0.8,
+            "source": "e"
+          },
+          {
+            "kind": "expectation",
+            "value": -0.2,
+            "confidence": 0.7,
+            "source": "e"
+          },
+          {
+            "kind": "prior_outcome",
+            "value": 0.9,
+            "confidence": 0.9,
+            "source": "e"
+          },
+          {
+            "kind": "expected_reaction",
+            "value": 0.5,
+            "confidence": 0.6,
+            "source": "e"
+          }
+        ]
+      }
+    }
+  ]
+}

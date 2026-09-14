@@ -5,21 +5,43 @@ import (
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/simulator/drives"
 	"github.com/tushardhara/dream/simulator/dynamics"
+	"github.com/tushardhara/dream/simulator/internal/reference"
 	"math"
 	"reflect"
 	"testing"
 )
+
+// The generator and the original #42 assertions consume exactly the same
+// versioned input fixture. Keeping this test in behavior avoids an experiment
+// import cycle; it reads data, never evaluator labels or expected outcomes.
+type relationshipReferenceFixture struct {
+	Version   string           `json:"version"`
+	At        core.LogicalTime `json:"at"`
+	Actor     ActionActor      `json:"actor"`
+	Situation ActionSituation  `json:"situation"`
+	Profiles  []struct {
+		Name    string                   `json:"name"`
+		Context core.RelationshipContext `json:"context"`
+	} `json:"profiles"`
+}
+
+func relationshipReference(t testing.TB) relationshipReferenceFixture {
+	t.Helper()
+	raw := reference.Relationships()
+	var f relationshipReferenceFixture
+	if e := json.Unmarshal(raw, &f); e != nil || f.Version != "relationship-comparisons.v1" || f.At != 5 || len(f.Profiles) != 7 {
+		t.Fatal("controlled input fixture", e)
+	}
+	return f
+}
 
 func relationAccount(role core.ID, trust, expectation, history float64) core.RelationshipContext {
 	return core.RelationshipContext{Version: 1, Observer: "a", Other: "b", Types: []core.ID{role}, Valid: core.Interval{}, Details: []core.RelationshipDetail{{Kind: "history", Sources: []core.ID{"e"}}}, Measures: []core.RelationshipMeasure{{Kind: "trust", Value: trust, Confidence: .8, Source: "e"}, {Kind: "expectation", Value: expectation, Confidence: .7, Source: "e"}, {Kind: "prior_outcome", Value: history, Confidence: .9, Source: "e"}, {Kind: "expected_reaction", Value: .5, Confidence: .6, Source: "e"}}}
 }
 func relationalChoice(t *testing.T, r *core.RelationshipContext, focus bool) (ActionActor, ActionDecision) {
 	t.Helper()
-	a, s := actionFixture(t)
-	s.Contexts = nil
-	s.RelationshipEvidence = []dynamics.Perceived{s.Observation.Event}
-	s.Offers = []ActionOffer{{Kind: Ask, Recipient: "b", Evidence: []core.ID{"e"}, Duration: 1}, {Kind: Decline, Recipient: "b", Evidence: []core.ID{"e"}, Duration: 1}, {Kind: Reveal, Recipient: "b", Evidence: []core.ID{"e"}, Duration: 1, Mode: Full}}
-	s.Disclosure = &DisclosureGrant{Recipient: "b", Mode: Full, Sources: []core.ID{"e"}}
+	f := relationshipReference(t)
+	a, s := f.Actor, f.Situation
 	if r != nil {
 		var e error
 		s, e = ApplyRelationship(s, *r, "a", 5, focus)
@@ -42,7 +64,11 @@ func probability(d ActionDecision, kind Kind) float64 {
 	return 0
 }
 func TestRelationalControlledSpecificityAndAblations(t *testing.T) {
-	profiles := []core.RelationshipContext{relationAccount("spouse", .8, .7, .6), relationAccount("sibling", .1, -.3, -.5), relationAccount("friend", .5, .2, .1), relationAccount("acquaintance", -.2, -.5, -.2)}
+	f := relationshipReference(t)
+	profiles := []core.RelationshipContext{}
+	for _, p := range f.Profiles[:4] {
+		profiles = append(profiles, p.Context)
+	}
 	decisions := []ActionDecision{}
 	for _, r := range profiles {
 		_, d := relationalChoice(t, &r, true)

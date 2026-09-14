@@ -86,9 +86,9 @@ Interfaces are declared by their consumers; adapters implement them, and `cmd` c
 
 A future application must be able to use the core without creating a simulation world, importing a branch type, or gaining access to simulator-only hidden state.
 
-The planned reuse test is concrete: a second, non-simulator client must ingest statements, preserve differing perspectives, correct and revoke evidence, and export permitted state.
+The second, non-simulator client in `examples/graphclient` exercises ingestion, differing perspectives, correction, revocation and permitted export without creating a world.
 
-### Planned technical foundation
+### Technical foundation
 
 - **Go**, in a single-module modular monolith.
 - **PostgreSQL**, with versioned events, temporal projections, idempotent writes, and recovery checkpoints.
@@ -130,7 +130,7 @@ No model vendor defines the core. No premature microservice split is required.
 | Evaluation and demonstration | Multi-seed comparisons, calibration readiness, and a 24-person synthetic world |
 | Later | Research console, longer studies, and applications built on the same core |
 
-The demonstration target is **24 simulated people, 8 overlapping groups, and 30+ relationship edges**, with a configurable 12-month simulated horizon. Smaller worlds come first.
+The bounded demonstration supports **24 simulated people, 8 overlapping groups, and 104 directional relationship reports**, with a configurable horizon of up to 12 model months. A five-person H/W/S/A/B fixture makes observer-specific relationships easier to inspect.
 
 A **30-day real-time study** is a separate operational milestone. It is not equivalent to advancing the simulated clock by a month.
 
@@ -148,15 +148,15 @@ Production relationship advice, real-user interventions, matching, and autonomou
 
 ## Development status
 
-**Early development.** This README describes the target design, not a completed feature set.
+**Backend research implementation.** Durable graph services, bounded simulation, authenticated management APIs, replay/revocation/export, an independent evaluator and a synthetic demo are implemented. The alignment work adds the supplied 22-drive and 27-action registries, observer-owned relationship contexts, and complete 13-exit/10-falsifier reporting.
 
-Bootstrap #2 is integrated into `backend-integration`. The project does not yet claim a runnable research release or an end-to-end simulator quickstart.
+This is not the full Intelligent Human Graph product or a validated human model. The [live integration epic](https://github.com/tushardhara/dream/issues/39) and [aggregate PR #38](https://github.com/tushardhara/dream/pull/38) carry exact review/CI status; final main integration remains owner-only.
 
 ### Getting started and verification
 
-Install Git, Make, Python 3, Go 1.27.1, a C compiler and Docker, then run `make verify` from the repository root.
+Install Git, Make, Python 3, Go 1.27.1, a C compiler and Docker, then run `make verify` from the repository root. On the shared host, first follow [test resource safety](docs/test-resource-safety.md) and run heavy commands under `scripts/disk-guard.py`, accounting all retained role files.
 
-`hws scenario validate examples/scenarios/quiet-overlap.yaml` validates the synthetic scenario offline. The authenticated gRPC/HTTP API is available through the transport host; `hws-api --config <file>` runs an explicit management-only profile with trusted credentials/view grants and a non-owner PostgreSQL connection. It never chooses a fake simulation policy: step/run-until require an embedding execution host with a configured handler. Development listeners are loopback-only; deployment requires TLS. See [transport composition and limits](docs/adr/0013-authenticated-transport.md). `hws-worker` provides bounded model/outbox maintenance; `hws-admin` supplies explicit migration and quarantined restore commands. See the [single-host operations runbook](docs/operations.md). Verification covers static/race checks, pinned protobuf/gateway/OpenAPI regeneration, real PostgreSQL role and revocation tests, and purge-aware backup/restore. No live provider or paid study is run by these checks.
+`hws scenario validate examples/scenarios/quiet-overlap.yaml` validates the synthetic scenario offline. The authenticated gRPC/HTTP API is available through the transport host; `hws-api --config <file>` runs an explicit management-only profile with trusted credentials/view grants and a non-owner PostgreSQL connection. It never chooses a fake simulation policy: step/run-until require an embedding execution host with a configured handler. Development listeners are loopback-only; deployment requires TLS. See [transport composition and limits](docs/adr/0013-authenticated-transport.md). `hws-worker` provides bounded model/outbox maintenance; `hws-admin` supplies explicit migration and quarantined restore commands. See the [single-host operations runbook](docs/operations.md). Verification covers static/race checks, pinned protobuf/gateway/OpenAPI regeneration, real PostgreSQL role and revocation tests, and purge-aware backup/restore. No live provider or paid study is run by these checks. See [offline evaluation](docs/evaluation.md) for frozen evidence reports and their scientific limits.
 
 See [Contributing](CONTRIBUTING.md), [architecture](docs/adr/0001-backend-boundaries.md), [requirements and gaps](docs/requirements.md), [pinned tools](docs/toolchain.md), and [agent workflow](docs/agent-workflow.md).
 

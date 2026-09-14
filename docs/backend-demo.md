@@ -5,8 +5,8 @@ Docker available. The command creates one disposable PostgreSQL 18.6 cluster
 (2 CPUs, 512 MiB, no persistent volume), uses non-owner runtime logins, and runs:
 
 - Compiled `hws-demo` partial checkpoint/resume and fresh-run equivalence.
-- 24 fictional adults, eight overlapping family/work/friends groups, 48 directed
-  observer-owned relationships, two fixed seeds, and 12 simulated model months.
+- 24 fictional adults, eight overlapping family/work/friends groups, 104 directional
+  observer-owned relationship reports, two fixed seeds, and 12 simulated model months.
 - Compiled recorded replay and own-actor export, including wrong-hash, unknown
   actor, foreign-note and hidden-research-label negatives.
 - The independent core/graph-only second host: separate perspectives, correction,
@@ -22,16 +22,19 @@ actual per-run elapsed time. Live API calls and incurred API cost are zero becau
 this command only uses deterministic reference/fake providers. Host infrastructure
 and coding-subscription costs are not measured or represented as zero.
 
-The small 2/4-person configurations are fast smoke worlds. The larger command is
+The 2/4-person configurations are smoke worlds; the five-person H/W/S/A/B configuration isolates spouse, sibling, friend and acquaintance perspectives. It has 12 directional reports, including W→A acquaintance and W↔S sibling-in-law/acquaintance; no W–B relationship is invented. The larger command is
 a bounded operational smoke, not a stress test, production capacity result, or
 30-day soak. The fixed seed pair is 11/23. Public scenarios contain routine,
 joyful, supportive, scarce-resource and compound-event periods. Group observations
 are visible only to members; typed deliveries reach only their recipient. Other
 actors use their own routine observation. Raw private notes, future events and
 research labels never enter another actor's choice. Shared help consumes finite
-resources. Synthetic latent dynamics retain the existing six-drive subset, decay,
-uncertainty, bounded receipt ledger and policy versions; complete HWS source
-registries remain unavailable.
+resources. The `backend-demo.v2` projection uses the shared 22-drive registry, 27-action
+engine and permissioned relationship appraisal. Relationship type labels alone
+do not set probabilities. Observed recipient replies can update later history;
+shared time is finite and actual consumption is recorded. Legacy v1 decoding and
+reproduction remain version-dispatched. The supplied HWS source registries are
+mapped in ADR0017–0020; no full private-document audit is claimed.
 
 A model month is explicitly 30 simulated days. There are two observation periods
 per month, one day apart near month-end; 12 months configure a 360-day virtual
@@ -44,8 +47,8 @@ The demo has a compact versioned checkpoint containing a period index and derive
 world hash. Its bounded actor state is reconstructed from frozen scenario inputs
 and counter-based recorded randomness. This avoids increasing the 4096-byte
 runtime checkpoint limit, four-actor cognitive codec limit, 16-outcome limit or
-32-receipt limit. At most 24 periods and 24 actors are supported; no ledger is
-silently evicted. Each new period's draws and resource consumption are recorded
+32-receipt limit. At most 24 periods and 24 actors (576 decisions/outcomes) are supported in
+the derived projection; no ledger is silently evicted or reset. Each new period's draws and resource consumption are recorded
 through the existing runtime journal. Replaying the journal and recomputing the
 projection must agree. Arbitrary injected events or unsupported forks fail closed;
 this fixed demo is not a new general-purpose simulation policy.

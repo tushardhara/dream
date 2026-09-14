@@ -15,6 +15,7 @@ import socket
 import sys
 import subprocess
 import tempfile
+import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -88,6 +89,48 @@ def main():
             listener.close()
             subprocess.run(["docker", "image", "rm", probe_iid.read_text().strip()],
                            cwd=ROOT, env=env, capture_output=True, timeout=30)
+        # Freeze the full source-registry experiment before either generation.
+        # Actual execution receipts are separate; logical report bytes must match.
+        alignment_dir = ROOT / "bin" / ("alignment-run-" + os.environ.get("DREAM_TEST_RUN", "standalone") + "-" + uuid.uuid4().hex[:12])
+        alignment_dir.mkdir(exist_ok=False)
+        plan = alignment_dir / "plan.json"
+        revision = command(["git", "rev-parse", "HEAD"], env).strip()
+        tree = command(["git", "rev-parse", "HEAD^{tree}"], env).strip()
+        freeze = args + ["--freeze-alignment-plan", str(plan), "--source-revision", revision, "--source-tree", tree]
+        command(freeze, env)
+        receipt_a = alignment_dir / "receipt-a.json"
+        receipt_b = alignment_dir / "receipt-b.json"
+        aligned_a = command(args + ["--alignment-plan", str(plan), "--alignment-receipt", str(receipt_a)], env)
+        aligned_b = command(args + ["--alignment-plan", str(plan), "--alignment-receipt", str(receipt_b)], env)
+        if aligned_a != aligned_b:
+            raise RuntimeError("complete registry report bytes are not reproducible")
+        aligned = json.loads(aligned_a)
+        if len(aligned["registry"]) != 23 or len(aligned["findings"]) != 23:
+            raise RuntimeError("incomplete source registry report")
+        if sum(e["kind"] == "exit" for e in aligned["registry"]) != 13 or sum(e["kind"] == "falsifier" for e in aligned["registry"]) != 10:
+            raise RuntimeError("incorrect source registry counts")
+        if aligned["real_human_validity"] != "NOT_TESTED" or aligned["cross_model_transfer"] != "NOT_TESTED" or aligned["real_30_day_study"] != "NOT_RUN":
+            raise RuntimeError("synthetic experiment fabricated scientific validation")
+        if any(m["status"] != "PASS" for m in aligned["engineering_mechanics"]):
+            raise RuntimeError("preregistered synthetic mechanics check failed or unresolved")
+        report_path = alignment_dir / "report.json"
+        with os.fdopen(os.open(report_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as stream:
+            stream.write(aligned_a)
+        # Retain the legacy format evidence too, without conflating seven old
+        # findings with the complete 23-entry source registry.
+        with os.fdopen(os.open(alignment_dir / "legacy-report.json", os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as stream:
+            stream.write(first)
+        for receipt in [receipt_a, receipt_b]:
+            command(args + ["--alignment-plan", str(plan), "--alignment-receipt", str(receipt), "--verify-alignment-report", str(report_path)], env)
+        # A syntactically valid fake source hash must not become a frozen plan.
+        for name, bad_revision, bad_tree in [("revision", "0" * 40, tree), ("tree", revision, "0" * 40)]:
+            bad_plan = alignment_dir / ("rejected-" + name + ".json")
+            attempt = subprocess.run(args + ["--freeze-alignment-plan", str(bad_plan), "--source-revision", bad_revision, "--source-tree", bad_tree], cwd=ROOT, env=env, text=True, capture_output=True, timeout=30)
+            (alignment_dir / ("rejected-" + name + ".log")).write_text((attempt.stdout + attempt.stderr)[-8000:])
+            if attempt.returncode == 0 or bad_plan.exists():
+                raise RuntimeError("forged source binding accepted")
+        print("PASS: complete 13/10 registry, frozen source/artifact plan, two byte-identical bounded experiments and retained evaluator times")
+        print("Alignment evidence: " + str(alignment_dir) + "; hash=" + aligned["hash"])
         print("PASS: byte-identical offline synthetic reports; hash=" + report["hash"])
         print("Report: bin/evaluation-report.json; generator=" + image)
         print("Human validity NOT TESTED; no promotion, live provider or deployment.")
