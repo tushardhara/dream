@@ -101,7 +101,11 @@ func Evaluate(ctx context.Context, seeds []uint64) (Report, error) {
 					return report, fmt.Errorf("%s/%s/%d: %w", scene.Name, policy, seed, e)
 				}
 				rows[i].Metrics.add(trace.Helper.Delivered, label.Helper)
-				rows[i].Metrics.PrivacyViolations += trace.PrivacyViolations
+				helperPrivacy := trace.PrivacyViolations
+				for _, human := range trace.Humans {
+					helperPrivacy -= human.PrivateViolations
+				}
+				rows[i].Metrics.PrivacyViolations += helperPrivacy
 				if scene.Boundary != "" && trace.Helper.Delivered {
 					rows[i].Metrics.BoundaryViolations++
 				}

@@ -26,7 +26,7 @@ All examples are synthetic and offline. This evaluation does not estimate real-w
 
 ## Behavioral mutation controls
 
-Thirteen independent, compiling single-input mutations were each rejected by actual consumer assertions. Each source file was restored before the next mutation. The final unmodified focused suite is run separately. The read-scope mutations leave writes intact; the receipt-write mutation leaves reads intact.
+Seventeen independent, compiling single-input mutations were each rejected by actual consumer assertions. Each source file was restored before the next mutation. The final unmodified focused suite is run separately. The read-scope mutations leave writes intact; the receipt-write mutation leaves reads intact.
 
 | Mutation | Actual failing control |
 | --- | --- |
@@ -43,3 +43,9 @@ Thirteen independent, compiling single-input mutations were each rejected by act
 | human-burden-write | `TestTemporalHumanClarificationBudgetAndCodec` |
 | history-channel | `TestTemporalHelperHistoryFiltersChannelAndScrubsProvenance` |
 | history-scrub | `TestTemporalHelperHistoryFiltersChannelAndScrubsProvenance` |
+| life-input-human | `TestTemporalHumanInputsChangeActualChoicesAndKeepWait` |
+| rhythm-input-human | `TestTemporalHumanInputsChangeActualChoicesAndKeepWait` |
+| stale-input-human | `TestTemporalHumanInputsChangeActualChoicesAndKeepWait` |
+| coverage-input-human | `TestTemporalHumanInputsChangeActualChoicesAndKeepWait` |
+
+The four native-human mutations run separately from the composed helper-first assertions, so a helper failure cannot mask an ignored human input. Helper and human privacy counts are attributed separately.
