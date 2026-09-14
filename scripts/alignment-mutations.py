@@ -19,6 +19,7 @@ def interrupted(signum, frame):
 signal.signal(signal.SIGTERM, interrupted)
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--review", action="store_true", help="run the additional evaluator/plan controls requested in review")
+parser.add_argument("--conjuncts", action="store_true", help="run the two reachable narrow conjunction controls")
 options = parser.parse_args()
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 run = os.environ.get("DREAM_TEST_RUN", "")
@@ -89,7 +90,13 @@ plan_clauses = [
 ]
 for name, clause in plan_clauses:
     review_checks.append(("plan-" + name, "evals/alignment.go", clause, "false", "./evals", "^TestAlignment(PlanRejectsEveryInvalidField|TamperedRetainedPlanCannotScore)$"))
-checks = review_checks if options.review else checks + review_checks
+conjunct_checks = [
+    ("supportive-reveal", "evals/alignment.go", ' && trialProbability(rows["supportive_acquaintance"], behavior.Reveal) > 0', "", "./evals", mechanics_test),
+    ("unknown-ask", "evals/alignment.go", ' && trialProbability(rows["unknown"], behavior.Ask) > 0', "", "./evals", mechanics_test),
+]
+if options.review and options.conjuncts:
+    parser.error("choose one bounded subset")
+checks = conjunct_checks if options.conjuncts else review_checks + conjunct_checks if options.review else checks + review_checks + conjunct_checks
 
 # Every mutation has an independently green relevant baseline and restoration run.
 for name, package, tests in [("baseline-evals", "./evals", baseline), ("baseline-probe", "./simulator/experiment", "^TestRelationshipProbeUsesControlledInputsAndSeeds$")]:

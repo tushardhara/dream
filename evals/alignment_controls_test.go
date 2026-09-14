@@ -35,33 +35,33 @@ func TestAlignmentMechanicsRejectUnsupportedPass(t *testing.T) {
 		return nil
 	}
 	cases := []struct {
-		name   string
-		want   AlignmentStatus
-		change func(*AlignmentEvidence)
+		name, mechanic string
+		want           AlignmentStatus
+		change         func(*AlignmentEvidence)
 	}{
-		{"relational_context_sensitivity", AlignmentFail, func(e *AlignmentEvidence) {
+		{"relational_context_sensitivity", "relational_context_sensitivity", AlignmentFail, func(e *AlignmentEvidence) {
 			find(e.First, "spouse").Decision = find(e.First, "sibling").Decision
 		}},
-		{"label_invariance", AlignmentFail, func(e *AlignmentEvidence) {
+		{"label_invariance", "label_invariance", AlignmentFail, func(e *AlignmentEvidence) {
 			find(e.First, "label_sibling").Decision = find(e.First, "friend").Decision
 		}},
-		{"expectation_history_stress_ablations", AlignmentFail, func(e *AlignmentEvidence) {
+		{"expectation_history_stress_ablations", "expectation_history_stress_ablations", AlignmentFail, func(e *AlignmentEvidence) {
 			find(e.First, "ablate_expectation").Decision = find(e.First, "ablation_baseline").Decision
 		}},
-		{"history_reversal", AlignmentFail, func(e *AlignmentEvidence) {
+		{"history_reversal", "history_reversal", AlignmentFail, func(e *AlignmentEvidence) {
 			find(e.First, "hostile_spouse").Decision = find(e.First, "supportive_acquaintance").Decision
 		}},
-		{"unknown_permission_boundary", AlignmentFail, func(e *AlignmentEvidence) {
+		{"unknown_permission_boundary", "unknown_permission_boundary", AlignmentFail, func(e *AlignmentEvidence) {
 			find(e.First, "unknown").Decision = find(e.First, "spouse").Decision
 		}},
-		{"relationship_appraisal", AlignmentFail, func(e *AlignmentEvidence) {
+		{"relationship_appraisal", "relationship_appraisal", AlignmentFail, func(e *AlignmentEvidence) {
 			find(e.First, "ablation_baseline").AfterDrivesHash = find(e.First, "without_appraisal").AfterDrivesHash
 		}},
-		{"event_changes_drive_state", AlignmentFail, func(e *AlignmentEvidence) {
+		{"event_changes_drive_state", "event_changes_drive_state", AlignmentFail, func(e *AlignmentEvidence) {
 			tr := find(e.First, "spouse")
 			tr.AfterDrivesHash = tr.BeforeDrivesHash
 		}},
-		{"selected_action_seed_variation", AlignmentInconclusive, func(e *AlignmentEvidence) {
+		{"selected_action_seed_variation", "selected_action_seed_variation", AlignmentInconclusive, func(e *AlignmentEvidence) {
 			// A valid generator can observe just WAIT at every seed. Retain each
 			// original draw, with a valid one-candidate distribution, rather than
 			// relying on an invalid Selected index or a request-binding failure.
@@ -79,8 +79,18 @@ func TestAlignmentMechanicsRejectUnsupportedPass(t *testing.T) {
 				}
 			}
 		}},
-		{"repeated_generation", AlignmentFail, func(e *AlignmentEvidence) {
+		{"repeated_generation", "repeated_generation", AlignmentFail, func(e *AlignmentEvidence) {
 			e.Repeat.Trials[0].AfterStateHash = strings.Repeat("a", 64)
+		}},
+		{"history_reversal_supportive", "history_reversal", AlignmentFail, func(e *AlignmentEvidence) {
+			find(e.First, "supportive_acquaintance").Decision = find(e.First, "hostile_spouse").Decision
+		}},
+		{"unknown_ask_missing", "unknown_permission_boundary", AlignmentFail, func(e *AlignmentEvidence) {
+			d := &find(e.First, "unknown").Decision
+			wait := d.Candidates[0]
+			wait.Probability = 1
+			d.Candidates = []behavior.ActionCandidate{wait}
+			d.Selected, d.Explored = 0, false
 		}},
 	}
 	for _, tc := range cases {
@@ -101,7 +111,7 @@ func TestAlignmentMechanicsRejectUnsupportedPass(t *testing.T) {
 			}
 			found := false
 			for _, m := range r.Mechanics {
-				if m.Name == tc.name {
+				if m.Name == tc.mechanic {
 					found = true
 					if m.Status != tc.want {
 						t.Fatalf("unsupported mechanic PASS: %s got %s want %s", tc.name, m.Status, tc.want)
@@ -113,6 +123,7 @@ func TestAlignmentMechanicsRejectUnsupportedPass(t *testing.T) {
 			}
 		})
 	}
+
 	for _, evidence := range []AlignmentEvidence{{}, {First: clone()}} {
 		r, err := BuildAlignmentReport(plan, evidence)
 		if err != nil {

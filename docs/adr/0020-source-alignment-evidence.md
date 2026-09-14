@@ -124,3 +124,9 @@ comparisons and sixteen plan clauses individually, requiring assertion failures
 and exact restored-green runs. The default script also retains the original
 sixteen controls. These tests protect the correct existing production logic;
 no scientific adequacy claim follows from their mutation sensitivity.
+
+Reachable conjunction controls separately remove supportive-history disclosure and
+unknown-context Ask availability, requiring the named FAIL through valid reports.
+`--conjuncts` runs these two controls; `--review` includes them. Missing WAIT is
+rejected by `ActionDecision.Validate` before scoring, so the evaluator's redundant
+WAIT predicate is not treated as a reachable counterexample.
