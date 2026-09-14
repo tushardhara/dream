@@ -135,3 +135,27 @@ func TestTemporalHumanRequiresCurrentRecordAndSourceMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestTemporalClarificationReadScopeDoesNotSpendAnotherPairOrTopicBudget(t *testing.T) {
+	for _, different := range []string{"peer", "topic"} {
+		actor, _ := NewTemporalActor("a", 0)
+		// Independently authored ledger from another relationship/topic; this holds
+		// writes fixed and exercises only the scope of the burden lookup.
+		with, topic := core.ID("b"), core.ID(core.Childcare)
+		input := temporalInput(t, 63, 3, "", 0)
+		topic = input.Domain.Scoped.Scope.Topic
+		if different == "peer" {
+			with = "c"
+		} else {
+			topic = "another-topic"
+		}
+		actor.Clarifications = []TemporalClarification{{With: with, Topic: topic, Decision: "old-1", At: 60}, {With: with, Topic: topic, Decision: "old-2", At: 61}}
+		next, d, e := ChooseTemporalAction(actor, input, 63, math.MaxUint64)
+		if e != nil || d.Human.Human.Human.Candidates[d.Human.Human.Human.Selected].Offer.Kind != Ask || len(next.Clarifications) != 3 {
+			t.Fatal("unrelated burden consumed", different, e)
+		}
+		if !reflect.DeepEqual(next.Clarifications[:2], actor.Clarifications) {
+			t.Fatal("unrelated receipts overwritten")
+		}
+	}
+}
