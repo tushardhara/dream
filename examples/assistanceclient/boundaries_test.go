@@ -354,3 +354,52 @@ func TestScopedVersionsPrivateAccountsAndForgedWaitReplay(t *testing.T) {
 		t.Fatal("private preparation imported another person's account")
 	}
 }
+
+func TestScopedReplayPinsStillPermissiveBoundaryEvidence(t *testing.T) {
+	for _, stored := range []bool{false, true} {
+		t.Run(fmt.Sprint(stored), func(t *testing.T) {
+			l, r := scopedFixture(t, assistance.Coordinate, core.Discussion)
+			consent(t, l, r)
+			out, e := l.Host(assistance.FakePlanner{}).Execute(context.Background(), r, nil)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if !stored {
+				l, r = scopedFixture(t, assistance.Coordinate, core.Discussion)
+				consent(t, l, r)
+			}
+			fresh := preference("additional-willingness", "bob", "alice", core.Discussion, core.Willing)
+			fresh.LearnedAt = 2
+			add(t, l, fresh)
+			snapshot, e := l.ReadBoundaries(context.Background(), r)
+			if e != nil {
+				t.Fatal(e)
+			}
+			decision, e := core.EvaluateBoundaries(snapshot.Records, *r.Scope, snapshot.Now)
+			if e != nil || !decision.Allowed {
+				t.Fatal("control must remain eligible", e)
+			}
+			before := l.Deliveries()
+			var record *assistance.Interaction
+			if !stored {
+				record = &out
+			}
+			if _, e := l.Host(nil).Execute(context.Background(), r, record); e == nil || l.Deliveries() != before {
+				t.Fatal("replay ignored changed but still-permissive policy evidence")
+			}
+		})
+	}
+}
+
+func TestScopedExtraParticipantCannotSupplyPrivateAccount(t *testing.T) {
+	_, r := scopedFixture(t, assistance.Coordinate, core.Discussion)
+	r.Scope.Target = "charlie"
+	r.Participants = append(r.Participants, "charlie")
+	if r.Validate() == nil {
+		t.Fatal("out-of-scope participant supplied private context")
+	}
+	r.Contexts = r.Contexts[:1]
+	if r.Validate() != nil {
+		t.Fatal("in-scope own context positive control")
+	}
+}

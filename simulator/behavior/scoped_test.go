@@ -121,3 +121,41 @@ func TestScopedMissingBoundaryWaitAndUnilateralDistance(t *testing.T) {
 		t.Fatal("unknown version")
 	}
 }
+
+func TestScopedWithdrawalRequiresExplicitReconnect(t *testing.T) {
+	a, _ := NewScopedActor("a", 0)
+	in := scopedInput(t, "b", Withdraw)
+	paused, d, e := ChooseScopedAction(a, in, 1, math.MaxUint64)
+	if e != nil || d.Human.Candidates[d.Human.Selected].Offer.Kind != Withdraw || paused.Contacts[0].State != "withdrawn" {
+		t.Fatal("withdraw positive control", d, e)
+	}
+	for _, step := range []struct {
+		target core.ID
+		kind   Kind
+		want   Kind
+	}{{"b", Say, Wait}, {"c", Say, Say}, {"b", Reconnect, Reconnect}} {
+		in = scopedInput(t, step.target, step.kind)
+		in.Situation.Observation.Event.Event = "after-withdraw"
+		in.Situation.Observation.Event.Rights.Resource = "after-withdraw"
+		in.Situation.Sources = append(in.Situation.Sources, "after-withdraw")
+		_, d, e := ChooseScopedAction(paused, in, 4, math.MaxUint64)
+		if e != nil || d.Human.Candidates[d.Human.Selected].Offer.Kind != step.want {
+			t.Fatal("withdrawal bypass or unrelated/reconnect control", step, d, e)
+		}
+	}
+}
+
+func TestScopedReconnectRestoresOnlyMatchingTopicContact(t *testing.T) {
+	a, _ := NewScopedActor("a", 0)
+	a.Contacts = []ScopedContact{{With: "b", Topic: "money", State: "left", At: 0, Evidence: "money-ending"}, {With: "b", Topic: "family", State: "withdrawn", At: 0, Evidence: "family-pause"}}
+	in := scopedInput(t, "b", Reconnect)
+	next, d, e := ChooseScopedAction(a, in, 1, math.MaxUint64)
+	if e != nil || d.Human.Candidates[d.Human.Selected].Offer.Kind != Reconnect || scopedContact(next, in.Scope) != "engaged" {
+		t.Fatal("explicit topic reconnection ineffective", d, e)
+	}
+	family := in.Scope
+	family.Topic = "family"
+	if scopedContact(next, family) != "withdrawn" {
+		t.Fatal("topic reconnection erased another topic pause")
+	}
+}

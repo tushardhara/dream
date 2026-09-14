@@ -206,3 +206,65 @@ func TestBoundaryProvenanceBounds(t *testing.T) {
 		t.Fatal("unbounded policy provenance")
 	}
 }
+
+func TestBoundarySelfReportOwnershipCannotBeForged(t *testing.T) {
+	a := boundaryFixture("a", "alice", "bob", Willing)
+	b := boundaryFixture("b", "bob", "alice", Willing)
+	if d, e := EvaluateBoundaries([]Boundary{a, b}, boundaryScope(), 2); e != nil || !d.Allowed {
+		t.Fatal("valid self-report control", d, e)
+	}
+	for _, fields := range []string{"observer", "source", "both"} {
+		forged := a
+		if fields == "observer" || fields == "both" {
+			forged.Meta.Observer = "bob"
+		}
+		if fields == "source" || fields == "both" {
+			forged.Meta.Source = "bob"
+		}
+		if forged.Meta.Validate() != nil {
+			t.Fatal("probe metadata must otherwise be valid")
+		}
+		if forged.Validate() == nil {
+			t.Fatal("forged self-report validated", fields)
+		}
+		if d, e := EvaluateBoundaries([]Boundary{forged, b}, boundaryScope(), 2); e == nil || d.Allowed {
+			t.Fatal("third party manufactured willingness", fields, d, e)
+		}
+	}
+}
+func TestBoundaryBlanketWillingnessCannotBroadenScope(t *testing.T) {
+	a := boundaryFixture("a", "alice", "bob", Willing)
+	b := boundaryFixture("b", "bob", "alice", Willing)
+	if d, e := EvaluateBoundaries([]Boundary{a, b}, boundaryScope(), 2); e != nil || !d.Allowed {
+		t.Fatal("exact-scope positive control", d, e)
+	}
+	for _, fields := range []string{"topic", "class", "both"} {
+		records := []Boundary{a, b}
+		for i := range records {
+			if fields == "topic" || fields == "both" {
+				records[i].Topic = AllTopics
+			}
+			if fields == "class" || fields == "both" {
+				records[i].Class = AllInteractions
+			}
+			if records[i].Meta.Validate() != nil {
+				t.Fatal("probe metadata must otherwise be valid")
+			}
+			if records[i].Validate() == nil {
+				t.Fatal("blanket willingness validated", fields)
+			}
+		}
+		if d, e := EvaluateBoundaries(records, boundaryScope(), 2); e == nil || d.Allowed {
+			t.Fatal("blanket grant created consent", fields, d, e)
+		}
+	}
+	b.Topic = AllTopics
+	b.Class = AllInteractions
+	b.Decision = Declined
+	if b.Validate() != nil {
+		t.Fatal("blanket refusal must remain representable")
+	}
+	if d, e := EvaluateBoundaries([]Boundary{a, b}, boundaryScope(), 2); e != nil || d.Allowed {
+		t.Fatal("blanket refusal was ignored", d, e)
+	}
+}

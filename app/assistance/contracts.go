@@ -122,6 +122,15 @@ func (r Request) Validate() error {
 		if (r.Arm == Single || r.Version == ScopedVersion && r.Scope.Class == core.PrivatePreparation) && p.Query.Scope.Owner != r.User {
 			return ErrInvalid
 		}
+		if r.Version == ScopedVersion {
+			inScope := false
+			for _, principal := range r.Scope.Participants() {
+				inScope = inScope || p.Query.Scope.Owner == principal
+			}
+			if !inScope {
+				return ErrInvalid
+			}
+		}
 		owners[p.Query.Scope.Owner] = true
 	}
 	b, e := json.Marshal(r)

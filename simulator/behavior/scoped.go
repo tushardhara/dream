@@ -109,6 +109,7 @@ func ChooseScopedAction(a ScopedActor, input ScopedSituation, at core.LogicalTim
 	raw, _ := json.Marshal(input.Situation)
 	var s ActionSituation
 	_ = json.Unmarshal(raw, &s)
+	contact := scopedContact(a, input.Scope)
 	offers := []ActionOffer{}
 	for _, o := range s.Offers {
 		if o.Recipient != "" && o.Recipient != input.Scope.Target && o.Recipient != input.Scope.Via {
@@ -123,14 +124,14 @@ func ChooseScopedAction(a ScopedActor, input ScopedSituation, at core.LogicalTim
 			o.Recipient = ""
 			offers = append(offers, o)
 		default:
-			if eligibility.Allowed && actionScopeClass(o) == input.Scope.Class {
+			if eligibility.Allowed && (contact != "withdrawn" || o.Kind == Reconnect) && actionScopeClass(o) == input.Scope.Class {
 				offers = append(offers, o)
 			}
 		}
 	}
 	s.Offers = offers
 	human := a.Human
-	human.Contact = scopedContact(a, input.Scope)
+	human.Contact = contact
 	next, decision, e := ChooseAction(human, s, at, draw)
 	if e != nil {
 		return ScopedActor{}, ScopedDecision{}, e
@@ -147,7 +148,7 @@ func ChooseScopedAction(a ScopedActor, input ScopedSituation, at core.LogicalTim
 		}
 		found := false
 		for i, c := range out.Contacts {
-			if c.With == input.Scope.Target && c.Topic == core.AllTopics {
+			if c.With == input.Scope.Target && (c.Topic == core.AllTopics || selected.Kind == Reconnect && c.Topic == input.Scope.Topic) {
 				out.Contacts[i].State = state
 				out.Contacts[i].At = at
 				out.Contacts[i].Evidence = decision.Event

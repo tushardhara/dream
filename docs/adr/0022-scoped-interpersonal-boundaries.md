@@ -35,6 +35,8 @@ bounded policy decision exposed by the host contains no private boundary reason.
 
 `assistance.v2` opts into this policy using an explicit trusted `InteractionScope`.
 The frozen `assistance.v1` behavior remains available for existing recorded runs.
+Only declared scope participants may supply v2 graph context; listing another
+person in the request cannot import that person's account into an unrelated scope.
 The new host requires a `PlanningGate`: it checks boundaries **before graph context
 reads or planner invocation**, again after planning/before delivery, and inside
 the journal's atomic commit callback. Denied planning produces an exact WAIT
@@ -55,7 +57,9 @@ Repeated dismissal and requested pauses produce non-intervention.
 
 `scoped-human-actions.v1` wraps the existing `human-actions.v2` engine. Its embedded
 actor stays engaged; a separate bounded relationship contact table controls the
-current interaction. Leaving or withdrawing affects the target relationship, not
+current interaction. Withdrawal suppresses ordinary interaction until an explicit eligible reconnect;
+unilateral leaving remains available during withdrawal. Leaving or withdrawing
+affects the target relationship, not
 all other people. The action's executable class must match the trusted scope;
 summary disclosure and third-party support cannot be relabelled as discussion.
 Leaving/withdrawing require no recipient consent and send no notification through
@@ -88,16 +92,18 @@ psychological or intervention validity.
 
 | #51 criterion | Code | Load-bearing tests |
 | --- | --- | --- |
-| Directional, time/topic/action scoped evidence; owned corrections/revocation | `core/boundary.go`, reference boundary authority | `TestBoundaryConsentIsDirectionalScopedAndNotInferred`, `TestBoundaryBreakExpiryCorrectionsRevocationAndRelay`, `TestRevokedMetadataAndHypothesisCorrectionCannotReviveConsent` |
+| Directional, time/topic/action scoped evidence; owned corrections/revocation | `core/boundary.go`, reference boundary authority | `TestBoundaryConsentIsDirectionalScopedAndNotInferred`, `TestBoundaryBreakExpiryCorrectionsRevocationAndRelay`, `TestRevokedMetadataAndHypothesisCorrectionCannotReviveConsent`, `TestBoundarySelfReportOwnershipCannotBeForged`, `TestBoundaryBlanketWillingnessCannotBroadenScope` |
 | Preplanning, delivery, atomic commit and replay gate independent of data grants | `app/assistance/host.go`, `BoundaryGate`, `Local` | `TestScopedConsentBeforePlannerAndDataReads`, `TestScopedRevocationPlanningCommitAndReplay`, `TestScopedVersionsPrivateAccountsAndForgedWaitReplay` |
-| Money pause/relay veto; unrelated conversation | core gate, helper host, scoped human wrapper | `TestRelayRequiresUnderlyingAndThirdPartyConsent`, `TestScopedMoneyPauseRelayAndUnrelatedConversation`, `TestScopedLeavePreservesUnrelatedConversationAndReplay` |
+| Money pause/relay veto; unrelated conversation | core gate, helper host, scoped human wrapper | `TestRelayRequiresUnderlyingAndThirdPartyConsent`, `TestScopedMoneyPauseRelayAndUnrelatedConversation`, `TestScopedLeavePreservesUnrelatedConversationAndReplay`, `TestScopedWithdrawalRequiresExplicitReconnect` |
 | Pressure distinguished from disagreement; no forced reconnection | core gate and action filtering | `TestScopedPressureVersusDisagreementAndPrivatePreparation`, `TestScopedNoContactBeatsReconnectUtilityAndClassRelabelling`, `TestRealScopedHelperAndHumanConsumerReplay` |
 | Break expiry, repeated dismissal, bounded clarification | core gate, boundary/history revision | `TestPressureDiffersFromDisagreementAndEndingIsNotBeneficialConsent`, `TestScopedBreakExpiryNeedsFreshPreferenceAndCorrectionsAreOwned`, `TestScopedClarificationCooldownBudgetAndBackdating`, `TestScopedConcurrentClarificationsCommitOneEffect` |
-| Versioned replay/history and unknown willingness | codecs, matches, planner history filtering | `TestScopedHistoryHidesBoundaryHashAndOtherScopes`, `TestScopedMissingBoundaryWaitAndUnilateralDistance`, `TestFrozen50CodecsAndExperiment` |
+| Versioned replay/history and unknown willingness | codecs, matches, planner history filtering | `TestScopedHistoryHidesBoundaryHashAndOtherScopes`, `TestScopedMissingBoundaryWaitAndUnilateralDistance`, `TestScopedReplayPinsStillPermissiveBoundaryEvidence`, `TestFrozen50CodecsAndExperiment` |
 
-Seven intentional mutation controls removed the preplanning read gate, atomic
+Thirteen intentional mutation controls removed the preplanning read gate, atomic
 commit callback, relay discussion gate, cross-class pressure restriction, expiry
-cutoff, scoped human contact and history hash scrub. Each failed its named
+cutoff, scoped human contact, history hash scrub, withdrawal restraint and still-permissive
+boundary replay binding, self-report ownership, blanket affirmative consent,
+context scope and topic-specific reconnection. Each failed its named
 behavioral test; original source was restored before full verification.
 
 ## Limits and conservative choices
