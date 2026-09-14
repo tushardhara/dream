@@ -126,6 +126,8 @@ func (g Genesis) Validate(e Engine) error {
 // actor selection. It deliberately carries no scenario reference/hash, seed,
 // horizon, future schedule, labels, latent state or other actor's private state.
 type ActorView struct {
+	UnknownAges   []core.ID                  `json:"unknown_ages,omitempty"`
+	Temporal      []core.TemporalFact        `json:"temporal_context,omitempty"`
 	Contexts      []core.RelationshipContext `json:"relationship_contexts,omitempty"`
 	Actor         core.ID                    `json:"actor"`
 	Humans        []Human                    `json:"humans"`
@@ -154,7 +156,7 @@ func (s Scenario) actorViews(actor core.ID) ([]ActorView, error) {
 		if actor != "" && a.ID != actor {
 			continue
 		}
-		v := ActorView{Contexts: a.Contexts, Actor: a.ID, Humans: c.Public.Humans, Groups: c.Public.Groups, Resources: c.Public.Resources, Facts: []Fact{}, Memories: a.Memories, Relationships: a.Relationships}
+		v := ActorView{UnknownAges: c.Public.UnknownAges, Temporal: a.Temporal, Contexts: a.Contexts, Actor: a.ID, Humans: c.Public.Humans, Groups: c.Public.Groups, Resources: c.Public.Resources, Facts: []Fact{}, Memories: a.Memories, Relationships: a.Relationships}
 		known := map[core.ID]bool{}
 		for _, k := range a.Knowledge {
 			known[k.Record] = true

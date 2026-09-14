@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/tushardhara/dream/app/graph"
+	"github.com/tushardhara/dream/core"
 )
 
 type Planner interface {
@@ -84,7 +85,7 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 		if e != nil || !d.Allowed {
 			return Interaction{}, ErrDenied
 		}
-		if r.Version == DomainVersion {
+		if UsesDomainContext(r.Version) {
 			projected, err := safe.Relations()
 			if err != nil {
 				return Interaction{}, ErrDenied
@@ -99,9 +100,18 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 	}
 	contextKnown := true
 	var perspectives []DomainPerspective
-	if r.Version == DomainVersion && planning.Allowed {
+	if UsesDomainContext(r.Version) && planning.Allowed {
 		var err error
 		contextKnown, perspectives, err = prepareDomains(r, relations, items)
+		if err != nil {
+			return Interaction{}, ErrDenied
+		}
+	}
+	temporalAllowed := true
+	var temporal []core.TemporalContext
+	if r.Version == TemporalVersion && planning.Allowed && contextKnown {
+		var err error
+		temporalAllowed, temporal, err = prepareTemporal(r, items)
 		if err != nil {
 			return Interaction{}, ErrDenied
 		}
@@ -141,7 +151,7 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 			return Interaction{}, ErrDenied
 		}
 		if old.ID == r.ID {
-			if !old.matches(r, items, planning, contextKnown) || recorded != nil && Digest(*recorded) != Digest(old) {
+			if !old.matches(r, items, planning, contextKnown, temporalAllowed) || recorded != nil && Digest(*recorded) != Digest(old) {
 				return Interaction{}, ErrInvalid
 			}
 			if revalidate(ctx, old.Result.Candidates[old.Result.Selected]) != nil {
@@ -156,7 +166,7 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 	result := waitFor(r.Version, "restraint")
 	if recorded != nil {
 		old := clone(*recorded)
-		if !old.matches(r, items, planning, contextKnown) {
+		if !old.matches(r, items, planning, contextKnown, temporalAllowed) {
 			return Interaction{}, ErrInvalid
 		}
 		result = old.Result
@@ -164,6 +174,8 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 		result = waitFor(r.Version, "boundary")
 	} else if !contextKnown {
 		result = waitFor(r.Version, "relationship_context")
+	} else if !temporalAllowed {
+		result = waitFor(r.Version, "temporal_context")
 	} else if r.Arm == None {
 		result = waitFor(r.Version, "disabled")
 	} else if r.Arm == Simple {
@@ -173,7 +185,7 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 		// planner without fresh permission. No request hashes enter the provider input.
 		safeHistory := []Interaction{}
 		for _, old := range history {
-			if old.At <= r.At && old.Version == r.Version && Digest(old.Scope) == Digest(r.Scope) && Digest(old.Focus) == Digest(r.Focus) {
+			if old.At <= r.At && old.Version == r.Version && Digest(old.Scope) == Digest(r.Scope) && Digest(old.Focus) == Digest(r.Focus) && Digest(old.Temporal) == Digest(r.Temporal) {
 				safeHistory = append(safeHistory, clone(old))
 			}
 		}
@@ -183,30 +195,31 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 			safeHistory[i].BoundaryHash = ""
 			safeHistory[i].Scope = nil
 			safeHistory[i].Focus = nil
+			safeHistory[i].Temporal = nil
 			for j := range safeHistory[i].Result.Candidates {
 				safeHistory[i].Result.Candidates[j].Evidence = nil
 			}
 		}
-		input := Input{Focus: clone(r.Focus), Relationships: clone(perspectives), Scope: clone(r.Scope), Version: r.Version, ID: r.ID, Helper: r.Helper, User: r.User, Arm: r.Arm, Goal: r.Goal, At: r.At, Seed: r.Seed, Context: clone(items), History: safeHistory}
+		input := Input{Temporal: clone(temporal), Focus: clone(r.Focus), Relationships: clone(perspectives), Scope: clone(r.Scope), Version: r.Version, ID: r.ID, Helper: r.Helper, User: r.User, Arm: r.Arm, Goal: r.Goal, At: r.At, Seed: r.Seed, Context: clone(items), History: safeHistory}
 		result, e = h.Planner.Plan(ctx, input)
 		if e != nil {
 			result = waitFor(r.Version, "unavailable")
 		}
 	}
-	if !result.validPlan(r, result.validate(r, items), planning, contextKnown) {
+	if !result.validPlan(r, result.validate(r, items), planning, contextKnown, temporalAllowed) {
 		return Interaction{}, ErrInvalid
 	}
 	selected := result.Candidates[result.Selected]
 	if revalidate(ctx, selected) != nil {
 		return Interaction{}, ErrDenied
 	}
-	out := Interaction{Focus: clone(r.Focus), Scope: clone(r.Scope), BoundaryHash: planning.Revision, EvidenceHash: Digest(items), Arm: r.Arm, Seed: r.Seed, Version: r.Version, ID: r.ID, Helper: r.Helper, User: r.User, At: r.At, RequestHash: hash, Result: clone(result), Delivered: selected.Action != Wait}
+	out := Interaction{Temporal: clone(r.Temporal), Focus: clone(r.Focus), Scope: clone(r.Scope), BoundaryHash: planning.Revision, EvidenceHash: Digest(items), Arm: r.Arm, Seed: r.Seed, Version: r.Version, ID: r.ID, Helper: r.Helper, User: r.User, At: r.At, RequestHash: hash, Result: clone(result), Delivered: selected.Action != Wait}
 	if h.Journal.Commit(ctx, r, out, func(commitCtx context.Context) error { return revalidate(commitCtx, selected) }) != nil {
 		return Interaction{}, ErrDenied
 	}
 	return clone(out), nil
 }
 
-func (old Interaction) matches(r Request, items []graph.SafeContextItem, planning PlanningDecision, contextKnown bool) bool {
-	return old.Version == r.Version && Digest(old.Focus) == Digest(r.Focus) && old.BoundaryHash == planning.Revision && Digest(old.Scope) == Digest(r.Scope) && old.ID == r.ID && old.Helper == r.Helper && old.User == r.User && old.At == r.At && old.Arm == r.Arm && old.Seed == r.Seed && old.RequestHash == Digest(r) && old.EvidenceHash == Digest(items) && old.Result.validPlan(r, old.Result.validate(r, items), planning, contextKnown) && old.Delivered == (old.Result.Candidates[old.Result.Selected].Action != Wait)
+func (old Interaction) matches(r Request, items []graph.SafeContextItem, planning PlanningDecision, contextKnown, temporalAllowed bool) bool {
+	return old.Version == r.Version && Digest(old.Focus) == Digest(r.Focus) && Digest(old.Temporal) == Digest(r.Temporal) && old.BoundaryHash == planning.Revision && Digest(old.Scope) == Digest(r.Scope) && old.ID == r.ID && old.Helper == r.Helper && old.User == r.User && old.At == r.At && old.Arm == r.Arm && old.Seed == r.Seed && old.RequestHash == Digest(r) && old.EvidenceHash == Digest(items) && old.Result.validPlan(r, old.Result.validate(r, items), planning, contextKnown, temporalAllowed) && old.Delivered == (old.Result.Candidates[old.Result.Selected].Action != Wait)
 }

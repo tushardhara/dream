@@ -40,10 +40,11 @@ type Human struct {
 	Age  int     `json:"age"`
 }
 type Public struct {
-	Humans    []Human    `json:"humans"`
-	Groups    []Group    `json:"groups"`
-	Resources []Resource `json:"resources"`
-	Facts     []Fact     `json:"facts"`
+	UnknownAges []core.ID  `json:"unknown_ages,omitempty"`
+	Humans      []Human    `json:"humans"`
+	Groups      []Group    `json:"groups"`
+	Resources   []Resource `json:"resources"`
+	Facts       []Fact     `json:"facts"`
 }
 type Group struct {
 	ID      core.ID   `json:"id"`
@@ -82,6 +83,7 @@ type Memory struct {
 	Text     string  `json:"text"`
 }
 type Actor struct {
+	Temporal      []core.TemporalFact        `json:"temporal_context,omitempty"`
 	Contexts      []core.RelationshipContext `json:"relationship_contexts,omitempty"`
 	ID            core.ID                    `json:"id"`
 	Facts         []Fact                     `json:"facts"`
@@ -143,10 +145,16 @@ func (s Scenario) CheckExecution(e Engine) error {
 }
 func (s Scenario) capabilities() []core.ID {
 	c := append([]core.ID{"genesis.v1"}, s.Requires...)
+	if len(s.Public.UnknownAges) > 0 {
+		c = append(c, "temporal-context.v1")
+	}
 	if len(s.Public.Resources) > 0 {
 		c = append(c, "resources.v1")
 	}
 	for _, a := range s.Actors {
+		if len(a.Temporal) > 0 {
+			c = append(c, "temporal-context.v1")
+		}
 		if len(a.Memories) > 0 {
 			c = append(c, "memory.v1")
 		}
