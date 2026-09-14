@@ -10,37 +10,34 @@ Between Us supplies intent, not additional implementation scope.
 
 These labels E1–E12 refer to epic correctness rules, not invented IHG source IDs.
 
-| Requirement | Engineering owner | #2 evidence / deferred gate |
+| Requirement | Implementation / evidence | Remaining scope |
 | --- | --- | --- |
-| Reusable core; no compulsory worlds; package ownership | #2, #3, #9 | TestRepositoryBoundaries, TestRules; second-host proof deferred #9 |
-| E1 versioned durable events, scoped idempotency | #3, #4 | DEFERRED; no persistence implemented |
-| E2 distinct occurred/valid/learned/recorded times and corrections | #3, #4, #8 | DEFERRED; temporal/as-of tests required |
-| E3 injected time/RNG, stable order, canonical hashes | #5, #6 | DEFERRED; deterministic fixtures/runtime tests |
-| E4 recorded/fake exact replay; fresh generation stochastic | #10, #13 | DEFERRED; no replay claim |
-| E5 fenced writer, crash-safe checkpoints, no provider calls in transactions | #4, #6, #10 | DEFERRED; recovery/duplicate-effect tests |
-| E6 auth/manifests/audit/budget negatives with first consumers; #12 before models | #4, #6, #12, #15 | workflow fixes dependency order; no consumers yet |
-| E7 fictional own-experience disclosure differs from IHG restricted-context policy | #12, #11 | DEFERRED; explicit policy tests |
-| E8 abstraction disabled by default; unknown evidence denies/WAITs | #12 | DEFERRED; no privacy guarantees claimed |
-| E9 immediate revocation and derivative invalidation; replay cannot resurrect purge | #4, #12, #13 | DEFERRED; retention/backups must be documented |
-| E10 trusted credentials; no exposed placeholder auth | #14 | command scaffolds open no network sockets; actual auth DEFERRED |
-| E11 bounded daily state; offline heldout candidate promotion | #7, #11, #16 | DEFERRED; no online training/promotion |
-| E12 explicit paid/live budget/infrastructure configuration | #10, #15, #17 | default CI has no live calls; optional targets fail closed |
-| Observer/evidence/uncertainty/time preserved; no global relationship truth or engagement objective | #3 onward | DEFERRED domain/behavior tests |
-| Independent evaluation; generation must not import evals | #2, #16 | TestRules forbids simulator/app/evals imports; research harness deferred |
-| Backend-only, PostgreSQL-only local compose | #2 | compose.yaml and explicit CLI scaffolds |
-| Negative architecture invariant including tagged/platform source | #2 | TestIllegalTaggedImport and TestPlatformFilesAndMalformedSource; testdata/illegal/core/bad.go |
-| Clean checkout, race/build/help, PR and integration CI | #2 | make verify, .github/workflows/verify.yml; remote results in PR |
-| Durable SHA-bound review/integration; owner-only main | #2 | AGENTS.md, agent-workflow.md, PR template; independent review pending |
-| 24 humans / 8 groups / 30+ edges after 2–4 actor fixtures | #5, #17 | DEFERRED; no simulation implemented |
-| 12-month virtual horizon distinct from real-time 30-day study | #17 | DEFERRED; live study NOT RUN |
-| 200 scenario families / 10,000+ scale; preregistered ablations/holdouts/calibration | #16, #17 / later research | DEFERRED research targets; not bootstrap acceptance |
-| Real-human transfer/validity; UI entry by owner engineering approval | #16, #17 / owner | NOT TESTED without real-human dataset; UI implementation excluded |
+| Reusable core; no compulsory worlds | `core`, `app/graph`, `examples/graphclient`; architecture and independent second-host tests | Full IHG product not claimed |
+| E1 durable versioned events and scoped idempotency | PostgreSQL event store, migrations and integration tests (#3/#4) | Source-wide private PRD audit unavailable |
+| E2 occurred/valid/learned/recorded time and correction | Temporal graph/memory queries, replay and correction tests | No global relationship truth |
+| E3 injected time/RNG, stable ordering and hashes | Runtime, dynamics, drives and action tests | Fresh model outputs remain stochastic |
+| E4 compatible recorded/fake replay | Recorded model operations and replay/branch tests | No exact reproduction claim for fresh calls |
+| E5 fencing, crash checkpoints, provider transaction boundary | Runtime leases, recovery and blocked-provider integration tests | Bounded single-host deployment design |
+| E6 authorization, manifests, audit and budgets | Application admission and PostgreSQL RLS/auth/budget negatives | No paid/live calls authorized |
+| E7 disclosure policies; E8 deny unknown, abstraction off by default | Separate fictional/strict policies and source-propagation tests | No covert persuasion or automated relationship advice |
+| E9 immediate revocation and derivative invalidation | Revocation, cache/export/replay races and purge-aware restore | Already delivered offline artifacts cannot be recalled |
+| E10 trusted credentials | Authenticated gRPC/HTTP management host, tenant/grant negatives | Execution needs configured embedding handler; no deployment |
+| E11 bounded state and offline owner promotion | Drive/action budgets; isolated evaluator with signed preregistration/holdout | No online weight updates or automatic activation |
+| E12 explicit paid/live configuration | Fake/recorded defaults; live/soak targets fail closed | Live research and infrastructure need later owner scope |
+| Observer/evidence/uncertainty/time | Claim, memory, relationship codecs and approved-context appraisal | Synthetic behavior is not human validity |
+| Independent evaluation | Import boundaries, isolated label-blind child, split/consent tests | Complete supplied source report is ADR0020; adequacy mostly unresolved |
+| Clean verification and operations | `make verify`, pinned generation, race/Postgres/restore/container/demo checks | Exact SHA-bound results and failures are in PR checkpoints |
+| Durable review and owner-only main | AGENTS.md, workflow, PR #38 | Engineering integration is not a released product |
+| 24 people / eight groups / relationships | Bounded demo: 104 directional reports; five-person contrast fixture | Operational smoke, not production capacity |
+| 12 model months versus 30 real days | 360 virtual days, 24 sparse observation periods; study clock gates | Real 30-day study NOT_RUN |
+| 200 families / 10,000 cases | Small bounded synthetic harness and split/holdout mechanisms | Research scale target NOT_RUN |
+| Real-human transfer and UI | Explicit NOT_TESTED scientific verdicts | No real data, UI or interventions authorized |
 
 ## Source reference register
 
-Except the drive registry explicitly supplied in #40, rows below remain missing-source gaps, not verified section-level interpretations.
-Ticket summaries constrain implementation in the interim; obtain authorized source
-access to complete traceability without publishing originals or private data.
+Tickets #40–#43 supply HWS §6, §7, §9, §19 and §20 extracts. Those extracts
+are mapped below and require no private HTML. All other missing original text
+remains a source gap; do not infer section-level completeness from ticket closure.
 
 | Document | Section / invariant ID | Status |
 | --- | --- | --- |
@@ -61,8 +58,8 @@ access to complete traceability without publishing originals or private data.
 | HWS PRD v0.1 | §16 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §17 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §18 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §19 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §20 | UNVERIFIED: original text unavailable; summarized scope above |
+| HWS PRD v0.1 | §19 | SUPPLIED SOURCE: #43 revision 2, all13 exit criteria; immutable registry and evidence report, ADR0020. |
+| HWS PRD v0.1 | §20 | SUPPLIED SOURCE: #43 revision 2, all10 primary falsifiers; explicit unknown polarity and adequacy limits, ADR0020. |
 | IHG canonical PRD v1.1 | 5 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 14 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 15 | UNVERIFIED: original text unavailable; summarized invariants above |

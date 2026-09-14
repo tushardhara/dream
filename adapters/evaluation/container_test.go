@@ -3,6 +3,7 @@ package evaluation
 import (
 	"context"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/tushardhara/dream/evals"
@@ -23,6 +24,22 @@ func TestContainerRejectsTagsAndOutputBudget(t *testing.T) {
 	}
 	if _, e := output.Write([]byte("x")); e == nil || !output.overflow {
 		t.Fatal("unbounded child output")
+	}
+}
+
+func TestIsolatedRelationshipProbeMatchesSharedEngine(t *testing.T) {
+	image := os.Getenv("DREAM_EVALUATOR_TEST_IMAGE")
+	if image == "" {
+		t.Skip("requires disposable evaluation-check image")
+	}
+	r := experiment.RelationshipProbeRequest{Version: experiment.RelationshipExperimentVersion, FixtureHash: experiment.RelationshipFixtureHash(), Seeds: []uint64{11, 23}}
+	want, e := experiment.GenerateRelationshipProbe(context.Background(), r)
+	if e != nil {
+		t.Fatal(e)
+	}
+	got, e := (Container{Image: image}).ProbeRelationships(context.Background(), r)
+	if e != nil || !reflect.DeepEqual(want, got) {
+		t.Fatal("isolated relationship evidence differs", e)
 	}
 }
 func TestIsolatedReferenceMatchesPureGeneration(t *testing.T) {

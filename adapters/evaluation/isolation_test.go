@@ -19,4 +19,11 @@ func TestContainerPermissionProbe(t *testing.T) {
 	if e != nil || len(result) != 0 {
 		t.Fatal("generator permissions isolation failed", e)
 	}
+	probe, e := (Container{Image: image}).execute(context.Background(), []byte("{}"), "--relationship-probe")
+	if e != nil || string(probe) != "[]\n" {
+		t.Fatal("relationship mode relaxed generator isolation", e)
+	}
+	if _, e = (Container{Image: image}).execute(context.Background(), []byte("{}"), "--unapproved-command"); e == nil {
+		t.Fatal("configurable child command accepted")
+	}
 }
