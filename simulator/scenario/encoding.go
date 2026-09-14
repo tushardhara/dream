@@ -126,39 +126,63 @@ func (g Genesis) Validate(e Engine) error {
 // actor selection. It deliberately carries no scenario reference/hash, seed,
 // horizon, future schedule, labels, latent state or other actor's private state.
 type ActorView struct {
-	Actor         core.ID        `json:"actor"`
-	Humans        []Human        `json:"humans"`
-	Groups        []Group        `json:"groups"`
-	Resources     []Resource     `json:"resources"`
-	Facts         []Fact         `json:"facts"`
-	Memories      []Memory       `json:"memories"`
-	Relationships []Relationship `json:"relationships"`
+	Contexts      []core.RelationshipContext `json:"relationship_contexts,omitempty"`
+	Actor         core.ID                    `json:"actor"`
+	Humans        []Human                    `json:"humans"`
+	Groups        []Group                    `json:"groups"`
+	Resources     []Resource                 `json:"resources"`
+	Facts         []Fact                     `json:"facts"`
+	Memories      []Memory                   `json:"memories"`
+	Relationships []Relationship             `json:"relationships"`
 }
 
-func (s Scenario) View(actor core.ID) (ActorView, error) {
+// ActorViews is for a trusted host that already holds the complete genesis.
+// It computes the same isolated projections as View with one canonicalization;
+// it must never be exposed as an actor-facing endpoint.
+func (s Scenario) ActorViews() ([]ActorView, error) { return s.actorViews("") }
+func (s Scenario) actorViews(actor core.ID) ([]ActorView, error) {
 	b, err := s.Canonical()
 	if err != nil {
-		return ActorView{}, err
+		return nil, err
 	}
 	var c Scenario
 	if err = json.Unmarshal(b, &c); err != nil {
-		return ActorView{}, err
+		return nil, err
 	}
+	out := []ActorView{}
 	for _, a := range c.Actors {
-		if a.ID != actor {
+		if actor != "" && a.ID != actor {
 			continue
 		}
-		v := ActorView{Actor: actor, Humans: c.Public.Humans, Groups: c.Public.Groups, Resources: c.Public.Resources, Facts: []Fact{}, Memories: a.Memories, Relationships: a.Relationships}
+		v := ActorView{Contexts: a.Contexts, Actor: a.ID, Humans: c.Public.Humans, Groups: c.Public.Groups, Resources: c.Public.Resources, Facts: []Fact{}, Memories: a.Memories, Relationships: a.Relationships}
 		known := map[core.ID]bool{}
 		for _, k := range a.Knowledge {
 			known[k.Record] = true
 		}
-		for _, f := range append(c.Public.Facts, a.Facts...) {
+		for _, f := range append(append([]Fact{}, c.Public.Facts...), a.Facts...) {
 			if known[f.ID] {
 				v.Facts = append(v.Facts, f)
 			}
 		}
-		return v, nil
+		// Independent copies also isolate public collections between actor consumers.
+		raw, _ := json.Marshal(v)
+		var owned ActorView
+		if err = json.Unmarshal(raw, &owned); err != nil {
+			return nil, err
+		}
+		out = append(out, owned)
+	}
+	return out, nil
+}
+func (s Scenario) View(actor core.ID) (ActorView, error) {
+	views, err := s.actorViews(actor)
+	if err != nil {
+		return ActorView{}, err
+	}
+	for _, v := range views {
+		if v.Actor == actor {
+			return v, nil
+		}
 	}
 	return ActorView{}, fail("$.actor", "unknown actor")
 }

@@ -82,11 +82,12 @@ type Memory struct {
 	Text     string  `json:"text"`
 }
 type Actor struct {
-	ID            core.ID        `json:"id"`
-	Facts         []Fact         `json:"facts"`
-	Knowledge     []Knowledge    `json:"knowledge"`
-	Memories      []Memory       `json:"memories"`
-	Relationships []Relationship `json:"relationships"`
+	Contexts      []core.RelationshipContext `json:"relationship_contexts,omitempty"`
+	ID            core.ID                    `json:"id"`
+	Facts         []Fact                     `json:"facts"`
+	Knowledge     []Knowledge                `json:"knowledge"`
+	Memories      []Memory                   `json:"memories"`
+	Relationships []Relationship             `json:"relationships"`
 }
 type Latent struct {
 	Actor   core.ID           `json:"actor"`
@@ -148,6 +149,9 @@ func (s Scenario) capabilities() []core.ID {
 	for _, a := range s.Actors {
 		if len(a.Memories) > 0 {
 			c = append(c, "memory.v1")
+		}
+		if len(a.Contexts) > 0 {
+			c = append(c, "relationships.v2")
 		}
 		if len(a.Relationships) > 0 {
 			c = append(c, "relationships.v1")

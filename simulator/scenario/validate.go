@@ -178,6 +178,32 @@ func (s Scenario) Validate() error {
 				return fail(q, "memory requires known evidence and bounded text")
 			}
 		}
+		if len(a.Contexts) > 8 {
+			return fail(p, "relationship context bound")
+		}
+		seenContexts := map[core.ID]bool{}
+		for _, c := range a.Contexts {
+			if c.Validate(a.ID, c.Other) != nil || c.Valid.Start != 0 || seenContexts[c.Other] {
+				return fail(p, "invalid observer relationship context")
+			}
+			seenContexts[c.Other] = true
+			found := false
+			for _, r := range a.Relationships {
+				if r.Other == c.Other {
+					for _, kind := range c.Types {
+						found = found || kind == r.Kind
+					}
+				}
+			}
+			if !found {
+				return fail(p, "context has no matching known relationship")
+			}
+			for _, id := range c.Sources() {
+				if !known[id] {
+					return fail(p, "unknown relationship context source")
+				}
+			}
+		}
 		for j, r := range a.Relationships {
 			q := fmt.Sprintf("%s.relationships[%d]", p, j)
 			if err := add(r.ID, q+".id"); err != nil {

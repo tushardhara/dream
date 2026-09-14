@@ -179,7 +179,7 @@ Private source documents, personal data, credentials, and unapproved provider tr
 </div>
 
 Run `make demo-check` for the bounded synthetic backend demo: 24 fictional adults,
-eight overlapping groups, 48 directed relationships, two recorded/fake seeds and a
+eight overlapping groups, 104 directional relationship reports, two recorded/fake seeds and a
 12-model-month simulated horizon, with replay, own-view export and restart checks.
 The printed `bin/demo-run-<id>/acceptance.json` records actual timing and limitations.
 See [backend demo](docs/backend-demo.md), [separately gated 30-real-day study

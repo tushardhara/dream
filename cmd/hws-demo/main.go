@@ -49,7 +49,7 @@ func readArtifact(path string) (hws.DemoArtifact, error) {
 func run(ctx context.Context, args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("hws-demo", flag.ContinueOnError)
 	flags.SetOutput(out)
-	people := flags.Int("people", 4, "2/4 smoke or 24 fictional adults")
+	people := flags.Int("people", 4, "2/4 smoke, 5-person relational fixture, or 24 fictional adults")
 	months := flags.Int("months", 1, "1..12 simulated fixed 30-day months")
 	seed := flags.Uint64("seed", 11, "recorded deterministic reference seed")
 	namespace := flags.String("namespace", "synthetic-demo", "stable owned namespace for restart")

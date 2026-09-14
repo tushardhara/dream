@@ -74,14 +74,24 @@ func TestTransportRuntimeRoleAndDurableAdmission(t *testing.T) {
 			t.Fatalf("accepted %d want %d", accepted.Load(), want)
 		}
 	}
-	run(5)
-	// Simulate a prior window without a wall-clock sleep. Admin-only mutation of
-	// this fixture's timestamps cannot be done by the runtime writer.
 	binding, _ := hws.ModelDigest(struct {
 		Credential core.ID
 		Scope      hws.Scope
 	}{b.Credential, b.Scope})
 	namespace := "admission:" + binding
+	// Pin the fixture's admission clock using the existing durable rollback
+	// protection. Otherwise a concurrent burst straddling a calendar-minute
+	// boundary legitimately admits more than five and makes this test flaky.
+	// Only the disposable admin can alter these timestamps; production time,
+	// the five-request limit and the cumulative budget remain unchanged.
+	if err = store.AdmitRequest(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	exec(t, admin, `UPDATE dream.events SET recorded_at=clock_timestamp()+interval '1 day' WHERE actor=$1 AND namespace=$2`, b.Scope.Actor, namespace)
+	run(4) // one recorded admission plus four concurrent admissions fills five.
+	run(0)
+	// Simulate a prior window without a wall-clock sleep. Admin-only mutation of
+	// this fixture's timestamps cannot be done by the runtime writer.
 	exec(t, admin, `UPDATE dream.events SET recorded_at=clock_timestamp()-interval '2 minutes' WHERE actor=$1 AND namespace=$2`, b.Scope.Actor, namespace)
 	run(2)
 	exec(t, admin, `UPDATE dream.events SET recorded_at=clock_timestamp()-interval '2 minutes' WHERE actor=$1 AND namespace=$2`, b.Scope.Actor, namespace)

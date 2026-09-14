@@ -8,6 +8,7 @@ import (
 	"github.com/tushardhara/dream/app/graph"
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/simulator/behavior"
+	"github.com/tushardhara/dream/simulator/dynamics"
 	rt "github.com/tushardhara/dream/simulator/runtime"
 )
 
@@ -74,7 +75,7 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 		return Receipt{}, ErrModel
 	}
 	if s.Policy == behavior.ActionPolicy {
-		if frame.Actions == nil || len(frame.Situation.Offers) != 0 || len(frame.Actions.Sources) != 0 || frame.Actions.Disclosure != nil {
+		if !validActionPlan(frame) {
 			return Receipt{}, ErrModel
 		}
 		for _, item := range safe.Items() {
@@ -111,6 +112,13 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 		if v.Kind != "edge" || v.From.Principal != request.Principal || v.To.Principal == "" {
 			continue
 		}
+		if v.Context != nil && frame.Actions == nil {
+			return Receipt{}, ErrModel
+		}
+		if frame.Actions != nil && v.Context != nil {
+			frame.Actions.Relationships = append(frame.Actions.Relationships, *v.Context)
+			continue
+		}
 		m := behavior.Memory{Other: v.To.Principal, Evidence: []core.ID{relation.Source}}
 		for _, dimension := range v.Dimensions {
 			switch dimension.Name {
@@ -121,6 +129,14 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 			}
 		}
 		frame.Situation.Relationships = append(frame.Situation.Relationships, m)
+	}
+	if frame.Actions != nil && len(frame.Actions.Relationships) > 0 {
+		for _, item := range safe.Items() {
+			// Internal markers are backed by this approved context and revalidated
+			// before commit; they cannot authorize a user-facing read/disclosure.
+			p := dynamics.Perceived{Actor: request.Principal, Event: item.Source, OccurredAt: item.OccurredAt, LearnedAt: item.LearnedAt, Confidence: item.Confidence, Rights: core.Rights{Resource: item.Source, Grants: []core.Grant{{Actor: request.Principal, Recipient: request.Principal, Purpose: "simulation", Operation: core.Read}, {Actor: request.Principal, Recipient: request.Principal, Purpose: "simulation", Operation: core.Derive}}}}
+			frame.Actions.RelationshipEvidence = append(frame.Actions.RelationshipEvidence, p)
+		}
 	}
 	frame.ModelHash = artifact.Hash
 	for _, finding := range artifact.Output.Findings {
@@ -242,7 +258,7 @@ func (s CognitiveService) Step(ctx context.Context, request ModelRequest, lease 
 		return Receipt{}, err
 	}
 	if s.Policy == behavior.ActionPolicy {
-		if frame.Actions == nil || len(frame.Situation.Offers) != 0 || len(frame.Actions.Sources) != 0 || frame.Actions.Disclosure != nil {
+		if !validActionPlan(frame) {
 			return Receipt{}, ErrModel
 		}
 		for _, item := range safe.Items() {

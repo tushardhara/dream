@@ -14,19 +14,24 @@ import (
 )
 
 type Delivery struct {
+	Decision  core.ID          `json:"decision,omitempty"`
+	ReplyTo   core.ID          `json:"reply_to,omitempty"`
 	Sender    core.ID          `json:"sender"`
 	Recipient core.ID          `json:"recipient"`
 	Kind      behavior.Kind    `json:"kind"`
 	At        core.LogicalTime `json:"at"`
 }
 type World struct {
-	Version   string              `json:"version"`
-	Period    int                 `json:"period"`
-	At        core.LogicalTime    `json:"at"`
-	Actors    []behavior.Actor    `json:"actors"`
-	Decisions []behavior.Decision `json:"decisions"`
-	Resources map[core.ID]int64   `json:"resources"`
-	Pending   []Delivery          `json:"pending"`
+	ActionOutcomes  []behavior.ActionOutcome  `json:"action_outcomes,omitempty"`
+	ActionActors    []behavior.ActionActor    `json:"action_actors,omitempty"`
+	ActionDecisions []behavior.ActionDecision `json:"action_decisions,omitempty"`
+	Version         string                    `json:"version"`
+	Period          int                       `json:"period"`
+	At              core.LogicalTime          `json:"at"`
+	Actors          []behavior.Actor          `json:"actors"`
+	Decisions       []behavior.Decision       `json:"decisions"`
+	Resources       map[core.ID]int64         `json:"resources"`
+	Pending         []Delivery                `json:"pending"`
 }
 
 func digest(v any) (string, error) {
@@ -71,6 +76,9 @@ func signal(theme string) (dynamics.Signals, error) {
 // mutable database. Only actor views and already-reached periods enter behavior.
 // Current-period randomness is also drawn through the canonical runtime recorder.
 func reconstruct(sc scenario.Scenario, through int, domain, common core.ID, coupled bool, record *rt.Random) (World, error) {
+	if demoVersion(sc) == RelationalVersion {
+		return reconstructRelational(sc, through, domain, common, coupled, record)
+	}
 	if sc.Validate() != nil || through < 0 || through > len(sc.Future) || len(sc.Future) > 24 {
 		return World{}, fmt.Errorf("invalid demo projection")
 	}
@@ -216,10 +224,26 @@ func Projection(state rt.State) (World, error) {
 	if json.Unmarshal(state.Genesis.Payload, &sc) != nil {
 		return World{}, fmt.Errorf("invalid genesis")
 	}
+	if demoVersion(sc) == Version {
+		for _, a := range sc.Actors {
+			if len(a.Contexts) > 0 {
+				return World{}, fmt.Errorf("legacy demo cannot ignore relationship context")
+			}
+		}
+	}
+	if v := demoVersion(sc); v != Version && v != RelationalVersion {
+		return World{}, fmt.Errorf("unsupported demo version")
+	}
 	var cp Checkpoint
 	if state.Data != "" {
-		if json.Unmarshal([]byte(state.Data), &cp) != nil || cp.Version != Version || cp.Period < 1 || cp.Period > 24 {
+		if json.Unmarshal([]byte(state.Data), &cp) != nil || cp.Version != demoVersion(sc) || cp.Period < 1 || cp.Period > 24 {
 			return World{}, fmt.Errorf("invalid demo checkpoint")
+		}
+	}
+	if state.Data != "" && cp.Version == RelationalVersion {
+		raw, _ := json.Marshal(cp)
+		if string(raw) != state.Data {
+			return World{}, fmt.Errorf("noncanonical relational checkpoint")
 		}
 	}
 	world, e := reconstruct(sc, cp.Period, state.RandomDomain, state.ExogenousDomain, state.Coupled, nil)
@@ -262,7 +286,7 @@ func (Handler) Transition(state rt.State, input rt.Input, clock rt.Clock, rng *r
 	if e != nil {
 		return rt.Output{}, e
 	}
-	raw, e := json.Marshal(Checkpoint{Version: Version, Period: next.Period, WorldHash: hash})
+	raw, e := json.Marshal(Checkpoint{Version: next.Version, Period: next.Period, WorldHash: hash})
 	if e != nil {
 		return rt.Output{}, e
 	}
