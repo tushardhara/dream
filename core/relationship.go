@@ -9,13 +9,17 @@ import (
 // IDs reference separately attributed claims/memories; they do not grant access.
 // An absent measure is unknown. Types never supply numerical defaults.
 type RelationshipContext struct {
-	Version  int                   `json:"version"`
-	Observer ID                    `json:"observer"`
-	Other    ID                    `json:"other"`
-	Types    []ID                  `json:"types"`
-	Valid    Interval              `json:"valid"`
-	Details  []RelationshipDetail  `json:"details,omitempty"`
-	Measures []RelationshipMeasure `json:"measures,omitempty"`
+	Account       ID                    `json:"account,omitempty"`
+	Domain        RelationshipDomain    `json:"domain,omitempty"`
+	RoleContext   ID                    `json:"role_context,omitempty"`
+	ContextSource ID                    `json:"context_source,omitempty"`
+	Version       int                   `json:"version"`
+	Observer      ID                    `json:"observer"`
+	Other         ID                    `json:"other"`
+	Types         []ID                  `json:"types"`
+	Valid         Interval              `json:"valid"`
+	Details       []RelationshipDetail  `json:"details,omitempty"`
+	Measures      []RelationshipMeasure `json:"measures,omitempty"`
 }
 type RelationshipDetail struct {
 	Kind    ID   `json:"kind"`
@@ -29,8 +33,21 @@ type RelationshipMeasure struct {
 }
 
 func (r RelationshipContext) Validate(observer, other ID) error {
-	if r.Version != 1 || observer.Validate() != nil || other.Validate() != nil || observer == other || r.Observer != observer || r.Other != other || r.Valid.Validate() != nil || len(r.Types) < 1 || len(r.Types) > 8 || len(r.Details) > 14 || len(r.Measures) > 13 {
+	if (r.Version != 1 && r.Version != 2) || observer.Validate() != nil || other.Validate() != nil || observer == other || r.Observer != observer || r.Other != other || r.Valid.Validate() != nil || len(r.Types) < 1 || len(r.Types) > 8 || len(r.Details) > 14 || len(r.Measures) > 13 {
 		return fmt.Errorf("invalid relationship context")
+	}
+	if r.Version == 1 && (r.Account != "" || r.Domain != "" || r.RoleContext != "" || r.ContextSource != "") {
+		return fmt.Errorf("domain fields require relationship v2")
+	}
+	if r.Version == 2 && (r.Account.Validate() != nil || !r.Domain.Valid() || r.RoleContext.Validate() != nil || r.ContextSource.Validate() != nil || r.Account == r.ContextSource) {
+		return fmt.Errorf("invalid domain account")
+	}
+	if r.Version == 2 {
+		for _, id := range r.Sources() {
+			if id == r.Account {
+				return fmt.Errorf("self-referential relationship evidence")
+			}
+		}
 	}
 	seen := map[ID]bool{}
 	for _, t := range r.Types {
@@ -82,6 +99,9 @@ func (r RelationshipContext) Sources() []ID {
 			seen[id] = true
 			out = append(out, id)
 		}
+	}
+	if r.Version == 2 {
+		add(r.ContextSource)
 	}
 	for _, d := range r.Details {
 		for _, id := range d.Sources {
