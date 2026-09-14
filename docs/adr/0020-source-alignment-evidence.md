@@ -111,3 +111,16 @@ revision/tree rejection, and runs actual container permission probes. Required
 full verification includes the original split, signed promotion, race, migration,
 replay/export and demo gates. See the exact PR checkpoint for runs, preserved
 failures, host enforcement limits and CI coverage; this ADR is not a test log.
+
+
+The evaluator controls also have negative-direction regression tests. Each of the
+nine named mechanics receives complete, structurally valid counterevidence and
+must report its specific FAIL or INCONCLUSIVE verdict through a verifiable report.
+Malformed input rejection cannot stand in for that result. Every frozen-plan
+validation clause has a direct invalid-field case; tampered retained decision
+rules/scopes are rejected before generation, even when supplied as the expected
+plan. `scripts/alignment-mutations.py --review` disables the nine evaluator
+comparisons and sixteen plan clauses individually, requiring assertion failures
+and exact restored-green runs. The default script also retains the original
+sixteen controls. These tests protect the correct existing production logic;
+no scientific adequacy claim follows from their mutation sensitivity.
