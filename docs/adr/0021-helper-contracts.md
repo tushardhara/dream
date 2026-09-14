@@ -69,8 +69,12 @@ exogenous and helper seeds. The initial exogenous event schedule is frozen in th
 fixture, rather than generated through interleaved actor/helper RNG consumption.
 Human/helper draws are keyed by domain and ordinal, so extra helper draws cannot
 shift human draws. A recorded run must match the complete manifest, request/evidence
-digests and reconstructed final transcript. Every helper replay path rechecks
-current graph rights; purged sources cannot be resurrected.
+digests (including approved source contents) and reconstructed final transcript. Every helper replay path rechecks
+current graph rights; purged sources cannot be resurrected. Duplicate delivery IDs
+also validate the complete recorded envelope. Historical requests see only helper
+interactions at or before their own clock; old source refs/hashes are omitted from
+planner history. The reference host retains at most32 interactions and1024 sanitized
+policy audit records, denying new work at capacity.
 
 New opt-in types and a new CLI require no migration of schemas1–6, cognitive.v1/v3,
 legacy six-drive/action registries or recorded reference-experiment.v1 runs.

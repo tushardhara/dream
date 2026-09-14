@@ -227,6 +227,7 @@ func (o Outcome) Validate() error {
 // Interaction is an event in the helper's independent history. Delivered is
 // mechanical receipt status only; outcomes require separately attributed evidence.
 type Interaction struct {
+	EvidenceHash     string
 	Arm              Arm
 	Seed             uint64
 	Version          string

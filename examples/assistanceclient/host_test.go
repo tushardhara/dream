@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -283,5 +284,76 @@ func TestCommitRechecksEligibilityAndEvidence(t *testing.T) {
 				t.Fatal("failed commit appended history")
 			}
 		})
+	}
+}
+
+func TestReplayPinsApprovedEvidenceContents(t *testing.T) {
+	ctx := context.Background()
+	l, r := Fixture(assistance.Single, assistance.Coordinate)
+	original, e := l.Host(assistance.FakePlanner{}).Execute(ctx, r, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprint(existing), func(t *testing.T) {
+			current, request := l, r
+			if !existing {
+				current, request = Fixture(assistance.Single, assistance.Coordinate)
+			}
+			scope := request.Contexts[0].Query.Scope
+			entries, _ := current.ReadMemory(ctx, scope)
+			entries[0].Content.Text = "Synthetic corrected request: previous content changed"
+			current.SetMemory(scope, entries)
+			before := current.Deliveries()
+			if _, e := current.Host(assistance.FakePlanner{}).Execute(ctx, request, &original); e == nil || current.Deliveries() != before {
+				t.Fatal("changed source silently replayed old inference")
+			}
+		})
+	}
+}
+
+func TestHistoryDoesNotRevealFutureAndDuplicateValidatesEnvelope(t *testing.T) {
+	ctx := context.Background()
+	l, r := Fixture(assistance.Single, assistance.Coordinate)
+	original, e := l.Host(assistance.FakePlanner{}).Execute(ctx, r, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	earlier := copyValue(r)
+	earlier.ID = "earlier"
+	earlier.At = 1
+	for i := range earlier.Contexts {
+		earlier.Contexts[i].Binding = earlier.ID
+		earlier.Contexts[i].Query.ValidAt = 1
+		earlier.Contexts[i].Query.KnownAt = 1
+	}
+	if e := l.Register(earlier); e != nil {
+		t.Fatal(e)
+	}
+	called := false
+	_, e = l.Host(planFunc(func(ctx context.Context, in assistance.Input) (assistance.Result, error) {
+		called = true
+		if len(in.History) != 0 {
+			t.Fatal("future helper history entered planner")
+		}
+		return (assistance.FakePlanner{}).Plan(ctx, in)
+	})).Execute(ctx, earlier, nil)
+	if e != nil || !called {
+		t.Fatal("historical control failed", e)
+	}
+	for _, field := range []string{"version", "time", "delivered"} {
+		l.history[0] = copyValue(original)
+		switch field {
+		case "version":
+			l.history[0].Version = "future"
+		case "time":
+			l.history[0].At++
+		case "delivered":
+			l.history[0].Delivered = false
+		}
+		before := l.Deliveries()
+		if _, e := l.Host(assistance.FakePlanner{}).Execute(ctx, r, nil); e == nil || l.Deliveries() != before {
+			t.Fatal("corrupt duplicate envelope accepted", field)
+		}
 	}
 }

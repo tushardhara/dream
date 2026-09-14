@@ -97,11 +97,11 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 	}
 	hash := Digest(r)
 	for _, old := range history {
-		if old.Helper != r.Helper || old.User != r.User {
+		if old.Version != Version || old.Helper != r.Helper || old.User != r.User || old.At.Validate() != nil {
 			return Interaction{}, ErrDenied
 		}
 		if old.ID == r.ID {
-			if old.Arm != r.Arm || old.Seed != r.Seed || old.RequestHash != hash || !old.Result.validate(r, items) || recorded != nil && Digest(*recorded) != Digest(old) {
+			if !old.matches(r, items) || recorded != nil && Digest(*recorded) != Digest(old) {
 				return Interaction{}, ErrInvalid
 			}
 			if revalidate(ctx, old.Result.Candidates[old.Result.Selected]) != nil {
@@ -116,7 +116,7 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 	result := waitResult("restraint")
 	if recorded != nil {
 		old := clone(*recorded)
-		if old.Version != Version || old.ID != r.ID || old.Helper != r.Helper || old.User != r.User || old.At != r.At || old.Arm != r.Arm || old.Seed != r.Seed || old.RequestHash != hash || !old.Result.validate(r, items) || old.Delivered != (old.Result.Candidates[old.Result.Selected].Action != Wait) {
+		if !old.matches(r, items) {
 			return Interaction{}, ErrInvalid
 		}
 		result = old.Result
@@ -127,9 +127,15 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 	} else if h.Planner != nil {
 		// History is mechanical only. Old evidence/source refs are not re-exposed to a
 		// planner without fresh permission. No request hashes enter the provider input.
-		safeHistory := clone(history)
+		safeHistory := []Interaction{}
+		for _, old := range history {
+			if old.At <= r.At {
+				safeHistory = append(safeHistory, clone(old))
+			}
+		}
 		for i := range safeHistory {
 			safeHistory[i].RequestHash = ""
+			safeHistory[i].EvidenceHash = ""
 			for j := range safeHistory[i].Result.Candidates {
 				safeHistory[i].Result.Candidates[j].Evidence = nil
 			}
@@ -153,9 +159,13 @@ func (h Host) Execute(ctx context.Context, request Request, recorded *Interactio
 	if revalidate(ctx, selected) != nil {
 		return Interaction{}, ErrDenied
 	}
-	out := Interaction{Arm: r.Arm, Seed: r.Seed, Version: Version, ID: r.ID, Helper: r.Helper, User: r.User, At: r.At, RequestHash: hash, Result: clone(result), Delivered: selected.Action != Wait}
+	out := Interaction{EvidenceHash: Digest(items), Arm: r.Arm, Seed: r.Seed, Version: Version, ID: r.ID, Helper: r.Helper, User: r.User, At: r.At, RequestHash: hash, Result: clone(result), Delivered: selected.Action != Wait}
 	if h.Journal.Commit(ctx, r, out, func(commitCtx context.Context) error { return revalidate(commitCtx, selected) }) != nil {
 		return Interaction{}, ErrDenied
 	}
 	return clone(out), nil
+}
+
+func (old Interaction) matches(r Request, items []graph.SafeContextItem) bool {
+	return old.Version == Version && old.ID == r.ID && old.Helper == r.Helper && old.User == r.User && old.At == r.At && old.Arm == r.Arm && old.Seed == r.Seed && old.RequestHash == Digest(r) && old.EvidenceHash == Digest(items) && old.Result.validate(r, items) && old.Delivered == (old.Result.Candidates[old.Result.Selected].Action != Wait)
 }
