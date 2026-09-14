@@ -15,6 +15,8 @@ root = pathlib.Path(__file__).resolve().parents[1]
 logs = root / 'bin' / 'drive-mutations'
 logs.mkdir(parents=True, exist_ok=True)
 probes = [
+ ('guard-cleanup-filter', 'scripts/disk-guard.py', "'label=dream.test.run='+run", "'label=dream.test.role=codex'", ''),
+ ('guard-accounting-kind', 'scripts/disk-guard.py', "return 'accounting_unavailable'", "return 'resource_limit'", ''),
  ('registry-order', 'simulator/drives/registry.go', '"acquisition"', '"comparison"', '^TestExactRegistryWireContract$'),
  ('legacy-dispatch', 'simulator/drives/codec.go', 'header.Version == dynamics.Version &&', 'false && header.Version == dynamics.Version &&', '^TestNewCodecAndLegacyReplay$'),
  ('context-permission', 'simulator/drives/appraisal.go', 'if e := c.Evidence.Validate(actor, at); e != nil {', 'if e := c.Evidence.Validate(actor, at); false && e != nil {', '^TestDrivePermissionReceiptAndBounds$'),
@@ -33,6 +35,10 @@ probes = [
 for name, file, old, new, test in probes:
     package = './app/hws' if file.startswith('app/hws/') else './simulator/drives'
     command = ['go', 'test', '-count=1', package, '-run', test]
+    marker = '--- FAIL:'
+    if file.endswith('.py'):
+        command = ['python3', '-m', 'unittest', 'discover', '-s', 'scripts', '-p', 'test_disk_guard.py']
+        marker = 'FAIL:'
     subprocess.run(command, cwd=root, check=True, timeout=120)
     path = root / file
     original = path.read_text()
@@ -50,7 +56,7 @@ for name, file, old, new, test in probes:
         result = subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=120)
         output = result.stdout + result.stderr
         (logs / (name + '.log')).write_text(output)
-        if result.returncode == 0 or '--- FAIL:' not in output:
+        if result.returncode == 0 or marker not in output:
             raise RuntimeError(name + ': no assertion failure: ' + output[-800:])
         print('CAUGHT ' + name, flush=True)
     finally:

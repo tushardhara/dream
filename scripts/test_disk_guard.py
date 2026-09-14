@@ -24,12 +24,13 @@ class DiskGuardTest(unittest.TestCase):
         from unittest import mock
         with tempfile.TemporaryDirectory() as directory:
             home = pathlib.Path(directory)
-            with mock.patch.object(pathlib.Path, 'home', return_value=home), mock.patch('sys.argv', ['disk-guard.py','--role','codex','--','never-launch']), mock.patch.object(guard, 'preflight', side_effect=RuntimeError('disk below 30 GiB')), mock.patch.object(guard.subprocess, 'Popen') as launch, contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(pathlib.Path, 'home', return_value=home), mock.patch('sys.argv', ['disk-guard.py','--role','codex','--','never-launch']), mock.patch.object(guard, 'preflight', side_effect=guard.ResourceLimit('disk below 30 GiB')), mock.patch.object(guard.subprocess, 'Popen') as launch, contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(guard.main(), 1)
                 launch.assert_not_called()
             record = json.loads((home/'.local/state/dream-tests/codex/checkpoint.json').read_text())
             self.assertEqual(record['status'], 'blocked')
             self.assertEqual(record['phase'], 'preflight')
+            self.assertEqual(record['failure_kind'], 'resource_limit')
             self.assertEqual(record['blocker'], 'disk below 30 GiB')
 
     def test_lock_denial_preserves_active_checkpoint(self):
@@ -64,3 +65,31 @@ class DiskGuardTest(unittest.TestCase):
         with mock.patch.object(guard.os, 'statvfs', return_value=stats), mock.patch.object(guard.shutil, 'which', return_value='docker'), mock.patch.object(guard.subprocess, 'check_output', side_effect=['0 total\n', failure]):
             with self.assertRaisesRegex(RuntimeError, 'Docker footprint inventory unavailable'):
                 guard.preflight([pathlib.Path('.')], 'codex')
+
+    def test_accounting_timeout_is_not_a_threshold_breach(self):
+        from unittest import mock
+        from types import SimpleNamespace
+        stats = SimpleNamespace(f_blocks=400*guard.GIB, f_bfree=100*guard.GIB,
+                                f_bavail=100*guard.GIB, f_frsize=1, f_files=1000, f_ffree=900)
+        timeout = guard.subprocess.TimeoutExpired(['du'], 30)
+        with mock.patch.object(guard.os, 'statvfs', return_value=stats), mock.patch.object(guard.subprocess, 'check_output', side_effect=timeout):
+            with self.assertRaises(guard.AccountingUnavailable) as caught:
+                guard.preflight([pathlib.Path('.')], 'codex')
+        self.assertEqual(guard.reason_kind(caught.exception), 'accounting_unavailable')
+        self.assertEqual(guard.reason_kind(guard.ResourceLimit('too large')), 'resource_limit')
+
+    def test_cleanup_selects_only_exact_run_resources(self):
+        from unittest import mock
+        run = 'codex-'+'a'*32
+        def docker(argv, **kwargs):
+            if argv[1] in ['ps', 'images']:
+                self.assertEqual(argv, ['docker', argv[1], '-aq', '--filter', 'label=dream.test.run='+run])
+                return guard.subprocess.CompletedProcess(argv, 0, stdout='owned-container\n' if argv[1]=='ps' else 'owned-image\n')
+            return guard.subprocess.CompletedProcess(argv, 0, stdout='')
+        with mock.patch.object(guard.shutil, 'which', return_value='docker'), mock.patch.object(guard.subprocess, 'run', side_effect=docker) as calls:
+            guard.cleanup_run(run)
+        self.assertEqual([c.args[0] for c in calls.call_args_list], [
+            ['docker','ps','-aq','--filter','label=dream.test.run='+run],
+            ['docker','rm','--force','owned-container'],
+            ['docker','images','-aq','--filter','label=dream.test.run='+run],
+            ['docker','rmi','owned-image']])

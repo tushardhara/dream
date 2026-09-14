@@ -17,6 +17,20 @@ import uuid
 
 GIB = 1024 ** 3
 
+class ResourceLimit(RuntimeError):
+    pass
+
+class AccountingUnavailable(RuntimeError):
+    pass
+
+def reason_kind(error):
+    if isinstance(error, ResourceLimit):
+        return 'resource_limit'
+    if isinstance(error, AccountingUnavailable):
+        return 'accounting_unavailable'
+    return 'interrupted' if str(error) == 'interrupted' else 'execution_error'
+
+
 
 def disk_failure(stats):
     total, free, available, inodes, ifree = stats
@@ -29,27 +43,39 @@ def disk_failure(stats):
 
 def preflight(paths, role=None):
     for path in paths:
-        s = os.statvfs(path)
+        try:
+            s = os.statvfs(path)
+        except OSError as error:
+            raise AccountingUnavailable('filesystem statistics unavailable: '+str(path)) from error
         problem = disk_failure((s.f_blocks*s.f_frsize, s.f_bfree*s.f_frsize,
                                 s.f_bavail*s.f_frsize, s.f_files, s.f_ffree))
         if problem:
-            raise RuntimeError(str(path) + ': ' + problem)
+            raise ResourceLimit(str(path) + ': ' + problem)
     try:
         size = int(subprocess.check_output(['du', '-scB1', *map(str, paths)], text=True,
                                           stderr=subprocess.STDOUT, timeout=30).splitlines()[-1].split()[0])
-    except subprocess.SubprocessError as error:
-        raise RuntimeError('role footprint scan unavailable (failed or exceeded 30s)') from error
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise AccountingUnavailable('role footprint scan unavailable (failed or exceeded 30s)') from error
     if role and shutil.which('docker'):
         try:
             images = subprocess.check_output(['docker', 'images', '-q', '--filter', 'label=dream.test.role='+role], text=True, stderr=subprocess.STDOUT, timeout=30).split()
             for image in set(images):
                 size += int(subprocess.check_output(['docker', 'image', 'inspect', '--format={{.Size}}', image], text=True, stderr=subprocess.STDOUT, timeout=30))
-        except subprocess.SubprocessError as error:
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
             # Skipping an unreachable daemon could hide retained role images.
-            raise RuntimeError('Docker footprint inventory unavailable; cannot enforce role accounting') from error
+            raise AccountingUnavailable('Docker footprint inventory unavailable; cannot enforce role accounting') from error
     if size >= 10 * GIB:
-        raise RuntimeError('role accounted footprint reached 10 GiB')
+        raise ResourceLimit('role accounted footprint reached 10 GiB')
     return size
+
+
+def cleanup_run(run):
+    if shutil.which('docker'):
+        for kind, listing, removal in [('container','ps','rm'), ('image','images','rmi')]:
+            found = subprocess.run(['docker',listing,'-aq','--filter','label=dream.test.run='+run], capture_output=True,text=True,timeout=30)
+            for item in set(found.stdout.split()):
+                cmd = ['docker',removal] + (['--force'] if kind == 'container' else []) + [item]
+                subprocess.run(cmd,capture_output=True,timeout=30)
 
 
 def deny(root, command, error, owns_lock):
@@ -57,6 +83,7 @@ def deny(root, command, error, owns_lock):
     path = root/('checkpoint.json' if owns_lock else 'denied.json')
     record = {'status': 'blocked', 'phase': 'preflight' if owns_lock else 'lock',
               'exit_code': 1, 'blocker': str(error), 'command': command,
+              'failure_kind': reason_kind(error) if owns_lock else 'lock_unavailable',
               'finished_at': time.time()}
     path.write_text(json.dumps(record))
     print('Guard: blocked:', str(error), 'checkpoint='+str(path), flush=True)
@@ -107,6 +134,7 @@ def main():
             env.update(TMPDIR=scratch, GOTMPDIR=scratch)
             process = None
             failure = None
+            failure_kind = None
             code = 1
             try:
                 process = subprocess.Popen(command, env=env, start_new_session=True,
@@ -133,6 +161,7 @@ def main():
                 reader.join(timeout=5)
             except (RuntimeError, OSError, subprocess.SubprocessError) as error:
                 failure = str(error)
+                failure_kind = reason_kind(error)
             finally:
                 if process is not None and process.poll() is None:
                     os.killpg(process.pid, signal.SIGTERM)
@@ -142,13 +171,8 @@ def main():
                         os.killpg(process.pid, signal.SIGKILL)
                         process.wait(timeout=10)
                 # Only exact unique-run labels, never global prune or name guesses.
-                if shutil.which('docker'):
-                    for kind, listing, removal in [('container','ps','rm'), ('image','images','rmi')]:
-                        found = subprocess.run(['docker',listing,'-aq','--filter','label=dream.test.run='+run], capture_output=True,text=True,timeout=30)
-                        for item in set(found.stdout.split()):
-                            cmd = ['docker',removal] + (['--force'] if kind == 'container' else []) + [item]
-                            subprocess.run(cmd,capture_output=True,timeout=30)
-                (root/'checkpoint.json').write_text(json.dumps({'run':run,'status':'blocked' if failure else 'finished','exit_code':code,'blocker':failure,'finished_at':time.time()}))
+                cleanup_run(run)
+                (root/'checkpoint.json').write_text(json.dumps({'run':run,'status':'blocked' if failure else 'finished','exit_code':code,'blocker':failure,'failure_kind':failure_kind,'finished_at':time.time()}))
             print('Guard:', failure or ('exit '+str(code)), 'log='+str(root/'output.log'), flush=True)
             return 1 if failure else code
 

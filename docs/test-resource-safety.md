@@ -63,3 +63,9 @@ remain unrun where the daemon is unavailable, regardless of CI status elsewhere.
 For a busy shared host, local agents may set `GOMAXPROCS=2 GOFLAGS=-p=2` to bound Go
 build/runtime parallelism. This does not change tests, assertions, resource ceilings
 or command timeouts. A footprint scan still fails closed if it exceeds 30 seconds.
+
+Blocked records distinguish `failure_kind=resource_limit` from
+`accounting_unavailable`, `lock_unavailable`, `interrupted` and execution errors.
+An accounting failure does not assert a disk/inode/footprint breach; it still stops
+work because current enforcement cannot be established. Exact-run cleanup argv
+and same-role refusal are pinned by repository regression tests.

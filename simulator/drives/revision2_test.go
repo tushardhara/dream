@@ -202,6 +202,9 @@ func TestRetainedFactorAppraisalOrdering(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	if a.Variables[ApproachDesire].Values[0] != .40264 || a.Variables[Curiosity].Values[0] != .404224 {
+		t.Fatalf("pre-event appraisal reference changed: approach=%g curiosity=%g", a.Variables[ApproachDesire].Values[0], a.Variables[Curiosity].Values[0])
+	}
 	if a.Factors.Variables[Fatigue] == b.Factors.Variables[Fatigue] {
 		t.Fatal("control did not change fatigue")
 	}
