@@ -12,6 +12,20 @@ import (
 )
 
 const relationPrefix = "relation.v1:"
+const relationV2Prefix = "relation.v2:"
+
+func relationCodec(v RelationState) string {
+	if v.Version == 2 {
+		return relationV2Prefix
+	}
+	return relationPrefix
+}
+func isRelation(text string) bool {
+	return strings.HasPrefix(text, relationPrefix) || strings.HasPrefix(text, relationV2Prefix)
+}
+func relationJSON(text string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(text, relationPrefix), relationV2Prefix)
+}
 
 type RelationshipDimension struct {
 	Name       core.ID         `json:"name"`
@@ -33,17 +47,18 @@ type RelationshipPattern struct {
 // never a canonical truth owned by its participants. Commitments and open loops
 // reference independently permissioned memory records, not inferred obligations.
 type RelationState struct {
-	Version     uint32                  `json:"version"`
-	ID          core.ID                 `json:"id"`
-	Kind        string                  `json:"kind"`
-	From        *core.Subject           `json:"from,omitempty"`
-	To          *core.Subject           `json:"to,omitempty"`
-	Types       []core.ID               `json:"types"`
-	Memberships []Membership            `json:"memberships"`
-	Dimensions  []RelationshipDimension `json:"dimensions"`
-	Commitments []core.ID               `json:"commitments"`
-	OpenLoops   []core.ID               `json:"open_loops"`
-	Patterns    []RelationshipPattern   `json:"patterns"`
+	Context     *core.RelationshipContext `json:"context,omitempty"`
+	Version     uint32                    `json:"version"`
+	ID          core.ID                   `json:"id"`
+	Kind        string                    `json:"kind"`
+	From        *core.Subject             `json:"from,omitempty"`
+	To          *core.Subject             `json:"to,omitempty"`
+	Types       []core.ID                 `json:"types"`
+	Memberships []Membership              `json:"memberships"`
+	Dimensions  []RelationshipDimension   `json:"dimensions"`
+	Commitments []core.ID                 `json:"commitments"`
+	OpenLoops   []core.ID                 `json:"open_loops"`
+	Patterns    []RelationshipPattern     `json:"patterns"`
 }
 
 func relationIDs(ids []core.ID, max int) bool {
@@ -60,8 +75,23 @@ func relationIDs(ids []core.ID, max int) bool {
 	return true
 }
 func (v RelationState) Validate(observer core.ID) error {
-	if v.Version != 1 || v.ID.Validate() != nil || observer.Validate() != nil || !relationIDs(v.Types, 8) || len(v.Types) == 0 {
+	if (v.Version != 1 && v.Version != 2) || v.Version == 1 && v.Context != nil || v.Version == 2 && v.Context == nil || v.ID.Validate() != nil || observer.Validate() != nil || !relationIDs(v.Types, 8) || len(v.Types) == 0 {
 		return fmt.Errorf("invalid relation version/id/types")
+	}
+	if v.Context != nil {
+		if v.Kind != "edge" || v.From == nil || v.To == nil || v.From.Principal != observer || v.Context.Validate(observer, v.To.Principal) != nil {
+			return fmt.Errorf("invalid directional relation context")
+		}
+		a := sortedRelationIDs(v.Types)
+		b := sortedRelationIDs(v.Context.Types)
+		if len(a) != len(b) {
+			return fmt.Errorf("relation types mismatch")
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return fmt.Errorf("relation types mismatch")
+			}
+		}
 	}
 	switch v.Kind {
 	case "edge":
@@ -134,6 +164,14 @@ func EncodeRelation(v RelationState, observer core.ID) (string, error) {
 		return "", err
 	}
 	v = owned
+	if v.Context != nil {
+		v.Context.Types = sortedRelationIDs(v.Context.Types)
+		for i := range v.Context.Details {
+			v.Context.Details[i].Sources = sortedRelationIDs(v.Context.Details[i].Sources)
+		}
+		sort.Slice(v.Context.Details, func(i, j int) bool { return v.Context.Details[i].Kind < v.Context.Details[j].Kind })
+		sort.Slice(v.Context.Measures, func(i, j int) bool { return v.Context.Measures[i].Kind < v.Context.Measures[j].Kind })
+	}
 	v.Types = sortedRelationIDs(v.Types)
 	v.Commitments = sortedRelationIDs(v.Commitments)
 	v.OpenLoops = sortedRelationIDs(v.OpenLoops)
@@ -177,17 +215,17 @@ func EncodeRelation(v RelationState, observer core.ID) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(raw)+len(relationPrefix) > 2048 {
+	if len(raw)+len(relationCodec(v)) > 2048 {
 		return "", fmt.Errorf("relation encoded budget")
 	}
-	return relationPrefix + string(raw), nil
+	return relationCodec(v) + string(raw), nil
 }
 func DecodeRelation(r MemoryRecord) (RelationState, error) {
 	var v RelationState
-	if r.Validate() != nil || r.Content.Kind != RelationshipMemory || !strings.HasPrefix(r.Content.Text, relationPrefix) {
+	if r.Validate() != nil || r.Content.Kind != RelationshipMemory || !isRelation(r.Content.Text) {
 		return v, fmt.Errorf("not a relationship record")
 	}
-	dec := json.NewDecoder(strings.NewReader(strings.TrimPrefix(r.Content.Text, relationPrefix)))
+	dec := json.NewDecoder(strings.NewReader(relationJSON(r.Content.Text)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&v); err != nil {
 		return v, err
@@ -199,7 +237,7 @@ func DecodeRelation(r MemoryRecord) (RelationState, error) {
 	if text != r.Content.Text {
 		return v, fmt.Errorf("noncanonical relation")
 	}
-	if !sameSubject(relationSubject(v), r.Event.Subject) {
+	if !sameSubject(relationSubject(v), r.Event.Subject) || v.Context != nil && !sameRelationInterval(v.Context.Valid, r.Event.Meta.Valid) {
 		return v, fmt.Errorf("relation envelope subject mismatch")
 	}
 	sources := map[core.ID]bool{}
@@ -209,6 +247,9 @@ func DecodeRelation(r MemoryRecord) (RelationState, error) {
 	references := append(append([]core.ID{}, v.Commitments...), v.OpenLoops...)
 	for _, p := range v.Patterns {
 		references = append(references, p.Evidence...)
+	}
+	if v.Context != nil {
+		references = append(references, v.Context.Sources()...)
 	}
 	for _, id := range references {
 		if !sources[id] {
@@ -295,7 +336,7 @@ func (s RelationService) Query(ctx context.Context, q MemoryQuery, id core.ID) (
 	}
 	states := map[core.ID]RelationState{}
 	for _, e := range entries {
-		if e.Revoked || e.Content == nil || e.Content.Kind != RelationshipMemory || !strings.HasPrefix(e.Content.Text, relationPrefix) {
+		if e.Revoked || e.Content == nil || e.Content.Kind != RelationshipMemory || !isRelation(e.Content.Text) {
 			continue
 		}
 		v, err := DecodeRelation(e.record())
@@ -381,17 +422,17 @@ func (s SafeContext) Relations() ([]SafeRelation, error) {
 		if item.Kind != RelationshipMemory {
 			continue
 		}
-		if !strings.HasPrefix(item.Text, relationPrefix) {
+		if !isRelation(item.Text) {
 			return nil, fmt.Errorf("unknown safe relation encoding")
 		}
 		var state RelationState
-		d := json.NewDecoder(strings.NewReader(strings.TrimPrefix(item.Text, relationPrefix)))
+		d := json.NewDecoder(strings.NewReader(relationJSON(item.Text)))
 		d.DisallowUnknownFields()
 		if err := d.Decode(&state); err != nil {
 			return nil, err
 		}
 		encoded, err := EncodeRelation(state, item.Observer)
-		if err != nil || encoded != item.Text || !sameSubject(relationSubject(state), item.Subject) {
+		if err != nil || encoded != item.Text || !sameSubject(relationSubject(state), item.Subject) || state.Context != nil && !sameRelationInterval(state.Context.Valid, item.Valid) {
 			return nil, fmt.Errorf("safe relation envelope")
 		}
 		sources := map[core.ID]bool{}
@@ -404,6 +445,9 @@ func (s SafeContext) Relations() ([]SafeRelation, error) {
 		for _, p := range state.Patterns {
 			refs = append(refs, p.Evidence...)
 		}
+		if state.Context != nil {
+			refs = append(refs, state.Context.Sources()...)
+		}
 		for _, id := range refs {
 			if !sources[id] {
 				return nil, fmt.Errorf("safe relation provenance")
@@ -412,4 +456,8 @@ func (s SafeContext) Relations() ([]SafeRelation, error) {
 		out = append(out, SafeRelation{item.Source, item.Observer, state})
 	}
 	return out, nil
+}
+
+func sameRelationInterval(a, b core.Interval) bool {
+	return a.Start == b.Start && (a.End == nil && b.End == nil || a.End != nil && b.End != nil && *a.End == *b.End)
 }

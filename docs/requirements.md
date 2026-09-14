@@ -49,7 +49,7 @@ access to complete traceability without publishing originals or private data.
 | HWS PRD v0.1 | §4 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §5 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §6 drive registry | Owner-supplied exact22-name registry in #40; simulator/drives and ADR0017. Other original section text is not certified |
-| HWS PRD v0.1 | §7 | UNVERIFIED: original text unavailable; summarized scope above |
+| HWS PRD v0.1 | §7 | SUPPLIED SOURCE: #42 revision 2 provides relationship fields/principles; ADR-0019 maps bounded implementation and tests. Full private document remains unverified. |
 | HWS PRD v0.1 | §8 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §9 | SUPPLIED SOURCE: #41 revision 2 gives all27 actions and14-stage lifecycle; ADR-0018 maps implementation/tests. Full private document remains unverified. |
 | HWS PRD v0.1 | §10 | UNVERIFIED: original text unavailable; summarized scope above |

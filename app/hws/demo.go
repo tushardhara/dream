@@ -50,7 +50,7 @@ func SealDemo(a DemoArtifact) (DemoArtifact, error) {
 }
 func VerifyDemo(a DemoArtifact, expected string) (demo.World, error) {
 	sealed, e := SealDemo(a)
-	if e != nil || a.Hash != expected || a.Hash != sealed.Hash || a.Version != demo.Version || a.RealStudy != "not-run" || a.HumanValidity != "not-tested" || a.CrossModel != "not-tested" || a.ProviderMode != "deterministic_fake" || a.ProviderCalls != 0 || a.APICostMicros != 0 || a.Elapsed < 0 {
+	if e != nil || a.Hash != expected || a.Hash != sealed.Hash || (a.Version != demo.Version && a.Version != demo.RelationalVersion) || a.RealStudy != "not-run" || a.HumanValidity != "not-tested" || a.CrossModel != "not-tested" || a.ProviderMode != "deterministic_fake" || a.ProviderCalls != 0 || a.APICostMicros != 0 || a.Elapsed < 0 {
 		return demo.World{}, fmt.Errorf("invalid demo artifact or scientific claim")
 	}
 	replay, e := Replay(a.Replay, RecordedReplay)
@@ -69,7 +69,7 @@ func VerifyDemo(a DemoArtifact, expected string) (demo.World, error) {
 		return demo.World{}, e
 	}
 	hash, e := world.Hash()
-	if e != nil || hash != a.WorldHash || a.SimulatedHorizon != replay.Final.Budget.Horizon || a.Completed != (replay.Final.Status == "completed") {
+	if e != nil || hash != a.WorldHash || world.Version != a.Version || a.SimulatedHorizon != replay.Final.Budget.Horizon || a.Completed != (replay.Final.Status == "completed") {
 		return demo.World{}, fmt.Errorf("demo completion/projection mismatch")
 	}
 	return world, nil
@@ -82,7 +82,7 @@ func RunDemo(ctx context.Context, store DemoStore, o DemoOptions, clock Operatio
 	if store == nil || clock == nil || o.Namespace.Validate() != nil || o.Holder.Validate() != nil || o.MaxBoundaries < 1 || o.MaxBoundaries > 64 {
 		return DemoArtifact{}, fmt.Errorf("invalid bounded demo configuration")
 	}
-	sc, e := demo.Scenario(o.People, o.Months, o.Seed)
+	sc, e := demo.RelationalScenario(o.People, o.Months, o.Seed)
 	if e != nil {
 		return DemoArtifact{}, e
 	}
@@ -147,7 +147,7 @@ func RunDemo(ctx context.Context, store DemoStore, o DemoOptions, clock Operatio
 	if e != nil {
 		return DemoArtifact{}, e
 	}
-	artifact, e := SealDemo(DemoArtifact{Version: demo.Version, Replay: bundle, WorldHash: hash, Completed: final.State.Status == "completed", SimulatedHorizon: sc.World.Horizon, RealStudy: "not-run", HumanValidity: "not-tested", CrossModel: "not-tested", ProviderMode: "deterministic_fake", Elapsed: time.Since(start)})
+	artifact, e := SealDemo(DemoArtifact{Version: world.Version, Replay: bundle, WorldHash: hash, Completed: final.State.Status == "completed", SimulatedHorizon: sc.World.Horizon, RealStudy: "not-run", HumanValidity: "not-tested", CrossModel: "not-tested", ProviderMode: "deterministic_fake", Elapsed: time.Since(start)})
 	if e != nil {
 		return DemoArtifact{}, e
 	}
@@ -156,12 +156,15 @@ func RunDemo(ctx context.Context, store DemoStore, o DemoOptions, clock Operatio
 }
 
 type DemoActorExport struct {
-	Version       string              `json:"version"`
-	View          scenario.ActorView  `json:"initial_own_view"`
-	State         behavior.Actor      `json:"derived_own_state"`
-	Decisions     []behavior.Decision `json:"own_decisions"`
-	Deliveries    []demo.Delivery     `json:"pending_own_deliveries"`
-	HumanValidity string              `json:"real_human_validity"`
+	ActionState     *behavior.ActionActor     `json:"action_state,omitempty"`
+	ActionDecisions []behavior.ActionDecision `json:"action_decisions,omitempty"`
+	ActionOutcomes  []behavior.ActionOutcome  `json:"action_outcomes,omitempty"`
+	Version         string                    `json:"version"`
+	View            scenario.ActorView        `json:"initial_own_view"`
+	State           *behavior.Actor           `json:"derived_own_state,omitempty"`
+	Decisions       []behavior.Decision       `json:"own_decisions"`
+	Deliveries      []demo.Delivery           `json:"pending_own_deliveries"`
+	HumanValidity   string                    `json:"real_human_validity"`
 }
 
 // ExportDemoActor is an offline projection over an already authorized synthetic
@@ -179,12 +182,30 @@ func ExportDemoActor(a DemoArtifact, expected string, actor core.ID) (DemoActorE
 	if e != nil {
 		return DemoActorExport{}, e
 	}
-	out := DemoActorExport{Version: demo.Version, View: view, HumanValidity: "not-tested"}
+	out := DemoActorExport{Version: world.Version, View: view, HumanValidity: "not-tested"}
 	found := false
 	for _, state := range world.Actors {
 		if state.State.Actor == actor {
-			out.State = state
+			owned := state
+			out.State = &owned
 			found = true
+		}
+	}
+	for _, state := range world.ActionActors {
+		if state.Drives.Actor == actor {
+			owned := state
+			out.ActionState = &owned
+			found = true
+		}
+	}
+	for _, d := range world.ActionDecisions {
+		if d.Actor == actor {
+			out.ActionDecisions = append(out.ActionDecisions, d)
+		}
+	}
+	for _, o := range world.ActionOutcomes {
+		if o.Outcome.Observer == actor {
+			out.ActionOutcomes = append(out.ActionOutcomes, o)
 		}
 	}
 	if !found {

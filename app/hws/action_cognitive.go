@@ -23,11 +23,13 @@ const actionCognitivePrefix = "cognitive.v2:"
 // ActionFrame contains trusted affordances. The service supplies Sources and
 // Disclosure from current capabilities; a planner cannot supply either grant.
 type ActionFrame struct {
-	Offers       []behavior.ActionOffer
-	Contexts     []behavior.DisclosureContext
-	DriveContext *[drives.ContextCount]drives.Cue
-	Sources      []core.ID
-	Disclosure   *behavior.DisclosureGrant
+	Relationships []core.RelationshipContext
+	Focus         core.ID
+	Offers        []behavior.ActionOffer
+	Contexts      []behavior.DisclosureContext
+	DriveContext  *[drives.ContextCount]drives.Cue
+	Sources       []core.ID
+	Disclosure    *behavior.DisclosureGrant
 }
 type ActionCheckpoint struct {
 	Version      int                      `json:"version"`
@@ -233,6 +235,17 @@ func (h CognitiveHandler) transitionActions(current rt.State, input rt.Input, cl
 			p.Signals = dynamics.Signals{}
 			s.Observation.Context[i] = drives.Cue{Evidence: p}
 		}
+	}
+	focusFound := f.Focus == ""
+	for _, relation := range f.Relationships {
+		focusFound = focusFound || relation.Other == f.Focus
+		s, e = behavior.ApplyRelationship(s, relation, input.Actor, input.At, relation.Other == f.Focus)
+		if e != nil {
+			return rt.Output{}, e
+		}
+	}
+	if !focusFound {
+		return rt.Output{}, fmt.Errorf("unknown relationship focus")
 	}
 	s.Resources, e = rt.SpendableResources(current)
 	if e != nil {

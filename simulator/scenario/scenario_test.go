@@ -233,3 +233,26 @@ func TestForeignKnowledgeOwnershipGuard(t *testing.T) {
 		t.Fatalf("ownership guard: %v", err)
 	}
 }
+
+func TestBatchedActorViewsRemainIsolated(t *testing.T) {
+	s := fixture()
+	views, e := s.ActorViews()
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, v := range views {
+		single, e := s.View(v.Actor)
+		if e != nil {
+			t.Fatal(e)
+		}
+		a, _ := json.Marshal(v)
+		b, _ := json.Marshal(single)
+		if string(a) != string(b) {
+			t.Fatal("batch changed actor view")
+		}
+	}
+	views[0].Humans[0].Name = "MUTATED"
+	if views[1].Humans[0].Name == "MUTATED" || s.Public.Humans[0].Name == "MUTATED" {
+		t.Fatal("views alias genesis or another actor")
+	}
+}

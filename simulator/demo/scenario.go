@@ -29,6 +29,12 @@ func Scenario(people, months int, seed uint64) (scenario.Scenario, error) {
 	if (people != 2 && people != 4 && people != 24) || months < 1 || months > 12 {
 		return scenario.Scenario{}, fmt.Errorf("demo supports 2/4/24 people and 1..12 simulated months")
 	}
+	return buildScenario(people, months, seed)
+}
+func buildScenario(people, months int, seed uint64) (scenario.Scenario, error) {
+	if months < 1 || months > 12 {
+		return scenario.Scenario{}, fmt.Errorf("demo months bound")
+	}
 	sc := scenario.Scenario{Version: 1, World: scenario.World{ID: simulator.WorldID(fmt.Sprintf("demo:%d:%d:%d", people, months, seed)), Seed: seed, Horizon: core.LogicalTime(months) * Month}, Requires: []core.ID{}, Public: scenario.Public{Resources: []scenario.Resource{{ID: "shared-time", Capacity: 12, Available: 12}}}, Research: scenario.Research{Labels: []scenario.Label{{ID: "evaluator-only", Text: "DEMO_RESEARCH_LABEL_CANARY"}}}}
 	for i := 0; i < people; i++ {
 		id := human(i)

@@ -74,7 +74,7 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 		return Receipt{}, ErrModel
 	}
 	if s.Policy == behavior.ActionPolicy {
-		if frame.Actions == nil || len(frame.Situation.Offers) != 0 || len(frame.Actions.Sources) != 0 || frame.Actions.Disclosure != nil {
+		if frame.Actions == nil || len(frame.Situation.Offers) != 0 || len(frame.Actions.Sources) != 0 || frame.Actions.Disclosure != nil || len(frame.Actions.Relationships) != 0 {
 			return Receipt{}, ErrModel
 		}
 		for _, item := range safe.Items() {
@@ -109,6 +109,13 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 		}
 		v := relation.State
 		if v.Kind != "edge" || v.From.Principal != request.Principal || v.To.Principal == "" {
+			continue
+		}
+		if v.Context != nil && frame.Actions == nil {
+			return Receipt{}, ErrModel
+		}
+		if frame.Actions != nil && v.Context != nil {
+			frame.Actions.Relationships = append(frame.Actions.Relationships, *v.Context)
 			continue
 		}
 		m := behavior.Memory{Other: v.To.Principal, Evidence: []core.ID{relation.Source}}
