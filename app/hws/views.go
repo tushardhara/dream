@@ -11,6 +11,8 @@ import (
 
 	"github.com/tushardhara/dream/app/graph"
 	"github.com/tushardhara/dream/core"
+	"github.com/tushardhara/dream/simulator/behavior"
+	"github.com/tushardhara/dream/simulator/drives"
 	"github.com/tushardhara/dream/simulator/dynamics"
 	"github.com/tushardhara/dream/simulator/scenario"
 )
@@ -251,6 +253,7 @@ type ActorObservation struct {
 	GenesisKnown scenario.ActorView
 }
 type ActorSelfState struct {
+	ActionState    *behavior.ActionActor `json:"action_state,omitempty"`
 	Principal      core.ID
 	At             core.LogicalTime
 	InitialProfile *scenario.Latent
@@ -319,6 +322,32 @@ func (v *ViewService) Actor(ctx context.Context, permit ViewPermit) (observation
 			owned.Drives = append(owned.Drives[:0:0], profile.Drives...)
 			self.InitialProfile = &owned
 		}
+	}
+	if strings.HasPrefix(snap.State.Data, actionCognitivePrefix) {
+		c, e := DecodeActionCheckpoint(snap.State.Data)
+		if e != nil {
+			return ActorObservation{}, ActorSelfState{}, ErrViewDenied
+		}
+		found := false
+		for _, a := range c.Actors {
+			if a.Drives.Actor != g.Realm.Principal {
+				continue
+			}
+			found = true
+			a.Drives, e = drives.Advance(a.Drives, snap.State.At)
+			if e != nil {
+				return ActorObservation{}, ActorSelfState{}, ErrViewDenied
+			}
+			self.ActionState = &a
+			registry := drives.Registry()
+			for i, v := range a.Drives.Variables {
+				self.CurrentDrives = append(self.CurrentDrives, SelfDrive{registry[i].ID, v.Values[0], core.Confidence(v.Values[2])})
+			}
+		}
+		if !found {
+			return ActorObservation{}, ActorSelfState{}, ErrViewDenied
+		}
+		return ActorObservation{g.Realm.Principal, snap.State.At, known}, self, nil
 	}
 	if snap.State.Data != "" {
 		checkpoint, err := DecodeAppraisalCheckpoint(snap.State.Data)

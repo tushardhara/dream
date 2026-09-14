@@ -330,17 +330,22 @@ type WriterSpan struct {
 	Source     core.ID
 	Start, End int
 }
-type WriterDraft struct{ Spans []WriterSpan }
+type WriterDraft struct {
+	Spans   []WriterSpan
+	Fiction *FictionDraft
+}
 type ApprovedWriter interface {
 	Write(context.Context, SafeContext) (WriterDraft, error)
 }
 type ValidatedOutput struct {
-	Text     string
-	Sources  []core.ID
-	Evidence []SafeContextItem
+	FictionMode string `json:",omitempty"`
+	Text        string
+	Sources     []core.ID
+	Evidence    []SafeContextItem
 }
 
-// Write is intentionally a bounded quotation protocol. Arbitrary paraphrase or
+// Write supports bounded quotations and explicit typed fictional transforms.
+// Arbitrary paraphrase or
 // free-form generation is not claimed safe by string filters. Untrusted source
 // text cannot mint capabilities or choose new source rights. #10 supplies adapters.
 func (p *PolicyService) Write(ctx context.Context, approved ApprovedContext, binding core.ID, writer ApprovedWriter) (output ValidatedOutput, decisionOut PolicyDecision, resultErr error) {
@@ -368,6 +373,12 @@ func (p *PolicyService) Write(ctx context.Context, approved ApprovedContext, bin
 	_, decision, err = p.Revalidate(ctx, approved, binding)
 	if err != nil || !decision.Allowed {
 		return ValidatedOutput{}, decision, err
+	}
+	if draft.Fiction != nil {
+		if len(draft.Spans) != 0 {
+			return ValidatedOutput{}, policyDeny("mixed_writer_protocol", -1), nil
+		}
+		return renderFiction(*draft.Fiction, safe, approved.proposal.Mode)
 	}
 	if len(draft.Spans) == 0 || len(draft.Spans) > 16 {
 		return ValidatedOutput{}, policyDeny("invalid_writer_output", -1), nil
