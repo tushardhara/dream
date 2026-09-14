@@ -116,13 +116,31 @@ func TestTemporalHumanClarificationBudgetAndCodec(t *testing.T) {
 }
 func TestTemporalHumanRequiresCurrentRecordAndSourceMetadata(t *testing.T) {
 	actor, _ := NewTemporalActor("a", 0)
-	for _, change := range []string{"revoked_source", "revoked_record", "forged_confidence", "foreign", "future"} {
+	for _, change := range []string{"revoked_source", "revoked_record", "missing_source", "missing_record", "forged_confidence", "foreign", "future"} {
 		in := temporalInput(t, 63, 3, "", 0)
 		switch change {
-		case "revoked_source":
-			in.Domain.Scoped.Situation.RelationshipEvidence[0].Rights.Revoked = true
-		case "revoked_record":
-			in.Domain.Scoped.Situation.RelationshipEvidence[2].Rights.Revoked = true
+		case "revoked_source", "revoked_record", "missing_source", "missing_record":
+			target := core.ID("temporal-source")
+			if change == "revoked_record" || change == "missing_record" {
+				target = "rhythm"
+			}
+			evidence := in.Domain.Scoped.Situation.RelationshipEvidence
+			found := false
+			for i, p := range evidence {
+				if p.Event == target {
+					found = true
+					if change == "missing_source" || change == "missing_record" {
+						evidence = append(evidence[:i:i], evidence[i+1:]...)
+					} else {
+						evidence[i].Rights.Revoked = true
+					}
+					break
+				}
+			}
+			if !found {
+				t.Fatal("missing negative-control target", target)
+			}
+			in.Domain.Scoped.Situation.RelationshipEvidence = evidence
 		case "forged_confidence":
 			in.Evidence[0].Confidence = .9
 		case "foreign":

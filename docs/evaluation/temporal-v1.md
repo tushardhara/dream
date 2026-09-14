@@ -2,6 +2,8 @@
 
 Run `go run ./cmd/temporal-report -out docs/evaluation/temporal-v1.json` under the repository disk guard. The committed JSON is the actual 16-seed output (seeds 1–16), not a manually authored expected-result fixture. Twelve scenes use two synthetic adults, a daily or occasional own preference, 2/60-day gaps, caregiving, a work transition, stale experience, agreed break, sparse coverage, an unobserved channel, observer disagreement and no-contact.
 
+The daily-labelled explicit preference permits gaps of 1–3 logical days; the occasional preference permits 1–90. Preferences have a 365-day freshness horizon and circumstance reports a 30-day horizon. These are authored engineering tolerances, not universal contact rules or estimates of real people.
+
 The helper compares opt-in assistance v4, its domain v3 policy without temporal interpretation, and the simple explicit-goal baseline. All use the same explicit unknown goal and scoped willingness. Both humans still run when the helper waits. Their permitted graph inputs and temporal policy stay identical across helper arms. A separate paired human ablation removes temporal eligibility while retaining the same domain engine, source records, boundaries and random draw. These are engineering controls, not a trial of helper influence on human responses (deferred to #53).
 
 | Consumer / policy | Trials | Label-appropriate | Unnecessary clarification | Missed clarification | Privacy / boundary violations |
