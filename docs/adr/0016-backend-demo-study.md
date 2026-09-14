@@ -1,6 +1,7 @@
 # ADR-0016: bounded reference demo and separate real-day study protocol
 
-Status: implementation for #17; independent exact-SHA engineering review required.
+Status: legacy #17 design, with #42 relational projection update in ADR0019
+and #43 complete source reporting in ADR0020. Exact reviews live in GitHub.
 
 The reference demo reuses the generic runtime/store, recorded RNG, dynamics and
 behavior functions. Its durable checkpoint is a versioned period/hash; actor state
@@ -30,7 +31,7 @@ has no default-changing or model-weight-writing capability.
 
 | Requirement | Evidence |
 | --- | --- |
-| 24 humans, 8 overlapping groups, 30+ edges; smoke/horizon | TestDemoScenarioScaleAndBoundedHorizon; 48 directed edges, 2/4/24 people, 1..12 fixed model months |
+| 24 humans, 8 overlapping groups, 30+ edges; smoke/horizon | TestDemoScenarioScaleAndBoundedHorizon; original v1 had 48 directed edges; current v2 has 104 directional reports, 2/4/5/24 people and 1..12 model months |
 | Neutral/joyful/compound/scarce/incomplete/slow state | Scenario themes and existing dynamics; TestDemoInitialDerivationAndUnseenGroup, actor reconstruction/receipt/resource checks |
 | Recorded multi-seed demo and measured operational smoke | TestDemoCLIIntegration, make demo-check; two full seed runs and retained actual timing/hardware/cost records |
 | Recovery/replay/export and second host | TestTwentyFourPersonYearReconstructionAndRecovery, TestDemoArtifactCanonicalWireRoundTrip, TestDemoArtifactReplayAndPrivateExport, TestGraphClientIntegration |
@@ -42,6 +43,7 @@ has no default-changing or model-weight-writing capability.
 
 See docs/backend-demo.md and docs/study-protocol.md for runnable commands, artifact
 handling, operational bounds, unresolved owner configuration and scientific/source
-gaps. A 360-day simulated horizon is not a 30-real-day observation study. Complete
-HWS source falsifiers, independent frontier-model transfer, real-human validity,
-200-family/large-scale research, live capacity and production stress are NOT TESTED.
+gaps. A 360-day simulated horizon is not a 30-real-day observation study. ADR0020 now enumerates all supplied HWS exits/falsifiers in a separate evidence
+report; registry completeness does not confer source-criterion adequacy.
+Independent frontier-model transfer, real-human validity, 200-family/large-scale
+research, live capacity and production stress remain NOT_TESTED.

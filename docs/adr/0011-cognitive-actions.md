@@ -1,6 +1,8 @@
 # ADR-0011: bounded synthetic cognitive actions and outcomes
 
-Status: proposed for issue #11, subject to independent exact-SHA review.
+Status: retained legacy human-actions.v1 design from #11. The current complete
+27-action grammar and 14-stage loop are specified in ADR0018 (#41); v1 recordings
+continue to use their original versioned policy.
 
 `CognitiveService.Step` composes approved retrieval, durable typed interpretation,
 then `Apply` and the pure `CognitiveHandler`. A trusted `CognitivePlanner` maps
@@ -19,8 +21,9 @@ production decision engine, real-user advice, persuasion, matching or notificati
 
 The executable registry is wait, observe, ask, self_disclose, help, decline,
 invite, break_promise and third_party_support. These include the actions named in
-#11 and the earlier typed model candidates. Complete original HWS source-list
-coverage is **UNVERIFIED**; no unseen action/mode is implemented by guessing.
+#11 and the earlier typed model candidates. This was the bounded legacy subset;
+the subsequently supplied full §9 list is implemented separately in ADR0018.
+No new actions are silently inserted into the v1 scoring or wire semantics.
 Unknown modes and malformed proposals fail even when other proposals are safe.
 Unsafe but structurally valid affordances are filtered by current recipient,
 actor availability, resource capacity, action duration, disclosure and commitment

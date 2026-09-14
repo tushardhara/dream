@@ -64,8 +64,9 @@ synthetic_offline_batch; no production activation host or default exists. No own
 threshold is selected by this ticket. The test's permissive threshold is synthetic
 test data and cannot authorize anything without the trusted test key.
 
-Engineering checks do not supply missing source text. The report lists the known
-summary-level checks and explicitly marks complete HWS source falsifiers,
-cross-model transfer and real-human validity NOT TESTED. The source register in
-docs/requirements.md remains UNVERIFIED, including #7/#11 complete registries.
-See docs/evaluation.md for commands and acceptance evidence.
+This ADR describes the legacy evaluation-report.v1 protocol and its seven
+format-scoped findings. The later supplied HWS §19/§20 extracts are fully
+enumerated in the separate ADR0020 alignment report; #40/#41 map the supplied
+drive/action registries in ADR0017/0018. This closes those named source gaps,
+not unsupplied private-document traceability. Cross-model transfer and real-human
+validity remain NOT_TESTED. See docs/evaluation.md for both versioned formats.

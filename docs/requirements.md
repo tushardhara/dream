@@ -48,7 +48,7 @@ remains a source gap; do not infer section-level completeness from ticket closur
 | HWS PRD v0.1 | §6 drive registry | Owner-supplied exact22-name registry in #40; simulator/drives and ADR0017. Other original section text is not certified |
 | HWS PRD v0.1 | §7 | SUPPLIED SOURCE: #42 revision 2 provides relationship fields/principles; ADR-0019 maps bounded implementation and tests. Full private document remains unverified. |
 | HWS PRD v0.1 | §8 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §9 | SUPPLIED SOURCE: #41 revision 2 gives all27 actions and14-stage lifecycle; ADR-0018 maps implementation/tests. Full private document remains unverified. |
+| HWS PRD v0.1 | §9 | SUPPLIED SOURCE: #41 revision 2 gives all 27 actions and 14-stage lifecycle; ADR-0018 maps implementation/tests. Full private document remains unverified. |
 | HWS PRD v0.1 | §10 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §11 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §12 | UNVERIFIED: original text unavailable; summarized scope above |
@@ -58,8 +58,8 @@ remains a source gap; do not infer section-level completeness from ticket closur
 | HWS PRD v0.1 | §16 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §17 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §18 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §19 | SUPPLIED SOURCE: #43 revision 2, all13 exit criteria; immutable registry and evidence report, ADR0020. |
-| HWS PRD v0.1 | §20 | SUPPLIED SOURCE: #43 revision 2, all10 primary falsifiers; explicit unknown polarity and adequacy limits, ADR0020. |
+| HWS PRD v0.1 | §19 | SUPPLIED SOURCE: #43 revision 2, all 13 exit criteria; immutable registry and evidence report, ADR0020. |
+| HWS PRD v0.1 | §20 | SUPPLIED SOURCE: #43 revision 2, all 10 primary falsifiers; explicit unknown polarity and adequacy limits, ADR0020. |
 | IHG canonical PRD v1.1 | 5 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 14 | UNVERIFIED: original text unavailable; summarized invariants above |
 | IHG canonical PRD v1.1 | 15 | UNVERIFIED: original text unavailable; summarized invariants above |
@@ -300,27 +300,57 @@ ADR-0015 and docs/evaluation.md map the independent evaluator process, frozen
 family/person/group/time splits, label-blind generation, consented synthetic imports,
 proper scoring/missingness, clustered uncertainty, conditional forecasts and
 separately owner-signed batch authorization protocol. All reports keep real-human
-validity and cross-model transfer NOT TESTED; complete original HWS falsifier and
-registry traceability remain UNVERIFIED. No production defaults or owner adequacy
+validity and cross-model transfer NOT_TESTED. The complete supplied source
+falsifiers are now enumerated separately by ADR0020; unsupplied private-document
+traceability remains UNVERIFIED. No production defaults or owner adequacy
 thresholds are changed. Engineering integration still requires exact-SHA review
 and passing complete checks.
 
 ## #17 demo and separate study protocol
 
 ADR0016, docs/backend-demo.md and docs/study-protocol.md map the 24-person,
-eight-overlapping-group, 48-directed-edge sparse reference demo; actual fake
+eight-overlapping-group sparse reference demo (legacy 48 directed edges, current
+v2 104 directional reports); actual fake
 multi-seed run/replay/export/recovery measurements; and the evaluator-owned fixed
 30-real-day reservation/report protocol. Existing runtime/cognitive/receipt caps
 are retained. Engineering acceptance, synthetic behavioral evidence and human
 validity are separate fields. A real 30-day run, live independent frontier-model
-transfer, real-human validity and unavailable complete HWS falsifiers are NOT
-TESTED/NOT RUN. The backend console contract and UI backlog are owner-review
+transfer and real-human validity remain NOT_TESTED/NOT_RUN. The complete supplied
+HWS registry is represented separately in ADR0020, with evidence adequacy kept
+distinct from enumeration. The backend console contract and UI backlog are owner-review
 material only; no UI entry, deployment, model-weight update or main merge occurs.
 
 ## Alignment #40: full drive registry and explicit old-state compatibility
 
-ADR0017 maps the owner-supplied22-drive registry, bounded hypothesis parameters,
+ADR0017 maps the owner-supplied 22-drive registry, bounded hypothesis parameters,
 permitted context/history/resource/relationship/belief/uncertainty appraisal,
 version-aware decoder and isolated new runtime host. Legacy six-variable state
-and recorded policies are retained with their old wire semantics. Only this
-registry source gap is resolved; #41–#44 remain separate sequential work.
+and recorded policies are retained with their old wire semantics. This resolves
+the supplied drive-name gap; source coverage is bounded to the ticket extract.
+
+## Alignment #41–#43: actions, relationships and evidence
+
+ADR0018 maps all 27 supplied actions and 14 lifecycle stages to their owners,
+recipient/permission/evidence rules, duration/resources, effects, disclosure and
+outcome tracking. Legacy policy/codec dispatch stays explicit; new cognition
+consumes the complete drive/action engines rather than a disconnected registry.
+
+ADR0019 maps all supplied §7 relationship fields to observer-owned attributed
+contexts, relation.v2 lineage/codec checks, permissioned cognition and the shared
+five/24-person demo. Same-input label swaps are invariant; history/expectation/
+stress ablations and adverse-spouse/supportive-acquaintance reversal exercise
+context effects without assigning role-based stereotypes. Outcomes need observed
+recipient evidence; finite shared time is actually consumed.
+
+ADR0020 maps every supplied §19/§20 row, stable source ID and evidence requirement
+to a frozen, separately versioned report. It reuses #42 controlled inputs through
+an isolated label-blind child; exact retained source/config/model/dataset/seed
+and execution-time evidence is required by verification. A complete 23-row registry
+is engineering coverage, not 23 scientific passes. Real-data calibration readiness
+is unmet; human/model transfer remain NOT_TESTED and the real study NOT_RUN. Only
+bounded independent reproduction can earn the declared engineering PASS.
+
+The aggregate #44 milestone still requires exact final-base/head verification,
+criterion-by-criterion original ticket reconciliation and an independent fresh
+recommendation on owner-only PR #38. These extracts do not establish full private
+PRD traceability or a completed IHG end-user product.
