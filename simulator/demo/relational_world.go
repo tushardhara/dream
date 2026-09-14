@@ -128,6 +128,7 @@ func reconstructRelational(sc scenario.Scenario, through int, domain, common cor
 			for _, f := range view.Facts {
 				if known[f.ID] {
 					s.Sources = append(s.Sources, f.ID)
+					s.RelationshipEvidence = append(s.RelationshipEvidence, perceived(owner, f.ID, 0, f.Confidence, dynamics.Signals{}))
 				}
 			}
 			visible := map[core.ID]bool{}

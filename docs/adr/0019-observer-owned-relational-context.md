@@ -36,6 +36,13 @@ eviction or invented neutral values makes an oversized input fit.
 `behavior.ApplyRelationship` translates currently permitted observer reports into
 #41 disclosure context and relationship memory; a host-selected focused interaction
 also supplies #40 history, relationship-support and expected-safety appraisal cues.
+Retrieved occurrence/learning timestamps are retained, and measure confidence is
+discounted by retrieved-source confidence. Missing, future, revoked, foreign or
+duplicate source metadata fails closed. The normal and provider-outage paths share
+one preparation gate: planners cannot mint relationship profiles or retrieved
+evidence. The bounded memory projection clamps aggregate readiness without
+changing disclosure eligibility/scoring.
+
 Trust, closeness, prior outcome and friction affect subjective consequences;
 expectation, sensitivity, fear, pride, shame, expected reaction, protective intent,
 norms and stress retain the #41 disclosure mechanisms. These coefficients are
@@ -91,7 +98,9 @@ Unobserved outcomes remain unknown. No fake completion of learning/study is impl
 | Supplied source fields, uncertainty and bounds | TestRelationshipSourceFieldsAndUnknown |
 | Exact five-person topology, contradictions, W-B unknown | TestFivePersonDirectionalTopology |
 | Same actor/event/seed distributions; role/history/state ablations; reversal | TestRelationalControlledSpecificityAndAblations |
-| Foreign, revoked, future/expired and ambiguous inputs | TestRelationshipAccessAndTimeFailClosed |
+| Foreign, revoked, future/expired and ambiguous inputs | TestRelationshipAccessAndTimeFailClosed; TestRelationshipEvidenceMetadataFailsClosed |
+| Retained timestamps/uncertainty and bounded extremes | TestRelationshipRetainsRetrievedTimeAndUncertainty; TestRelationshipExtremeValidMeasures |
+| Normal/outage planner authority | TestActionPlanCannotMintRelationshipAuthority; TestActionCognitiveIntegration forged relationship/evidence cases (real PG) |
 | Graph version, source/observer/subject/time and safe-context envelope | TestRelationshipV2CodecPermissionEnvelope |
 | Actual cognitive handler distribution and appraisal sensitivity | TestRelationalContextReachesCognitiveHandler |
 | Five/24 common-engine checkpoints, draws, replay and recovery | TestRelationalFiveAnd24CommonEngineRecovery |

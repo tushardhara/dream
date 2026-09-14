@@ -24,6 +24,14 @@ probes.extend([
     ("actual-help", "simulator/demo/relational_world.go", "w.Resources[selected.Resource] -= selected.Units", "w.Resources[selected.Resource] -= 0 * selected.Units", "TestRelationalRepliesAreCausalAndYearBounded"),
 ])
 
+probes.extend([
+    ("memory-range", "simulator/behavior/relationships.go", "Disclosure: bounded(c.readiness())", "Disclosure: c.readiness()", "TestRelationshipExtremeValidMeasures"),
+    ("retained-time", "simulator/behavior/relationships.go", "p := evidence[m.Evidence]", "p := evidence[m.Evidence]; p.OccurredAt = s.Observation.Event.OccurredAt; p.LearnedAt = s.Observation.Event.LearnedAt", "TestRelationshipRetainsRetrievedTimeAndUncertainty"),
+    ("source-uncertainty", "simulator/behavior/relationships.go", "float64(source.Confidence)", "(float64(source.Confidence)*0+1)", "TestRelationshipRetainsRetrievedTimeAndUncertainty"),
+    ("planner-profile", "app/hws/action_cognitive.go", "len(frame.Actions.Relationships) == 0", "(true || len(frame.Actions.Relationships) == 0)", "TestActionPlanCannotMintRelationshipAuthority"),
+    ("planner-evidence", "app/hws/action_cognitive.go", "len(frame.Actions.RelationshipEvidence) == 0", "(true || len(frame.Actions.RelationshipEvidence) == 0)", "TestActionPlanCannotMintRelationshipAuthority"),
+])
+
 for name, file, old, new, test in probes:
     path = root / file
     original = path.read_bytes()

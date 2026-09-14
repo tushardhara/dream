@@ -15,6 +15,7 @@ import (
 	"github.com/tushardhara/dream/app/hws"
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/simulator/behavior"
+	"github.com/tushardhara/dream/simulator/dynamics"
 	rt "github.com/tushardhara/dream/simulator/runtime"
 	"github.com/tushardhara/dream/simulator/scenario"
 )
@@ -34,8 +35,9 @@ func TestActionCognitiveIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	store := New(db)
-	for _, name := range []string{"recorded", "disclosure", "partial", "lie", "revoked_before_commit", "source_revoked_before_commit", "forged_grant", "revoked_during_plan", "forged_operational", "outage", "refused", "wait"} {
+	for _, name := range []string{"recorded", "disclosure", "partial", "lie", "revoked_before_commit", "source_revoked_before_commit", "forged_grant", "forged_relationship", "outage_forged_relationship", "forged_relationship_evidence", "outage_forged_relationship_evidence", "revoked_during_plan", "forged_operational", "outage", "refused", "wait"} {
 		t.Run(name, func(t *testing.T) {
+			outage := strings.HasPrefix(name, "outage")
 			m := runtimeManifest(t, "action-cognitive-"+name)
 			// Select the non-WAIT fixture without depending on its subjective score.
 			// Production still samples both alternatives; choice tests cover both.
@@ -93,7 +95,7 @@ func TestActionCognitiveIntegration(t *testing.T) {
 			calls := 0
 			provider := modelFunc(func(c context.Context, i hws.ProviderInput) (hws.ProviderResponse, error) {
 				calls++
-				if name == "outage" {
+				if outage {
 					return hws.ProviderResponse{Status: hws.ProviderUnavailable}, nil
 				}
 				if name == "refused" {
@@ -106,10 +108,10 @@ func TestActionCognitiveIntegration(t *testing.T) {
 				t.Fatal(e)
 			}
 			artifact, e := gateway.Execute(ctx, request)
-			if name != "outage" && name != "refused" && e != nil {
+			if !outage && name != "refused" && e != nil {
 				t.Fatal(e)
 			}
-			if (name == "outage" || name == "refused") && e == nil {
+			if (outage || name == "refused") && e == nil {
 				t.Fatal("failure unexpectedly generated artifact")
 			}
 			if name == "refused" {
@@ -117,7 +119,7 @@ func TestActionCognitiveIntegration(t *testing.T) {
 					t.Fatal("refusal accepted as outage evidence")
 				}
 			}
-			if name == "outage" {
+			if outage {
 				if _, use, err := store.FailedModel(ctx, request.Scope, request.Key); err != nil || !use.Failed || len(use.Hash) != 64 {
 					t.Fatal("missing durable outage evidence", err)
 				}
@@ -142,6 +144,15 @@ func TestActionCognitiveIntegration(t *testing.T) {
 					f.Actions.Offers = []behavior.ActionOffer{{Kind: kind, Mode: mode, Evidence: []core.ID{"e1"}, Recipient: "a", Duration: 1}}
 					v := behavior.ContextValue{Value: .8, Confidence: 1, Evidence: "e1"}
 					f.Actions.Contexts = []behavior.DisclosureContext{{Observer: "b", Recipient: "a", Trust: v, ExpectedReaction: v}}
+				}
+				if strings.Contains(name, "forged_relationship") {
+					if strings.HasSuffix(name, "_evidence") {
+						f.Actions.RelationshipEvidence = []dynamics.Perceived{p}
+					} else {
+						f.Actions.Focus = "a"
+						f.Actions.Relationships = []core.RelationshipContext{{Version: 1, Observer: "b", Other: "a", Types: []core.ID{"friend"}, Valid: core.Interval{}, Measures: []core.RelationshipMeasure{{Kind: "trust", Value: .8, Confidence: 1, Source: "e1"}}}}
+						f.Actions.RelationshipEvidence = []dynamics.Perceived{p}
+					}
 				}
 				if name == "forged_grant" {
 					f.Actions.Disclosure = &behavior.DisclosureGrant{Recipient: "a", Mode: behavior.Full, Sources: []core.ID{"e1"}}
@@ -182,13 +193,13 @@ func TestActionCognitiveIntegration(t *testing.T) {
 			}
 			var receipt hws.Receipt
 			use := hws.ModelUse{Key: request.Key, Hash: artifact.Hash}
-			if name == "outage" || name == "refused" {
+			if outage || name == "refused" {
 				receipt, e = service.Step(ctx, request, lease, "cognitive-step", nil)
 
 			} else {
 				receipt, e = service.Apply(ctx, request, artifact, lease, "cognitive-step", disclosure)
 			}
-			if name == "revoked_during_plan" || name == "revoked_before_commit" || name == "source_revoked_before_commit" || name == "forged_grant" || name == "forged_operational" || name == "refused" {
+			if strings.Contains(name, "forged_relationship") || name == "revoked_during_plan" || name == "revoked_before_commit" || name == "source_revoked_before_commit" || name == "forged_grant" || name == "forged_operational" || name == "refused" {
 				if e == nil {
 					t.Fatal("unsafe preparation committed")
 				}
@@ -209,7 +220,7 @@ func TestActionCognitiveIntegration(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			if checkpoint.Last.Actor != "b" || (name != "outage" && checkpoint.ModelHash != artifact.Hash) || len(checkpoint.Outcomes) != 1 || checkpoint.Actors[1].Drives.Applied[0].Event != "e1" {
+			if checkpoint.Last.Actor != "b" || (!outage && checkpoint.ModelHash != artifact.Hash) || len(checkpoint.Outcomes) != 1 || checkpoint.Actors[1].Drives.Applied[0].Event != "e1" {
 				t.Fatal("missing persisted cognitive record")
 			}
 			if name == "wait" {
@@ -218,7 +229,7 @@ func TestActionCognitiveIntegration(t *testing.T) {
 					t.Fatal("behavioral WAIT misclassified", counts)
 				}
 			}
-			if name == "outage" {
+			if outage {
 				counts := signals.Counts()
 				if counts[hws.CognitiveCommit][hws.ProviderOutage] != 1 || counts[hws.CognitiveCommit][hws.BehavioralWait] != 0 {
 					t.Fatal("outage presented as behavior", counts)
@@ -233,7 +244,7 @@ func TestActionCognitiveIntegration(t *testing.T) {
 				t.Fatal("foreign private actor exposed")
 			}
 			// Crash/restart uses the durable runtime operation receipt, no generation.
-			if name == "outage" {
+			if outage {
 				use.Hash = checkpoint.ModelHash
 				use.Failed = true
 				if !checkpoint.Last.Operational || !checkpoint.Outcomes[0].Outcome.Operational || len(checkpoint.Last.Candidates) != 1 {
@@ -242,7 +253,7 @@ func TestActionCognitiveIntegration(t *testing.T) {
 			}
 			retryRuntime := hws.Runtime{Store: New(db), Model: &use}
 			retry, e := retryRuntime.Execute(ctx, request.Scope, lease, "cognitive-step", rt.Command{Kind: "step"})
-			if e != nil || retry != receipt || calls != map[bool]int{true: 3, false: 1}[name == "outage"] {
+			if e != nil || retry != receipt || calls != map[bool]int{true: 3, false: 1}[outage] {
 				t.Fatal("restart reapplied or regenerated", e)
 			}
 			deliveries := 0
@@ -279,7 +290,7 @@ func TestActionCognitiveIntegration(t *testing.T) {
 					}
 				}
 			}
-			if name == "outage" && deliveries != 0 {
+			if outage && deliveries != 0 {
 				t.Fatal("outage delivered behavior")
 			}
 			snapshotKey, e := store.CaptureSnapshot(ctx, request.Scope, "after-cognition", receipt.Revision)

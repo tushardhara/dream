@@ -55,18 +55,19 @@ type DisclosureGrant struct {
 	Sources   []core.ID
 }
 type ActionSituation struct {
-	Observation   drives.Observation
-	Beliefs       []Belief
-	Relationships []Memory
-	Offers        []ActionOffer
-	Contexts      []DisclosureContext
-	Sources       []core.ID
-	Present       []core.ID
-	Resources     map[core.ID]int64
-	Commitments   []Commitment
-	Disclosure    *DisclosureGrant
-	Outage        bool
-	Horizon       core.LogicalTime
+	RelationshipEvidence []dynamics.Perceived
+	Observation          drives.Observation
+	Beliefs              []Belief
+	Relationships        []Memory
+	Offers               []ActionOffer
+	Contexts             []DisclosureContext
+	Sources              []core.ID
+	Present              []core.ID
+	Resources            map[core.ID]int64
+	Commitments          []Commitment
+	Disclosure           *DisclosureGrant
+	Outage               bool
+	Horizon              core.LogicalTime
 }
 type PrivateActionState struct {
 	Appraisal  [4]float64         `json:"appraisal"` // threat, opportunity, care, status
@@ -235,6 +236,9 @@ func (s ActionSituation) validate(a ActionActor, at core.LogicalTime) error {
 			return fmt.Errorf("invalid permitted sources")
 		}
 		sources[id] = true
+	}
+	if _, e := relationshipEvidence(s, a.Drives.Actor, at); e != nil {
+		return e
 	}
 	if !sources[s.Observation.Event.Event] {
 		return fmt.Errorf("event not retrieved")

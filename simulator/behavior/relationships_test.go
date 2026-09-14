@@ -3,6 +3,8 @@ package behavior
 import (
 	"encoding/json"
 	"github.com/tushardhara/dream/core"
+	"github.com/tushardhara/dream/simulator/drives"
+	"github.com/tushardhara/dream/simulator/dynamics"
 	"math"
 	"reflect"
 	"testing"
@@ -15,6 +17,7 @@ func relationalChoice(t *testing.T, r *core.RelationshipContext, focus bool) (Ac
 	t.Helper()
 	a, s := actionFixture(t)
 	s.Contexts = nil
+	s.RelationshipEvidence = []dynamics.Perceived{s.Observation.Event}
 	s.Offers = []ActionOffer{{Kind: Ask, Recipient: "b", Evidence: []core.ID{"e"}, Duration: 1}, {Kind: Decline, Recipient: "b", Evidence: []core.ID{"e"}, Duration: 1}, {Kind: Reveal, Recipient: "b", Evidence: []core.ID{"e"}, Duration: 1, Mode: Full}}
 	s.Disclosure = &DisclosureGrant{Recipient: "b", Mode: Full, Sources: []core.ID{"e"}}
 	if r != nil {
@@ -107,16 +110,19 @@ func TestRelationalControlledSpecificityAndAblations(t *testing.T) {
 	}
 }
 func TestRelationshipAccessAndTimeFailClosed(t *testing.T) {
-	for _, name := range []string{"foreign", "revoked", "future", "expired", "duplicate", "nan"} {
+	for _, name := range []string{"foreign", "revoked", "unretrieved_detail", "future", "expired", "duplicate", "nan"} {
 		t.Run(name, func(t *testing.T) {
 			_, s := actionFixture(t)
 			s.Contexts = nil
+			s.RelationshipEvidence = []dynamics.Perceived{s.Observation.Event}
 			r := relationAccount("friend", .5, .2, .1)
 			switch name {
 			case "foreign":
 				r.Observer = "c"
 			case "revoked":
 				s.Sources = nil
+			case "unretrieved_detail":
+				r.Details[0].Sources = []core.ID{"unpermitted-private-report"}
 			case "future":
 				r.Valid.Start = 6
 			case "expired":
@@ -129,6 +135,100 @@ func TestRelationshipAccessAndTimeFailClosed(t *testing.T) {
 			}
 			if _, e := ApplyRelationship(s, r, "a", 5, true); e == nil {
 				t.Fatal("invalid relationship accepted")
+			}
+		})
+	}
+}
+
+func TestRelationshipExtremeValidMeasures(t *testing.T) {
+	for _, sign := range []float64{1, -1} {
+		a, s := actionFixture(t)
+		s.Contexts = nil
+		s.RelationshipEvidence = []dynamics.Perceived{s.Observation.Event}
+		p := s.Observation.Event
+		p.Confidence = 1
+		s.RelationshipEvidence = []dynamics.Perceived{p}
+		r := relationAccount("friend", 0, 0, 0)
+		r.Measures = nil
+		for _, kind := range []core.ID{"trust", "expectation", "expected_reaction", "protective_intent", "social_norm", "prior_outcome", "sensitivity", "fear", "pride", "shame", "stress"} {
+			v := sign
+			switch kind {
+			case "sensitivity", "fear", "pride", "shame", "stress":
+				v = -sign
+			}
+			r.Measures = append(r.Measures, core.RelationshipMeasure{Kind: kind, Value: v, Confidence: 1, Source: "e"})
+		}
+		next, e := ApplyRelationship(s, r, "a", 5, true)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, _, e = ChooseAction(a, next, 5, 0); e != nil {
+			t.Fatal("valid extreme report became invalid memory", e)
+		}
+		if next.Relationships[0].Disclosure != sign {
+			t.Fatal("bounded projection", next.Relationships[0].Disclosure)
+		}
+	}
+}
+func retainedRelationshipFixture(t *testing.T) (ActionSituation, core.RelationshipContext) {
+	t.Helper()
+	_, s := actionFixture(t)
+	s.Contexts = nil
+	s.RelationshipEvidence = []dynamics.Perceived{s.Observation.Event}
+	s.Observation.Event.OccurredAt = 4
+	s.Observation.Event.LearnedAt = 5
+	r := relationAccount("friend", .8, .2, .5)
+	for i := range r.Measures {
+		r.Measures[i].Source = "history-report"
+	}
+	r.Details[0].Sources = []core.ID{"history-report"}
+	s.Sources = append(s.Sources, "history-report")
+	p := s.Observation.Event
+	p.Event = "history-report"
+	p.Rights.Resource = p.Event
+	p.OccurredAt = 1
+	p.LearnedAt = 2
+	p.Confidence = .4
+	s.RelationshipEvidence = []dynamics.Perceived{p}
+	return s, r
+}
+func TestRelationshipRetainsRetrievedTimeAndUncertainty(t *testing.T) {
+	s, r := retainedRelationshipFixture(t)
+	out, e := ApplyRelationship(s, r, "a", 5, true)
+	if e != nil {
+		t.Fatal(e)
+	}
+	cue := out.Observation.Context[drives.Relationships]
+	if cue.Evidence.OccurredAt != 1 || cue.Evidence.LearnedAt != 2 || cue.Evidence.Event != "history-report" {
+		t.Fatal("current event replaced retained source times", cue.Evidence)
+	}
+	if math.Abs(float64(out.Contexts[0].Trust.Confidence)-.8*.4) > 1e-12 {
+		t.Fatal("source uncertainty discarded")
+	}
+	s.RelationshipEvidence[0].Confidence = 0
+	out, e = ApplyRelationship(s, r, "a", 5, true)
+	if e != nil || out.Contexts[0].Trust.Confidence != 0 {
+		t.Fatal("unknown source became certain", e)
+	}
+}
+func TestRelationshipEvidenceMetadataFailsClosed(t *testing.T) {
+	for _, name := range []string{"missing", "foreign", "future", "duplicate", "revoked"} {
+		t.Run(name, func(t *testing.T) {
+			s, r := retainedRelationshipFixture(t)
+			switch name {
+			case "missing":
+				s.RelationshipEvidence = nil
+			case "foreign":
+				s.RelationshipEvidence[0].Actor = "b"
+			case "future":
+				s.RelationshipEvidence[0].LearnedAt = 6
+			case "duplicate":
+				s.RelationshipEvidence = append(s.RelationshipEvidence, s.RelationshipEvidence[0])
+			case "revoked":
+				s.RelationshipEvidence[0].Rights.Revoked = true
+			}
+			if _, e := ApplyRelationship(s, r, "a", 5, true); e == nil {
+				t.Fatal("invalid retained source accepted")
 			}
 		})
 	}

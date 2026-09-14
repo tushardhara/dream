@@ -34,10 +34,18 @@ func ApplyRelationship(s ActionSituation, r core.RelationshipContext, actor core
 			return ActionSituation{}, fmt.Errorf("ambiguous relationship memory")
 		}
 	}
+	evidence, err := relationshipEvidence(s, actor, at)
+	if err != nil {
+		return ActionSituation{}, err
+	}
 	c := DisclosureContext{Observer: actor, Recipient: r.Other}
 	measures := map[core.ID]ContextValue{}
 	for _, m := range r.Measures {
-		measures[m.Kind] = ContextValue{Value: m.Value, Confidence: m.Confidence, Evidence: m.Source}
+		source, ok := evidence[m.Source]
+		if !ok {
+			return ActionSituation{}, fmt.Errorf("missing relationship source metadata")
+		}
+		measures[m.Kind] = ContextValue{Value: m.Value, Confidence: core.Confidence(float64(m.Confidence) * float64(source.Confidence)), Evidence: m.Source}
 	}
 	c.Trust = measures["trust"]
 	c.RoleExpectation = measures["expectation"]
@@ -56,7 +64,7 @@ func ApplyRelationship(s ActionSituation, r core.RelationshipContext, actor core
 	refs := r.Sources()
 	if len(refs) > 0 {
 		trust := bounded(c.Trust.weighted() + .15*measures["closeness"].weighted() + .2*c.PriorOutcome.weighted() - .2*measures["friction"].weighted())
-		s.Relationships = append(append([]Memory{}, s.Relationships...), Memory{Other: r.Other, Trust: trust, Disclosure: c.readiness(), Evidence: refs})
+		s.Relationships = append(append([]Memory{}, s.Relationships...), Memory{Other: r.Other, Trust: trust, Disclosure: bounded(c.readiness()), Evidence: refs})
 	}
 	if focus {
 		for _, pair := range []struct {
@@ -67,15 +75,31 @@ func ApplyRelationship(s ActionSituation, r core.RelationshipContext, actor core
 			if m.Evidence == "" {
 				continue
 			}
-			p := s.Observation.Event
-			p.Event = m.Evidence
-			p.Confidence = m.Confidence
+			p := evidence[m.Evidence]
+			p.Confidence = m.Confidence // confidence of this evidence-bound measure
 			p.Signals = dynamics.Signals{}
-			p.Rights = core.Rights{Resource: m.Evidence, Grants: []core.Grant{{Actor: actor, Recipient: actor, Purpose: "simulation", Operation: core.Read}, {Actor: actor, Recipient: actor, Purpose: "simulation", Operation: core.Derive}}}
-			// This is a trusted-host adapter over already permitted sources. It cannot
-			// be used to authorize retrieval or disclosure of the original record.
+			p.Rights.Grants = append([]core.Grant{}, p.Rights.Grants...)
 			s.Observation.Context[pair.slot] = drives.Cue{Evidence: p, Value: (m.Value + 1) / 2}
 		}
 	}
 	return s, nil
+}
+
+// Retrieved metadata, not the current event's timestamps, binds retained cues.
+func relationshipEvidence(s ActionSituation, actor core.ID, at core.LogicalTime) (map[core.ID]dynamics.Perceived, error) {
+	if len(s.RelationshipEvidence) > 16 {
+		return nil, fmt.Errorf("relationship evidence bound")
+	}
+	sources := map[core.ID]bool{}
+	for _, id := range s.Sources {
+		sources[id] = true
+	}
+	out := map[core.ID]dynamics.Perceived{}
+	for _, p := range s.RelationshipEvidence {
+		if _, duplicate := out[p.Event]; duplicate || !sources[p.Event] || p.Validate(actor, at) != nil {
+			return nil, fmt.Errorf("invalid retrieved relationship evidence")
+		}
+		out[p.Event] = p
+	}
+	return out, nil
 }

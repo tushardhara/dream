@@ -23,13 +23,14 @@ const actionCognitivePrefix = "cognitive.v2:"
 // ActionFrame contains trusted affordances. The service supplies Sources and
 // Disclosure from current capabilities; a planner cannot supply either grant.
 type ActionFrame struct {
-	Relationships []core.RelationshipContext
-	Focus         core.ID
-	Offers        []behavior.ActionOffer
-	Contexts      []behavior.DisclosureContext
-	DriveContext  *[drives.ContextCount]drives.Cue
-	Sources       []core.ID
-	Disclosure    *behavior.DisclosureGrant
+	RelationshipEvidence []dynamics.Perceived
+	Relationships        []core.RelationshipContext
+	Focus                core.ID
+	Offers               []behavior.ActionOffer
+	Contexts             []behavior.DisclosureContext
+	DriveContext         *[drives.ContextCount]drives.Cue
+	Sources              []core.ID
+	Disclosure           *behavior.DisclosureGrant
 }
 type ActionCheckpoint struct {
 	Version      int                      `json:"version"`
@@ -224,7 +225,7 @@ func (h CognitiveHandler) transitionActions(current rt.State, input rt.Input, cl
 		return rt.Output{}, fmt.Errorf("recorded model binding required")
 	}
 	f := frame.Actions
-	s := behavior.ActionSituation{Observation: drives.Observation{Event: frame.Situation.Perceived}, Beliefs: frame.Situation.Beliefs, Relationships: frame.Situation.Relationships, Offers: f.Offers, Contexts: f.Contexts, Sources: f.Sources, Disclosure: f.Disclosure, Outage: frame.Situation.Outage, Horizon: frame.Situation.Horizon}
+	s := behavior.ActionSituation{RelationshipEvidence: f.RelationshipEvidence, Observation: drives.Observation{Event: frame.Situation.Perceived}, Beliefs: frame.Situation.Beliefs, Relationships: frame.Situation.Relationships, Offers: f.Offers, Contexts: f.Contexts, Sources: f.Sources, Disclosure: f.Disclosure, Outage: frame.Situation.Outage, Horizon: frame.Situation.Horizon}
 	// Missing context stays explicitly zero-confidence. No inferred trust/consent.
 	if f.DriveContext != nil {
 		s.Observation.Context = *f.DriveContext
@@ -375,4 +376,10 @@ func (h CognitiveHandler) transitionActions(current rt.State, input rt.Input, cl
 	c.Outcomes = append(c.Outcomes, o)
 	out.Data, e = c.Encode()
 	return out, e
+}
+
+// A planner proposes affordances, never retrieved data or capability grants.
+// Apply and operational fallback must use the same preparation boundary.
+func validActionPlan(frame CognitiveFrame) bool {
+	return frame.Actions != nil && len(frame.Situation.Offers) == 0 && len(frame.Actions.Sources) == 0 && frame.Actions.Disclosure == nil && len(frame.Actions.Relationships) == 0 && len(frame.Actions.RelationshipEvidence) == 0
 }
