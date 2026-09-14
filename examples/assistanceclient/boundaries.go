@@ -59,7 +59,7 @@ func (l *Local) Advance(at core.LogicalTime) error {
 func (l *Local) ReadBoundaries(ctx context.Context, r assistance.Request) (assistance.BoundarySnapshot, error) {
 	defer l.lock(ctx)()
 	old, ok := l.requests[r.ID]
-	if !ok || assistance.Digest(old) != assistance.Digest(r) || r.Version != assistance.ScopedVersion {
+	if !ok || assistance.Digest(old) != assistance.Digest(r) || !assistance.UsesScopedBoundaries(r.Version) {
 		return assistance.BoundarySnapshot{}, assistance.ErrDenied
 	}
 	return assistance.BoundarySnapshot{Now: l.now, Records: copyValue(l.boundaries)}, nil

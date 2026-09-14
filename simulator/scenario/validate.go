@@ -182,11 +182,16 @@ func (s Scenario) Validate() error {
 			return fail(p, "relationship context bound")
 		}
 		seenContexts := map[core.ID]bool{}
+		seenDomainAccounts := map[core.ID]bool{}
 		for _, c := range a.Contexts {
-			if c.Validate(a.ID, c.Other) != nil || c.Valid.Start != 0 || seenContexts[c.Other] {
+			if c.Validate(a.ID, c.Other) != nil || c.Valid.Start != 0 || c.Version == 1 && seenContexts[c.Other] || c.Version == 2 && seenDomainAccounts[c.Account] {
 				return fail(p, "invalid observer relationship context")
 			}
-			seenContexts[c.Other] = true
+			if c.Version == 1 {
+				seenContexts[c.Other] = true
+			} else {
+				seenDomainAccounts[c.Account] = true
+			}
 			found := false
 			for _, r := range a.Relationships {
 				if r.Other == c.Other {

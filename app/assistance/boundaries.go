@@ -7,10 +7,14 @@ import (
 
 // ScopedVersion is opt-in. Version remains the frozen #50 wire/replay contract.
 const ScopedVersion = "assistance.v2"
+const DomainVersion = "assistance.v3"
+
+func UsesScopedBoundaries(v string) bool { return v == ScopedVersion || v == DomainVersion }
+
 const ClarificationCooldown core.LogicalTime = 10
 const MaxClarifications = 2
 
-func knownVersion(v string) bool { return v == Version || v == ScopedVersion }
+func knownVersion(v string) bool { return v == Version || UsesScopedBoundaries(v) }
 
 type PlanningDecision struct {
 	Allowed  bool
@@ -50,7 +54,7 @@ func (g *BoundaryGate) Check(ctx context.Context, r Request, c Candidate) error 
 	return nil
 }
 func (g *BoundaryGate) Plan(ctx context.Context, r Request) (PlanningDecision, error) {
-	if g == nil || r.Version != ScopedVersion || r.Scope == nil || g.Auth == nil || g.Source == nil || g.History == nil || g.Auth.Check(ctx, r, Candidate{Action: Wait, Reason: "restraint"}) != nil {
+	if g == nil || !UsesScopedBoundaries(r.Version) || r.Scope == nil || g.Auth == nil || g.Source == nil || g.History == nil || g.Auth.Check(ctx, r, Candidate{Action: Wait, Reason: "restraint"}) != nil {
 		return PlanningDecision{}, ErrDenied
 	}
 	snapshot, e := g.Source.ReadBoundaries(ctx, r)
@@ -96,7 +100,7 @@ func (g *BoundaryGate) Plan(ctx context.Context, r Request) (PlanningDecision, e
 		Records  []core.Boundary
 		Recent   []Interaction
 		Decision core.BoundaryDecision
-	}{ScopedVersion, r.Scope, snapshot.Records, recent, decision})
+	}{r.Version, r.Scope, snapshot.Records, recent, decision})
 	return PlanningDecision{Allowed: decision.Allowed, Revision: revision}, nil
 }
 func preferenceFor(r Request) Result {
@@ -109,15 +113,18 @@ func waitFor(version, reason string) Result {
 	out.Version = version
 	return out
 }
-func (o Result) validPlan(r Request, itemsValid bool, p PlanningDecision) bool {
+func (o Result) validPlan(r Request, itemsValid bool, p PlanningDecision, contextKnown bool) bool {
 	if !itemsValid {
 		return false
 	}
-	if r.Version == ScopedVersion {
+	if UsesScopedBoundaries(r.Version) {
 		if !p.Allowed {
 			return Digest(o) == Digest(waitFor(r.Version, "boundary"))
 		}
-		return o.Candidates[o.Selected].Reason != "boundary"
+		if r.Version == DomainVersion && !contextKnown {
+			return Digest(o) == Digest(waitFor(r.Version, "relationship_context"))
+		}
+		return o.Candidates[o.Selected].Reason != "boundary" && o.Candidates[o.Selected].Reason != "relationship_context"
 	}
 	return true
 }

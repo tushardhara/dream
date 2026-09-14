@@ -58,7 +58,7 @@ func (l *Local) Register(r assistance.Request) error {
 	if old, ok := l.requests[r.ID]; ok && assistance.Digest(old) != assistance.Digest(r) {
 		return assistance.ErrInvalid
 	}
-	if r.Version == assistance.ScopedVersion {
+	if assistance.UsesScopedBoundaries(r.Version) {
 		if _, exists := l.requests[r.ID]; !exists && r.At < l.now {
 			return assistance.ErrDenied
 		}

@@ -34,6 +34,9 @@ func ExplicitPreference(goal Goal, user core.ID) Result {
 type FakePlanner struct{}
 
 func (FakePlanner) Plan(ctx context.Context, in Input) (Result, error) {
+	if in.Version == DomainVersion {
+		return (DomainPlanner{}).Plan(ctx, in)
+	}
 	if ctx.Err() != nil {
 		return Result{}, ctx.Err()
 	}

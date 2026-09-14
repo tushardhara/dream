@@ -59,7 +59,8 @@ func (a Action) Valid() bool { return a == Wait || a == Clarify || a == Acknowle
 // Request contains host-selected evidence references, never raw caller text or
 // simulated state. Goal is an explicit user choice, not an inferred relationship goal.
 type Request struct {
-	Scope                     *core.InteractionScope `json:",omitempty"`
+	Focus                     *core.RelationshipFocus `json:",omitempty"`
+	Scope                     *core.InteractionScope  `json:",omitempty"`
 	Version                   string
 	ID, Helper, User, Purpose core.ID
 	Participants              []core.ID
@@ -84,7 +85,7 @@ func (r Request) Validate() error {
 	if r.Version == Version && r.Scope != nil {
 		return ErrInvalid
 	}
-	if r.Version == ScopedVersion {
+	if UsesScopedBoundaries(r.Version) {
 		if r.Scope == nil || r.Scope.Validate() != nil || r.Scope.Initiator != r.User || !seen[r.Scope.Target] || r.Scope.Via != "" && !seen[r.Scope.Via] {
 			return ErrInvalid
 		}
@@ -103,6 +104,14 @@ func (r Request) Validate() error {
 			}
 		}
 	}
+	if r.Version != DomainVersion && r.Focus != nil {
+		return ErrInvalid
+	}
+	if r.Version == DomainVersion {
+		if r.Focus == nil || r.Focus.Validate() != nil || r.Scope.Topic != core.ID(r.Focus.Domain) || r.Scope.Class == core.SummarySharing && r.Focus.Domain != core.Confidentiality {
+			return ErrInvalid
+		}
+	}
 	if !seen[r.User] {
 		return ErrInvalid
 	}
@@ -119,10 +128,10 @@ func (r Request) Validate() error {
 		if p.Version != 1 || p.Query.Validate() != nil || p.Binding != r.ID || p.Query.Actor != r.Helper || p.Recipient != r.Helper || p.Query.Purpose != r.Purpose || p.Mode != graph.ExternalContext || p.Operation != core.Read || p.Query.KnownAt != r.At || p.Query.ValidAt != r.At || !seen[p.Query.Scope.Owner] || owners[p.Query.Scope.Owner] || len(p.Sources) < 1 || len(p.Sources) > 16 {
 			return ErrInvalid
 		}
-		if (r.Arm == Single || r.Version == ScopedVersion && r.Scope.Class == core.PrivatePreparation) && p.Query.Scope.Owner != r.User {
+		if (r.Arm == Single || UsesScopedBoundaries(r.Version) && r.Scope.Class == core.PrivatePreparation) && p.Query.Scope.Owner != r.User {
 			return ErrInvalid
 		}
-		if r.Version == ScopedVersion {
+		if UsesScopedBoundaries(r.Version) {
 			inScope := false
 			for _, principal := range r.Scope.Participants() {
 				inScope = inScope || p.Query.Scope.Owner == principal
@@ -153,7 +162,7 @@ func (c Candidate) validate(r Request, items []graph.SafeContextItem) bool {
 		return false
 	}
 	if c.Action == Wait {
-		return c.Recipient == "" && len(c.Evidence) == 0 && (c.Reason == "restraint" || c.Reason == "disabled" || c.Reason == "unavailable" || r.Version == ScopedVersion && c.Reason == "boundary")
+		return c.Recipient == "" && len(c.Evidence) == 0 && (c.Reason == "restraint" || c.Reason == "disabled" || c.Reason == "unavailable" || UsesScopedBoundaries(r.Version) && c.Reason == "boundary" || r.Version == DomainVersion && c.Reason == "relationship_context")
 	}
 	// Both versions deliver only fixed, non-identifying templates to the requesting person.
 	// No free text, paraphrase, source identity or multi-person disclosure leaves here.
@@ -192,7 +201,9 @@ func (c Candidate) validate(r Request, items []graph.SafeContextItem) bool {
 }
 
 type Input struct {
-	Scope            *core.InteractionScope `json:",omitempty"`
+	Focus            *core.RelationshipFocus `json:",omitempty"`
+	Relationships    []DomainPerspective     `json:",omitempty"`
+	Scope            *core.InteractionScope  `json:",omitempty"`
 	Version          string
 	ID, Helper, User core.ID
 	Arm              Arm
@@ -225,7 +236,7 @@ func (o Result) validate(r Request, items []graph.SafeContextItem) bool {
 	if r.Arm == None && o.Candidates[o.Selected].Action != Wait {
 		return false
 	}
-	if r.Arm == Simple && Digest(o) != Digest(preferenceFor(r)) && !(r.Version == ScopedVersion && Digest(o) == Digest(waitFor(r.Version, "boundary"))) {
+	if r.Arm == Simple && Digest(o) != Digest(preferenceFor(r)) && !(UsesScopedBoundaries(r.Version) && Digest(o) == Digest(waitFor(r.Version, "boundary"))) && !(r.Version == DomainVersion && Digest(o) == Digest(waitFor(r.Version, "relationship_context"))) {
 		return false
 	}
 	return true
@@ -274,8 +285,9 @@ func (o Outcome) Validate() error {
 // Interaction is an event in the helper's independent history. Delivered is
 // mechanical receipt status only; outcomes require separately attributed evidence.
 type Interaction struct {
-	Scope            *core.InteractionScope `json:",omitempty"`
-	BoundaryHash     string                 `json:",omitempty"`
+	Focus            *core.RelationshipFocus `json:",omitempty"`
+	Scope            *core.InteractionScope  `json:",omitempty"`
+	BoundaryHash     string                  `json:",omitempty"`
 	EvidenceHash     string
 	Arm              Arm
 	Seed             uint64

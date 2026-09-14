@@ -152,6 +152,11 @@ func (s Scenario) capabilities() []core.ID {
 		}
 		if len(a.Contexts) > 0 {
 			c = append(c, "relationships.v2")
+			for _, profile := range a.Contexts {
+				if profile.Version == 2 {
+					c = append(c, "relationships.v3")
+				}
+			}
 		}
 		if len(a.Relationships) > 0 {
 			c = append(c, "relationships.v1")
