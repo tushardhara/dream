@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"time"
@@ -54,6 +55,10 @@ func (c Container) Generate(ctx context.Context, requests []experiment.Request) 
 	// Fixed flags and digest-only image: no mount, env passthrough, remote pull,
 	// daemon socket, elevated capability or policy-configurable command argument.
 	args := []string{"run", "--rm", "--pull=never", "--name", name, "--label", "dream.disposable=true", "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--memory=256m", "--cpus=1", "--pids-limit=32", "--user=65532:65532", "--entrypoint=/hws-generate", "-i", c.Image}
+	// Test ownership labels are metadata only, never passed into the child.
+	if run := os.Getenv("DREAM_TEST_RUN"); regexp.MustCompile(`^(codex|claude)-[0-9a-f]{32}$`).MatchString(run) {
+		args = append(args[:1], append([]string{"--label", "dream.test.run=" + run, "--label", "dream.test.role=" + os.Getenv("DREAM_TEST_ROLE")}, args[1:]...)...)
+	}
 	command := exec.CommandContext(ctx, "docker", args...)
 	command.Stdin = bytes.NewReader(raw)
 	var out limitedOutput

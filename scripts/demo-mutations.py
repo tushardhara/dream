@@ -2,6 +2,13 @@
 Every probe needs a green baseline and an actual assertion failure; restore bytes
 in finally. Uses synthetic tests only, with no provider, merge or deployment.
 """
+import signal
+
+def interrupted(signum, frame):
+    raise KeyboardInterrupt("owned check interrupted")
+
+signal.signal(signal.SIGTERM, interrupted)
+
 import pathlib
 import subprocess
 

@@ -119,4 +119,4 @@ run evidence and exact SHAs live on the ticket PR, not an assumed pass in this A
 Trusted composition is not network authentication or a Go security sandbox. Raw
 stores, constructors and researcher capabilities must never be exposed to clients
 or model tools. Real credential binding is #14. Original PRDs and the complete HWS
-§6 registry remain UNVERIFIED; this ticket makes no research/privacy certification.
+source text remains UNVERIFIED; the §6 drive names are now supplied in #40 (ADR0017). This ticket makes no research/privacy certification.

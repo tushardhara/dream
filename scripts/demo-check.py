@@ -1,6 +1,13 @@
 """Fresh disposable backend demo/replay/export acceptance; fake only, no deployment.
 Keeps the larger demo separate from the existing 120-second migration suite.
 """
+import signal
+
+def interrupted(signum, frame):
+    raise KeyboardInterrupt("owned check interrupted")
+
+signal.signal(signal.SIGTERM, interrupted)
+
 import os
 import pathlib
 import json
@@ -24,10 +31,10 @@ try:
     command("go", "build", "-trimpath", "-o", str(image_context / "hws-generate"), "./cmd/hws-generate", env=build_env)
     (image_context / "Dockerfile").write_text(
         'FROM scratch\nCOPY hws-generate /hws-generate\nUSER 65532:65532\nLABEL dream.study.fixture="' + name + '"\nENTRYPOINT ["/hws-generate"]\n')
-    command("docker", "build", "--network=none", "--iidfile", str(image_context / "id"), scratch.name, env=build_env)
+    command("docker", "build", "--force-rm", "--label", "dream.test.run=" + os.environ.get("DREAM_TEST_RUN", "standalone"), "--label", "dream.test.role=" + os.environ.get("DREAM_TEST_ROLE", "standalone"), "--network=none", "--iidfile", str(image_context / "id"), scratch.name, env=build_env)
     image = (image_context / "id").read_text().strip()
     command("docker", "run", "--detach", "--rm", "--name", name,
-            "--label", "dream.disposable=true", "--cpus", "2", "--memory", "512m",
+            "--label", "dream.disposable=true", "--label", "dream.test.run=" + os.environ.get("DREAM_TEST_RUN", "standalone"), "--label", "dream.test.role=" + os.environ.get("DREAM_TEST_ROLE", "standalone"), "--cpus", "2", "--memory", "512m",
             "--pids-limit", "128", "--tmpfs", "/var/lib/postgresql",
             "--publish", "127.0.0.1::5432", "--env", "POSTGRES_PASSWORD=disposable_local_only",
             "postgres:18.6")

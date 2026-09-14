@@ -83,3 +83,9 @@ privacy/evaluation/promotion policy under ordinary ticket authorization.
 
 At bootstrap both branches reported unprotected; this workflow does not establish
 server-side protection. Do not claim it does.
+
+## Shared VPC disk recovery safeguards
+
+Both roles must follow [test-resource-safety.md](test-resource-safety.md) before
+local heavy work. Use the foreground role guard, account retained work/cache,
+and checkpoint before stopping. Never launch a new supervisor or competing worker.

@@ -1,6 +1,6 @@
 # Requirements matrix and source gaps
 
-Authority is the executable summaries in epic #1 and tickets #2–#17. Original
+Authority is the executable summaries in epic #1 and tickets #2–#17, plus owner-supplied alignment epic #39 and its child tickets. Original
 PRD attachments are unavailable and are not published here. The source reference
 register below enumerates every cited section/ID but does **not** invent per-section
 meaning from missing text. Full source traceability remains UNVERIFIED. The String
@@ -38,7 +38,7 @@ These labels E1–E12 refer to epic correctness rules, not invented IHG source I
 
 ## Source reference register
 
-Every row is a missing-source gap, not a verified section-level interpretation.
+Except the drive registry explicitly supplied in #40, rows below remain missing-source gaps, not verified section-level interpretations.
 Ticket summaries constrain implementation in the interim; obtain authorized source
 access to complete traceability without publishing originals or private data.
 
@@ -48,7 +48,7 @@ access to complete traceability without publishing originals or private data.
 | HWS PRD v0.1 | §3 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §4 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §5 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §6 | UNVERIFIED: original text unavailable; summarized scope above |
+| HWS PRD v0.1 | §6 drive registry | Owner-supplied exact22-name registry in #40; simulator/drives and ADR0017. Other original section text is not certified |
 | HWS PRD v0.1 | §7 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §8 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §9 | UNVERIFIED: original text unavailable; summarized scope above |
@@ -182,7 +182,7 @@ trusted handler/port boundary and deferred CLI/API, dynamics/replay/scientific g
 
 | Criterion | Evidence / status |
 | --- | --- |
-| Complete HWS §6 drive-name registry | **UNVERIFIED / NOT VERIFIABLE**: complete source list unavailable. No all-names coverage claim. Owner source request remains open |
+| Complete HWS §6 drive-name registry | Exact22 names supplied by owner in #40; new versioned simulator/drives implementation, ADR0017 and registry tests. Independent integration gate still required |
 | Versioned documented initial active subset | ticket7-subset.v1 contains only the six concepts explicitly named in #7; ADR-0006 lists defaults, active and unsupported parameter coverage |
 | Stable substrate, bounded uncertain latent state, time and causes | TestDecaySubdivisionAndResidue, TestPlasticityBoundsAndCompoundInteraction, TestCodecAndCausalLedger |
 | Permitted perceived event → appraisal → competing deltas | TestPermissionAndStageIdempotency, TestReferenceTransitionGolden, AppraisalHandler boundary tests |
@@ -318,3 +318,11 @@ validity are separate fields. A real 30-day run, live independent frontier-model
 transfer, real-human validity and unavailable complete HWS falsifiers are NOT
 TESTED/NOT RUN. The backend console contract and UI backlog are owner-review
 material only; no UI entry, deployment, model-weight update or main merge occurs.
+
+## Alignment #40: full drive registry and explicit old-state compatibility
+
+ADR0017 maps the owner-supplied22-drive registry, bounded hypothesis parameters,
+permitted context/history/resource/relationship/belief/uncertainty appraisal,
+version-aware decoder and isolated new runtime host. Legacy six-variable state
+and recorded policies are retained with their old wire semantics. Only this
+registry source gap is resolved; #41–#44 remain separate sequential work.

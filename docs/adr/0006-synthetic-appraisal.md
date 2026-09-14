@@ -12,13 +12,11 @@ introduced. #11 consumes the appraisal stage; it must not repeat it.
 
 ## Registry and parameter coverage
 
-The registry is `ticket7-subset.v1`, ordered and immutable to callers. The source
-for these concepts is the #7 issue's explicitly named initial subset. **Completeness
-against all HWS PRD §6 names is UNVERIFIED / NOT VERIFIABLE**: the original section
-and complete list are unavailable. No missing names are invented or claimed
-implemented. The owner's source request remains open. Claude's clarification is
-recorded at https://github.com/tushardhara/dream/issues/7#issuecomment-5651532761;
-implementation proceeds on the already-scoped subset while retaining the gap.
+This document preserves the legacy `ticket7-subset.v1` implementation and its
+wire contract. The owner has now supplied all22 HWS section6 drive names in
+issue40. `simulator/drives`, codec3/registry `hws-section6.v1`, implements that
+complete registry; see ADR0017. This six-variable model remains available for
+old recorded state/replay only and does not substitute for the new registry.
 
 | Stable registry ID | Baseline | Half-life | Appraisal gain | Coverage |
 | --- | ---: | ---: | ---: | --- |
@@ -28,7 +26,7 @@ implementation proceeds on the already-scoped subset while retaining the gap.
 | status | .3 | 12h | .25 | active status-threat pressure |
 | belonging | .5 | 24h | .25 | active unmet-belonging pressure |
 | slow_residue | .1 | 168h | .08 | active slow accumulated residue |
-| Other §6 names | unknown | unknown | unknown | UNVERIFIED; not enumerated or implemented |
+| Complete22-name §6 registry | see ADR0017 | see ADR0017 | see ADR0017 | separate version; old ordinals retained |
 
 Numbers are versioned synthetic defaults, not calibrated human estimates. The
 six-variable order is part of the codec. New registry names/parameters require a

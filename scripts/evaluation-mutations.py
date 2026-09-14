@@ -2,6 +2,13 @@
 Runs green baselines, removes one guard at a time, requires a test assertion failure,
 and restores original bytes in finally. No merges, live data or permissions changes.
 """
+import signal
+
+def interrupted(signum, frame):
+    raise KeyboardInterrupt("owned check interrupted")
+
+signal.signal(signal.SIGTERM, interrupted)
+
 import pathlib,subprocess
 root=pathlib.Path(__file__).resolve().parents[1]
 logs=root/'bin'/'evaluation-mutations'

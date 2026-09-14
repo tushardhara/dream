@@ -1,6 +1,13 @@
 """Build/smoke only: nonroot, networkless, read-only disposable containers.
 No publication, deployment, provider, daemon configuration or unrelated cleanup.
 """
+import signal
+
+def interrupted(signum, frame):
+    raise KeyboardInterrupt("owned check interrupted")
+
+signal.signal(signal.SIGTERM, interrupted)
+
 import json
 import os
 import pathlib
@@ -23,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="dream-image-check-") as scratch:
         command(["go", "build", "-trimpath", "-o", "bin/container/" + name, "./cmd/" + name], env=env)
     revision = command(["git", "rev-parse", "HEAD"])
     iid = pathlib.Path(scratch) / "image-id"
-    command(["docker", "build", "--network=none", "--iidfile", str(iid), "--build-arg", "REVISION=" + revision, "."], env=env)
+    command(["docker", "build", "--force-rm", "--label", "dream.test.run=" + os.environ.get("DREAM_TEST_RUN", "standalone"), "--label", "dream.test.role=" + os.environ.get("DREAM_TEST_ROLE", "standalone"), "--network=none", "--iidfile", str(iid), "--build-arg", "REVISION=" + revision, "."], env=env)
     image = iid.read_text().strip()
     details = json.loads(command(["docker", "image", "inspect", image], env=env))[0]
     if details["Config"]["User"] != "65532:65532":
@@ -31,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix="dream-image-check-") as scratch:
     for entry in ("hws", "hws-api", "hws-worker", "hws-admin"):
         name = "dream-image-check-" + uuid.uuid4().hex[:12]
         try:
-            command(["docker", "run", "--rm", "--name", name, "--label", "dream.disposable=true",
+            command(["docker", "run", "--rm", "--name", name, "--label", "dream.disposable=true", "--label", "dream.test.run=" + os.environ.get("DREAM_TEST_RUN", "standalone"), "--label", "dream.test.role=" + os.environ.get("DREAM_TEST_ROLE", "standalone"),
                      "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
                      "--memory=128m", "--cpus=1", "--pids-limit=32", "--entrypoint", "/" + entry,
                      image, "--help"], env=env)
