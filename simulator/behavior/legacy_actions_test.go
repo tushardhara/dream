@@ -3,13 +3,13 @@ package behavior_test
 import (
 	"bytes"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/simulator/behavior"
 	"github.com/tushardhara/dream/simulator/dynamics"
 	"math"
-	"os"
 	"testing"
 )
 
@@ -20,11 +20,11 @@ type record struct {
 	Outcome  behavior.Outcome  `json:"outcome"`
 }
 
+//go:embed testdata/legacy-actions-v1.json
+var legacyActionBytes []byte
+
 func TestFrozenLegacyActionsV1(t *testing.T) {
-	raw, e := os.ReadFile("testdata/legacy-actions-v1.json")
-	if e != nil {
-		t.Fatal(e)
-	}
+	raw := legacyActionBytes
 	h := sha256.Sum256(raw)
 	if hex.EncodeToString(h[:]) != "dd5344f2c8df187f610a59ce91e727c822beb2535d1328b1cf5951b7e109ca6a" {
 		t.Fatal("legacy fixture modified")
