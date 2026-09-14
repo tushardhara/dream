@@ -3,6 +3,7 @@ package hws
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/tushardhara/dream/core"
@@ -29,7 +30,7 @@ type ForkSpec struct {
 
 func (s ForkSpec) Validate() error {
 	p := s.Source.Scope
-	if s.Version != 1 || p.Validate() != nil || s.Source.ID.Validate() != nil || len(s.Source.Hash) != 64 || s.Child.Validate() != nil || s.Child.Actor != p.Actor || s.Child.Namespace != p.Namespace || s.Child.World != p.World || s.Child.Branch == p.Branch || s.Child.Run == p.Run || s.Mode != FreshSimulation || s.Policy != behavior.Policy || s.MaxDuration <= 0 || s.MaxDuration > 24*time.Hour {
+	if s.Version != 1 || p.Validate() != nil || s.Source.ID.Validate() != nil || len(s.Source.Hash) != 64 || s.Child.Validate() != nil || s.Child.Actor != p.Actor || s.Child.Namespace != p.Namespace || s.Child.World != p.World || s.Child.Branch == p.Branch || s.Child.Run == p.Run || s.Mode != FreshSimulation || (s.Policy != behavior.Policy && s.Policy != behavior.ActionPolicy) || s.MaxDuration <= 0 || s.MaxDuration > 24*time.Hour {
 		return fmt.Errorf("invalid fork scope/mode/policy")
 	}
 	return nil
@@ -37,6 +38,17 @@ func (s ForkSpec) Validate() error {
 func ForkState(f FrozenState, s ForkSpec) (rt.State, error) {
 	if f.Validate() != nil || s.Validate() != nil || f.Scope != s.Source.Scope || f.Hash != s.Source.Hash {
 		return rt.State{}, fmt.Errorf("untrusted fork snapshot")
+	}
+	if f.State.Data != "" {
+		isNew := strings.HasPrefix(f.State.Data, actionCognitivePrefix)
+		if isNew != (s.Policy == behavior.ActionPolicy) {
+			return rt.State{}, fmt.Errorf("fork cannot silently change action policy")
+		}
+		if isNew {
+			if _, err := DecodeActionCheckpoint(f.State.Data); err != nil {
+				return rt.State{}, err
+			}
+		}
 	}
 	// A purged entry has no learned-time payload left. Until tombstone-only
 	// inheritance is supported, making a child would drop its irreversible ID

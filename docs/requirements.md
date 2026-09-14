@@ -51,7 +51,7 @@ access to complete traceability without publishing originals or private data.
 | HWS PRD v0.1 | §6 drive registry | Owner-supplied exact22-name registry in #40; simulator/drives and ADR0017. Other original section text is not certified |
 | HWS PRD v0.1 | §7 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §8 | UNVERIFIED: original text unavailable; summarized scope above |
-| HWS PRD v0.1 | §9 | UNVERIFIED: original text unavailable; summarized scope above |
+| HWS PRD v0.1 | §9 | SUPPLIED SOURCE: #41 revision 2 gives all27 actions and14-stage lifecycle; ADR-0018 maps implementation/tests. Full private document remains unverified. |
 | HWS PRD v0.1 | §10 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §11 | UNVERIFIED: original text unavailable; summarized scope above |
 | HWS PRD v0.1 | §12 | UNVERIFIED: original text unavailable; summarized scope above |
@@ -260,8 +260,9 @@ disclosure and delayed observer-specific outcomes to unit/race and real PostgreS
 evidence. Operational WAIT requires durable exhausted retryable failure evidence;
 refusals and permission errors cannot masquerade as human behavior. Appraisal
 receipts and the runtime 4096-byte cap remain hard limits. The bounded four-actor
-codec and ticket-named action registry do not claim complete unavailable HWS source
-coverage, large studies or validated human realism. Pure internal planner/handler
+codec and ticket-named v1 registry predate the supplied #41 source. ADR-0018
+now maps the complete supplied §9 grammar. They do not claim full private HWS
+source coverage, large studies or validated human realism. Pure internal planner/handler
 ports are not network authentication. See ADR-0011 for recovery, privacy and sizing
 limits and later-ticket responsibilities.
 

@@ -211,6 +211,14 @@ func (r Runtime) Execute(ctx context.Context, scope Scope, lease Lease, key core
 				outcome = BehavioralWait
 			}
 		}
+		if checkpoint, e := DecodeActionCheckpoint(next.Data); e == nil && checkpoint.Last != nil {
+			d := checkpoint.Last
+			if d.Operational {
+				outcome = ProviderOutage
+			} else if d.Candidates[d.Selected].Offer.Kind == behavior.Wait {
+				outcome = BehavioralWait
+			}
+		}
 		r.Observer.Observe(CognitiveCommit, outcome, time.Since(started))
 	}
 	return receipt, err

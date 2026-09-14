@@ -18,6 +18,7 @@ type CognitivePlanner interface {
 	Plan(context.Context, rt.Input, graph.SafeContext) (CognitiveFrame, error)
 }
 type CognitiveService struct {
+	Policy  string
 	Gateway *ModelGateway
 	Views   *ViewService
 	Runtime Runtime
@@ -44,7 +45,7 @@ func (f fixedCognitiveFrame) Frame(i rt.Input) (CognitiveFrame, error) {
 // Prepare/generate, policy output validation, and canonical application are
 // separate stages; there is no provider callback inside the transition/SQL tx.
 func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artifact ModelArtifact, lease Lease, key core.ID, disclosure *SelfDisclosure) (Receipt, error) {
-	if s.Gateway == nil || s.Views == nil || s.Runtime.Store == nil || s.Planner == nil || request.Capability != ModelInterpretation {
+	if s.Gateway == nil || s.Views == nil || s.Runtime.Store == nil || s.Planner == nil || request.Capability != ModelInterpretation || s.Policy != "" && s.Policy != behavior.Policy && s.Policy != behavior.ActionPolicy {
 		return Receipt{}, ErrModel
 	}
 	safe, err := s.Views.ModelContext(ctx, request.Permit, request.Approved, request.Scope, request.Principal)
@@ -70,6 +71,16 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 	// Planner cannot relabel policy failure as operational WAIT, forge model
 	// beliefs, or enable self disclosure by setting a boolean/string field.
 	if frame.Situation.Outage || frame.Situation.DisclosureRecipient != "" || frame.Disclosure != "" || frame.ModelHash != "" || len(frame.Situation.Beliefs) != 0 || len(frame.Situation.Relationships) != 0 {
+		return Receipt{}, ErrModel
+	}
+	if s.Policy == behavior.ActionPolicy {
+		if frame.Actions == nil || len(frame.Situation.Offers) != 0 || len(frame.Actions.Sources) != 0 || frame.Actions.Disclosure != nil {
+			return Receipt{}, ErrModel
+		}
+		for _, item := range safe.Items() {
+			frame.Actions.Sources = append(frame.Actions.Sources, item.Source)
+		}
+	} else if frame.Actions != nil {
 		return Receipt{}, ErrModel
 	}
 	approvedEvent := false
@@ -144,6 +155,12 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 		if !decision.Allowed {
 			return Receipt{}, ErrViewDenied
 		}
+		if s.Policy == behavior.ActionPolicy {
+			if !behavior.DisclosureMode(output.FictionMode).Valid() {
+				return Receipt{}, ErrViewDenied
+			}
+			frame.Actions.Disclosure = &behavior.DisclosureGrant{Recipient: disclosure.Recipient, Mode: behavior.DisclosureMode(output.FictionMode), Sources: append([]core.ID{}, output.Sources...)}
+		}
 		frame.Disclosure = output.Text
 		frame.Situation.DisclosureRecipient = disclosure.Recipient
 		prior := runtime.BeforeCommit
@@ -163,7 +180,7 @@ func (s CognitiveService) Apply(ctx context.Context, request ModelRequest, artif
 			return nil
 		}
 	}
-	runtime.Handler = CognitiveHandler{Source: fixedCognitiveFrame{event, frame}}
+	runtime.Handler = CognitiveHandler{Source: fixedCognitiveFrame{event, frame}, Policy: s.Policy}
 	return s.Gateway.Apply(ctx, request, artifact, runtime, lease, key)
 }
 
@@ -177,7 +194,7 @@ type ModelFailureReader interface {
 // settled retryable failure can take the operational WAIT branch. Policy errors,
 // malformed results, capacity exhaustion and uncertain in-flight work fail closed.
 func (s CognitiveService) Step(ctx context.Context, request ModelRequest, lease Lease, key core.ID, disclosure *SelfDisclosure) (Receipt, error) {
-	if s.Gateway == nil || s.Views == nil || s.Planner == nil || s.Runtime.Store == nil || request.Capability != ModelInterpretation {
+	if s.Gateway == nil || s.Views == nil || s.Planner == nil || s.Runtime.Store == nil || request.Capability != ModelInterpretation || s.Policy != "" && s.Policy != behavior.Policy && s.Policy != behavior.ActionPolicy {
 		return Receipt{}, ErrModel
 	}
 	artifact, err := s.Gateway.Execute(ctx, request)
@@ -224,6 +241,16 @@ func (s CognitiveService) Step(ctx context.Context, request ModelRequest, lease 
 	if err != nil {
 		return Receipt{}, err
 	}
+	if s.Policy == behavior.ActionPolicy {
+		if frame.Actions == nil || len(frame.Situation.Offers) != 0 || len(frame.Actions.Sources) != 0 || frame.Actions.Disclosure != nil {
+			return Receipt{}, ErrModel
+		}
+		for _, item := range safe.Items() {
+			frame.Actions.Sources = append(frame.Actions.Sources, item.Source)
+		}
+	} else if frame.Actions != nil {
+		return Receipt{}, ErrModel
+	}
 	// An outage does not infer beliefs, deliver disclosure or learn a response.
 	frame.Situation.Outage = true
 	frame.Situation.Beliefs = nil
@@ -234,7 +261,7 @@ func (s CognitiveService) Step(ctx context.Context, request ModelRequest, lease 
 	frame.ModelHash = use.Hash
 	runtime := s.Runtime
 	runtime.Model = &use
-	runtime.Handler = CognitiveHandler{Source: fixedCognitiveFrame{input, frame}}
+	runtime.Handler = CognitiveHandler{Source: fixedCognitiveFrame{input, frame}, Policy: s.Policy}
 	prior := runtime.BeforeCommit
 	runtime.BeforeCommit = func(c context.Context) error {
 		if prior != nil {

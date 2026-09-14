@@ -140,6 +140,7 @@ func DecodeCognitiveCheckpoint(s string) (CognitiveCheckpoint, error) {
 }
 
 type CognitiveFrame struct {
+	Actions   *ActionFrame
 	Situation behavior.Situation
 	// The preparation service validates a recorded model artifact. No generation
 	// or storage I/O occurs inside Transition. No raw model text becomes an action.
@@ -150,14 +151,18 @@ type CognitiveFrame struct {
 	Response *CognitiveResponse
 }
 type CognitiveResponse struct {
-	Decision core.ID
-	Other    core.ID
-	Code     string
+	CommitmentStatus string
+	Decision         core.ID
+	Other            core.ID
+	Code             string
 }
 type CognitiveSource interface {
 	Frame(rt.Input) (CognitiveFrame, error)
 }
-type CognitiveHandler struct{ Source CognitiveSource }
+type CognitiveHandler struct {
+	Source CognitiveSource
+	Policy string
+}
 type deliveredBehavior struct {
 	Version   int           `json:"version"`
 	Decision  core.ID       `json:"decision"`
@@ -168,6 +173,12 @@ type deliveredBehavior struct {
 }
 
 func (h CognitiveHandler) Transition(current rt.State, input rt.Input, clock rt.Clock, rng *rt.Random) (rt.Output, error) {
+	if h.Policy == behavior.ActionPolicy {
+		return h.transitionActions(current, input, clock, rng)
+	}
+	if h.Policy != "" && h.Policy != behavior.Policy {
+		return rt.Output{}, fmt.Errorf("unknown cognition policy")
+	}
 	if current.Validate() != nil || h.Source == nil || rng == nil || clock.Now() != input.At || input.Kind != "observation" {
 		return rt.Output{}, fmt.Errorf("cognitive transition boundary")
 	}
@@ -207,6 +218,9 @@ func (h CognitiveHandler) Transition(current rt.State, input rt.Input, clock rt.
 	frame, err := h.Source.Frame(input)
 	if err != nil {
 		return rt.Output{}, err
+	}
+	if frame.Actions != nil || frame.Response != nil && frame.Response.CommitmentStatus != "" {
+		return rt.Output{}, fmt.Errorf("v2 action fields in legacy cognition")
 	}
 	s := frame.Situation
 	if s.Perceived.Actor != input.Actor || s.Perceived.Event != input.ID || s.Horizon > current.Budget.Horizon || len(frame.Disclosure) > 2048 {
