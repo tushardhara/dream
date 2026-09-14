@@ -59,6 +59,7 @@ func (a Action) Valid() bool { return a == Wait || a == Clarify || a == Acknowle
 // Request contains host-selected evidence references, never raw caller text or
 // simulated state. Goal is an explicit user choice, not an inferred relationship goal.
 type Request struct {
+	Temporal                  *core.TemporalFocus     `json:",omitempty"`
 	Focus                     *core.RelationshipFocus `json:",omitempty"`
 	Scope                     *core.InteractionScope  `json:",omitempty"`
 	Version                   string
@@ -73,6 +74,13 @@ type Request struct {
 
 func (r Request) Validate() error {
 	if !knownVersion(r.Version) || r.ID.Validate() != nil || r.Helper.Validate() != nil || r.User.Validate() != nil || r.Purpose.Validate() != nil || r.At.Validate() != nil || !r.Arm.Valid() || !r.Goal.Valid() || len(r.Participants) < 1 || len(r.Participants) > 8 || len(r.Contexts) > 8 {
+		return ErrInvalid
+	}
+	if r.Version == TemporalVersion {
+		if r.Temporal == nil || r.Temporal.Validate() != nil || r.Scope == nil || r.Temporal.Observer != r.User || r.Temporal.Other != r.Scope.Target {
+			return ErrInvalid
+		}
+	} else if r.Temporal != nil {
 		return ErrInvalid
 	}
 	seen := map[core.ID]bool{}
@@ -104,10 +112,10 @@ func (r Request) Validate() error {
 			}
 		}
 	}
-	if r.Version != DomainVersion && r.Focus != nil {
+	if !UsesDomainContext(r.Version) && r.Focus != nil {
 		return ErrInvalid
 	}
-	if r.Version == DomainVersion {
+	if UsesDomainContext(r.Version) {
 		if r.Focus == nil || r.Focus.Validate() != nil || r.Scope.Topic != core.ID(r.Focus.Domain) || r.Scope.Class == core.SummarySharing && r.Focus.Domain != core.Confidentiality {
 			return ErrInvalid
 		}
@@ -125,7 +133,11 @@ func (r Request) Validate() error {
 		if totalSources > 16 {
 			return ErrInvalid
 		}
-		if p.Version != 1 || p.Query.Validate() != nil || p.Binding != r.ID || p.Query.Actor != r.Helper || p.Recipient != r.Helper || p.Query.Purpose != r.Purpose || p.Mode != graph.ExternalContext || p.Operation != core.Read || p.Query.KnownAt != r.At || p.Query.ValidAt != r.At || !seen[p.Query.Scope.Owner] || owners[p.Query.Scope.Owner] || len(p.Sources) < 1 || len(p.Sources) > 16 {
+		expectedVersion := uint32(1)
+		if r.Version == TemporalVersion {
+			expectedVersion = 2
+		}
+		if p.Version != expectedVersion || p.Query.Validate() != nil || p.Binding != r.ID || p.Query.Actor != r.Helper || p.Recipient != r.Helper || p.Query.Purpose != r.Purpose || p.Mode != graph.ExternalContext || p.Operation != core.Read || p.Query.KnownAt != r.At || p.Query.ValidAt != r.At || !seen[p.Query.Scope.Owner] || owners[p.Query.Scope.Owner] || len(p.Sources) < 1 || len(p.Sources) > 16 {
 			return ErrInvalid
 		}
 		if (r.Arm == Single || UsesScopedBoundaries(r.Version) && r.Scope.Class == core.PrivatePreparation) && p.Query.Scope.Owner != r.User {
@@ -162,7 +174,7 @@ func (c Candidate) validate(r Request, items []graph.SafeContextItem) bool {
 		return false
 	}
 	if c.Action == Wait {
-		return c.Recipient == "" && len(c.Evidence) == 0 && (c.Reason == "restraint" || c.Reason == "disabled" || c.Reason == "unavailable" || UsesScopedBoundaries(r.Version) && c.Reason == "boundary" || r.Version == DomainVersion && c.Reason == "relationship_context")
+		return c.Recipient == "" && len(c.Evidence) == 0 && (c.Reason == "restraint" || c.Reason == "disabled" || c.Reason == "unavailable" || UsesScopedBoundaries(r.Version) && c.Reason == "boundary" || UsesDomainContext(r.Version) && c.Reason == "relationship_context" || r.Version == TemporalVersion && c.Reason == "temporal_context")
 	}
 	// Both versions deliver only fixed, non-identifying templates to the requesting person.
 	// No free text, paraphrase, source identity or multi-person disclosure leaves here.
@@ -171,7 +183,7 @@ func (c Candidate) validate(r Request, items []graph.SafeContextItem) bool {
 	}
 	switch c.Action {
 	case Clarify:
-		if c.Reason != "goal_unknown" || r.Goal != Unknown {
+		if (c.Reason != "goal_unknown" && !(r.Version == TemporalVersion && c.Reason == "check_current_context")) || r.Goal != Unknown {
 			return false
 		}
 	case Acknowledge:
@@ -201,6 +213,7 @@ func (c Candidate) validate(r Request, items []graph.SafeContextItem) bool {
 }
 
 type Input struct {
+	Temporal         []core.TemporalContext  `json:",omitempty"`
 	Focus            *core.RelationshipFocus `json:",omitempty"`
 	Relationships    []DomainPerspective     `json:",omitempty"`
 	Scope            *core.InteractionScope  `json:",omitempty"`
@@ -236,7 +249,7 @@ func (o Result) validate(r Request, items []graph.SafeContextItem) bool {
 	if r.Arm == None && o.Candidates[o.Selected].Action != Wait {
 		return false
 	}
-	if r.Arm == Simple && Digest(o) != Digest(preferenceFor(r)) && !(UsesScopedBoundaries(r.Version) && Digest(o) == Digest(waitFor(r.Version, "boundary"))) && !(r.Version == DomainVersion && Digest(o) == Digest(waitFor(r.Version, "relationship_context"))) {
+	if r.Arm == Simple && Digest(o) != Digest(preferenceFor(r)) && !(UsesScopedBoundaries(r.Version) && Digest(o) == Digest(waitFor(r.Version, "boundary"))) && !(UsesDomainContext(r.Version) && Digest(o) == Digest(waitFor(r.Version, "relationship_context"))) {
 		return false
 	}
 	return true
@@ -285,6 +298,7 @@ func (o Outcome) Validate() error {
 // Interaction is an event in the helper's independent history. Delivered is
 // mechanical receipt status only; outcomes require separately attributed evidence.
 type Interaction struct {
+	Temporal         *core.TemporalFocus     `json:",omitempty"`
 	Focus            *core.RelationshipFocus `json:",omitempty"`
 	Scope            *core.InteractionScope  `json:",omitempty"`
 	BoundaryHash     string                  `json:",omitempty"`

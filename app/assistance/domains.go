@@ -103,7 +103,7 @@ func (DomainPlanner) Plan(ctx context.Context, in Input) (Result, error) {
 	if ctx.Err() != nil {
 		return Result{}, ctx.Err()
 	}
-	if in.Version != DomainVersion || in.Focus == nil || in.Focus.Validate() != nil || len(in.Relationships) == 0 {
+	if !UsesDomainContext(in.Version) || in.Focus == nil || in.Focus.Validate() != nil || len(in.Relationships) == 0 {
 		return Result{}, ErrInvalid
 	}
 	for _, p := range in.Relationships {

@@ -8,8 +8,11 @@ import (
 // ScopedVersion is opt-in. Version remains the frozen #50 wire/replay contract.
 const ScopedVersion = "assistance.v2"
 const DomainVersion = "assistance.v3"
+const TemporalVersion = "assistance.v4"
 
-func UsesScopedBoundaries(v string) bool { return v == ScopedVersion || v == DomainVersion }
+func UsesDomainContext(v string) bool { return v == DomainVersion || v == TemporalVersion }
+
+func UsesScopedBoundaries(v string) bool { return v == ScopedVersion || UsesDomainContext(v) }
 
 const ClarificationCooldown core.LogicalTime = 10
 const MaxClarifications = 2
@@ -59,6 +62,9 @@ func (g *BoundaryGate) Plan(ctx context.Context, r Request) (PlanningDecision, e
 	}
 	snapshot, e := g.Source.ReadBoundaries(ctx, r)
 	if e != nil || snapshot.Now < r.At {
+		return PlanningDecision{}, ErrDenied
+	}
+	if r.Version == TemporalVersion && snapshot.Now != r.At {
 		return PlanningDecision{}, ErrDenied
 	}
 	decision, e := core.EvaluateBoundaries(snapshot.Records, *r.Scope, snapshot.Now)
@@ -113,7 +119,7 @@ func waitFor(version, reason string) Result {
 	out.Version = version
 	return out
 }
-func (o Result) validPlan(r Request, itemsValid bool, p PlanningDecision, contextKnown bool) bool {
+func (o Result) validPlan(r Request, itemsValid bool, p PlanningDecision, contextKnown, temporalAllowed bool) bool {
 	if !itemsValid {
 		return false
 	}
@@ -121,10 +127,13 @@ func (o Result) validPlan(r Request, itemsValid bool, p PlanningDecision, contex
 		if !p.Allowed {
 			return Digest(o) == Digest(waitFor(r.Version, "boundary"))
 		}
-		if r.Version == DomainVersion && !contextKnown {
+		if UsesDomainContext(r.Version) && !contextKnown {
 			return Digest(o) == Digest(waitFor(r.Version, "relationship_context"))
 		}
-		return o.Candidates[o.Selected].Reason != "boundary" && o.Candidates[o.Selected].Reason != "relationship_context"
+		if r.Version == TemporalVersion && !temporalAllowed {
+			return Digest(o) == Digest(waitFor(r.Version, "temporal_context"))
+		}
+		return o.Candidates[o.Selected].Reason != "boundary" && o.Candidates[o.Selected].Reason != "relationship_context" && o.Candidates[o.Selected].Reason != "temporal_context"
 	}
 	return true
 }

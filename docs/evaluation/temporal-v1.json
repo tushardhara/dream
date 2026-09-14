@@ -1,0 +1,824 @@
+{
+  "Version": "temporal-experiment.v1",
+  "Seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "Rows": [
+    {
+      "Scene": "daily_2",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_2",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_2",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_2",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_2",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 14,
+        "Unnecessary": 18,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_60",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_60",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_60",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_60",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 18,
+        "Unnecessary": 0,
+        "Missed": 14,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "daily_60",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 18,
+        "Unnecessary": 0,
+        "Missed": 14,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_2",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_2",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_2",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_2",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_2",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 14,
+        "Unnecessary": 18,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_60",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_60",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_60",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_60",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "occasional_60",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 14,
+        "Unnecessary": 18,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "caregiving",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "caregiving",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "caregiving",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "caregiving",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "caregiving",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 14,
+        "Unnecessary": 18,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "work_transition",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "work_transition",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "work_transition",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "work_transition",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 18,
+        "Unnecessary": 0,
+        "Missed": 14,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "work_transition",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 18,
+        "Unnecessary": 0,
+        "Missed": 14,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "stale_experience",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "stale_experience",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "stale_experience",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "stale_experience",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 18,
+        "Unnecessary": 0,
+        "Missed": 14,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "stale_experience",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 18,
+        "Unnecessary": 0,
+        "Missed": 14,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "agreed_break",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "agreed_break",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "agreed_break",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "agreed_break",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "agreed_break",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "sparse",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "sparse",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "sparse",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "sparse",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "sparse",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 14,
+        "Unnecessary": 18,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "unobserved_channel",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "unobserved_channel",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "unobserved_channel",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "unobserved_channel",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "unobserved_channel",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 14,
+        "Unnecessary": 18,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "observer_disagreement",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "observer_disagreement",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "observer_disagreement",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 0,
+        "Unnecessary": 16,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "observer_disagreement",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 26,
+        "Unnecessary": 0,
+        "Missed": 6,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "observer_disagreement",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 18,
+        "Unnecessary": 8,
+        "Missed": 6,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "no_contact",
+      "Consumer": "helper",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "no_contact",
+      "Consumer": "helper",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "no_contact",
+      "Consumer": "helper",
+      "Policy": "simple",
+      "Metrics": {
+        "Trials": 16,
+        "Appropriate": 16,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "no_contact",
+      "Consumer": "human",
+      "Policy": "temporal",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "StatusAgreement": 32,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    },
+    {
+      "Scene": "no_contact",
+      "Consumer": "human",
+      "Policy": "context_off",
+      "Metrics": {
+        "Trials": 32,
+        "Appropriate": 32,
+        "Unnecessary": 0,
+        "Missed": 0,
+        "PrivacyViolations": 0,
+        "BoundaryViolations": 0
+      }
+    }
+  ],
+  "Notes": [
+    "Offline synthetic labels and engineering thresholds; no real-human validity, health, rejection or maturity inference.",
+    "Helper is a deterministic gate/template policy: repeated seeds are matched controls, not independent helper uncertainty samples.",
+    "Humans always execute, including helper WAIT. Human temporal policy and graph input stay fixed across helper arms; helper messages do not yet alter human responses. No helper outcome-benefit claim.",
+    "Human context_off is a separate paired input ablation of the same domain action engine, with identical evidence, boundaries and random draw.",
+    "Status agreement checks declared synthetic uncertainty categories. Baselines have no temporal uncertainty output; absent values are unmeasured, not zero error or calibration.",
+    "Complete-channel coverage is explicitly authored at the current logical day, never inferred from silence. Unseen phone activity and research labels are excluded from consumer inputs.",
+    "Privacy counts scan actual planner inputs for synthetic canaries and human evidence for foreign observers. Boundary counts inspect actual delivered/selected actions. These bounded probes are not exhaustive privacy proof."
+  ]
+}
