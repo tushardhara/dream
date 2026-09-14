@@ -316,3 +316,20 @@ func TestDomainHelperUnknownFrameConfidenceAndMissingMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestDomainHelperExplicitOwnChoicePreservesOtherUniquePerspective(t *testing.T) {
+	profiles := domainProfiles()
+	// Alice explicitly selects her family account. Bob has a unique family account;
+	// Alice's private record ID must not be used as a selector for Bob's account.
+	focus := core.RelationshipFocus{Version: core.RelationshipFocusVersion, Domain: core.Childcare, RoleContext: "family", Account: "alice-care"}
+	l, r := domainFixture(t, assistance.Multi, focus, profiles)
+	out, e := l.Host(assistance.FakePlanner{}).Execute(context.Background(), r, nil)
+	if e != nil || !out.Delivered {
+		t.Fatal("user's private account ID erased another observer's unique context", out, e)
+	}
+	// The immutable request hash is unchanged: the receipt's focus itself is bound.
+	out.Focus.Account = "alice-business"
+	if _, e = l.Host(nil).Execute(context.Background(), r, &out); e == nil {
+		t.Fatal("forged receipt focus accepted")
+	}
+}

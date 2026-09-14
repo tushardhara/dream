@@ -1,7 +1,7 @@
 # ADR 0023: Domain trust and overlapping role contexts
 
 Status: implemented for #52, pending independent review. Backend, synthetic and
- offline only; based on verified #51 integration `00996ca9`.
+offline only; based on verified #51 integration `00996ca9`.
 
 ## Decision and consumer behavior
 
@@ -103,6 +103,12 @@ cause the human decision; this experiment tests shared context consumption.
 | Conflicts/observers remain distinct through corrections, revocation, retrieval, planning and replay | graph domain retrieval/correction/comparison tests; helper conflict, atomic revocation, metadata, history and still-permitted replay tests; human current-source and codec tests |
 | Scenario/codec migrations and retained legacy behavior | `TestDomainScenarioMigrationCapabilityAndLegacyBytes`; explicit core migration tests; `TestFrozen50CodecsAndExperiment`; existing legacy relation/human/scenario tests |
 
-Mutation results and exact-SHA verification are recorded in the PR/checkpoint.
+Eight deliberate mutations removed domain selection, frame selection, learned-domain
+isolation, learned-frame isolation, helper measure consumption, replay evidence
+binding, frame uncertainty and per-observer explicit selection. Each was caught
+by a named behavioral test. The explicit-selection mutation initially survived
+because a positive multi-observer control was missing; that test was added and
+the mutation then failed. Source was restored after each check. Exact-SHA
+verification and command results are recorded in the PR/checkpoint.
 No human benefit, stereotype validity, inferred consent, real-world transfer rule,
 natural-language frame detection or validated relationship model is claimed.
