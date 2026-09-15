@@ -29,12 +29,18 @@ joyful, supportive, scarce-resource and compound-event periods. Group observatio
 are visible only to members; typed deliveries reach only their recipient. Other
 actors use their own routine observation. Raw private notes, future events and
 research labels never enter another actor's choice. Shared help consumes finite
-resources. The `backend-demo.v2` projection uses the shared 22-drive registry, 27-action
-engine and permissioned relationship appraisal. Relationship type labels alone
-do not set probabilities. Observed recipient replies can update later history;
-shared time is finite and actual consumption is recorded. Legacy v1 decoding and
-reproduction remain version-dispatched. The supplied HWS source registries are
-mapped in ADR0017–0020; no full private-document audit is claimed.
+resources. The current `backend-demo.v3` projection uses the shared 22-drive engine,
+explicit coordination/everyday domain accounts, scoped contact choices and the
+recipient-response policy. Own recipient context/private appraisal and stochastic
+choice determine supportive, dismissive, neutral, mixed or unresolved observations;
+a friendly delivery/reply alone establishes no benefit. Expected sender usefulness
+and recipient pressure remain separate accounts. Permitted observations affect
+later native choices, with immediate/later records and corrections preserved.
+Offers include refusal, disagreement, repair and scoped withdrawal, with breach
+requiring an actual commitment. Own exports include only that observer's new
+private history. Legacy v1/v2 decoding and reconstruction remain version-dispatched.
+See ADR0025 for contracts, bounds and the helper experiment; ADR0017–0020 retain the
+supplied source-registry mapping. No full private-document audit is claimed.
 
 A model month is explicitly 30 simulated days. There are two observation periods
 per month, one day apart near month-end; 12 months configure a 360-day virtual
@@ -47,8 +53,10 @@ The demo has a compact versioned checkpoint containing a period index and derive
 world hash. Its bounded actor state is reconstructed from frozen scenario inputs
 and counter-based recorded randomness. This avoids increasing the 4096-byte
 runtime checkpoint limit, four-actor cognitive codec limit, 16-outcome limit or
-32-receipt limit. At most 24 periods and 24 actors (576 decisions/outcomes) are supported in
-the derived projection; no ledger is silently evicted or reset. Each new period's draws and resource consumption are recorded
+32-receipt limit. At most 24 periods and 24 actors (576 native decisions) are supported.
+The new observer ledger has at most 72 expected/immediate/later observations per
+actor in this demo; only eight recent actions per peer contribute to current
+learning, with old observations retained. No ledger is silently reset. Each new period's draws and resource consumption are recorded
 through the existing runtime journal. Replaying the journal and recomputing the
 projection must agree. Arbitrary injected events or unsupported forks fail closed;
 this fixed demo is not a new general-purpose simulation policy.

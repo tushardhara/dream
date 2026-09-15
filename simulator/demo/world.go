@@ -22,16 +22,21 @@ type Delivery struct {
 	At        core.LogicalTime `json:"at"`
 }
 type World struct {
-	ActionOutcomes  []behavior.ActionOutcome  `json:"action_outcomes,omitempty"`
-	ActionActors    []behavior.ActionActor    `json:"action_actors,omitempty"`
-	ActionDecisions []behavior.ActionDecision `json:"action_decisions,omitempty"`
-	Version         string                    `json:"version"`
-	Period          int                       `json:"period"`
-	At              core.LogicalTime          `json:"at"`
-	Actors          []behavior.Actor          `json:"actors"`
-	Decisions       []behavior.Decision       `json:"decisions"`
-	Resources       map[core.ID]int64         `json:"resources"`
-	Pending         []Delivery                `json:"pending"`
+	OutcomeObservations []core.OutcomeObservation    `json:"outcome_observations,omitempty"`
+	RecipientDecisions  []behavior.RecipientDecision `json:"recipient_decisions,omitempty"`
+	ScopedActors        []behavior.ScopedActor       `json:"scoped_actors,omitempty"`
+	ScopedDecisions     []behavior.ScopedDecision    `json:"scoped_decisions,omitempty"`
+	Commitments         []behavior.Commitment        `json:"commitments,omitempty"`
+	ActionOutcomes      []behavior.ActionOutcome     `json:"action_outcomes,omitempty"`
+	ActionActors        []behavior.ActionActor       `json:"action_actors,omitempty"`
+	ActionDecisions     []behavior.ActionDecision    `json:"action_decisions,omitempty"`
+	Version             string                       `json:"version"`
+	Period              int                          `json:"period"`
+	At                  core.LogicalTime             `json:"at"`
+	Actors              []behavior.Actor             `json:"actors"`
+	Decisions           []behavior.Decision          `json:"decisions"`
+	Resources           map[core.ID]int64            `json:"resources"`
+	Pending             []Delivery                   `json:"pending"`
 }
 
 func digest(v any) (string, error) {
@@ -76,6 +81,9 @@ func signal(theme string) (dynamics.Signals, error) {
 // mutable database. Only actor views and already-reached periods enter behavior.
 // Current-period randomness is also drawn through the canonical runtime recorder.
 func reconstruct(sc scenario.Scenario, through int, domain, common core.ID, coupled bool, record *rt.Random) (World, error) {
+	if demoVersion(sc) == ResponsiveVersion {
+		return reconstructResponsive(sc, through, domain, common, coupled, record)
+	}
 	if demoVersion(sc) == RelationalVersion {
 		return reconstructRelational(sc, through, domain, common, coupled, record)
 	}
@@ -231,7 +239,7 @@ func Projection(state rt.State) (World, error) {
 			}
 		}
 	}
-	if v := demoVersion(sc); v != Version && v != RelationalVersion {
+	if v := demoVersion(sc); v != Version && v != RelationalVersion && v != ResponsiveVersion {
 		return World{}, fmt.Errorf("unsupported demo version")
 	}
 	var cp Checkpoint
@@ -240,7 +248,7 @@ func Projection(state rt.State) (World, error) {
 			return World{}, fmt.Errorf("invalid demo checkpoint")
 		}
 	}
-	if state.Data != "" && cp.Version == RelationalVersion {
+	if state.Data != "" && (cp.Version == RelationalVersion || cp.Version == ResponsiveVersion) {
 		raw, _ := json.Marshal(cp)
 		if string(raw) != state.Data {
 			return World{}, fmt.Errorf("noncanonical relational checkpoint")
