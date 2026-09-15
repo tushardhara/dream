@@ -31,6 +31,7 @@ build:
 	go build -trimpath -o bin/hws-assistance ./cmd/hws-assistance
 	go build -trimpath -o bin/hws-listening ./cmd/hws-listening
 	go build -trimpath -o bin/hws-repair ./cmd/hws-repair
+	go build -trimpath -o bin/hws-group ./cmd/hws-group
 help-check: build
 	./bin/hws --help
 	./bin/hws-api --help
@@ -42,7 +43,8 @@ help-check: build
 	./bin/hws-assistance --help
 	./bin/hws-listening --help
 	./bin/hws-repair --help
-verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check demo-check listening-check repair-check
+	./bin/hws-group --help
+verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check demo-check listening-check repair-check group-check
 live-provider soak:
 	@echo "BLOCKED: requires explicit owner authorization, provider/budget/infrastructure configuration and a later implemented runner."; exit 1
 
@@ -71,3 +73,7 @@ listening-check: build
 .PHONY: repair-check
 repair-check: build
 	python3 scripts/repair-check.py
+
+.PHONY: group-check
+group-check: build
+	python3 scripts/group-check.py
