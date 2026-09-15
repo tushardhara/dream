@@ -1231,3 +1231,164 @@ func TestUnmeasuredAppropriatenessAndBurdenReductionAreReported(t *testing.T) {
 		t.Fatalf("an unmeasured appropriateness was never reported: %+v", u)
 	}
 }
+
+// pairedUnit builds one harm-free comparison in its own independent world unit,
+// carrying controlled independently-attributed later evidence: later[arm][i] is
+// person i's reported benefit in that arm. Everything else is held constant so
+// only the property under test varies.
+func pairedUnit(unit int, later map[Arm][]float64) *Comparison {
+	id := fmt.Sprintf("unit-%d", unit)
+	c := Comparison{Version: UpliftVersion, Scenario: core.ID("scenario:" + id), Family: "ordinary_joy",
+		Seed: uint64(unit), Affected: []core.ID{person(0), person(1)}}
+	for _, a := range Arms {
+		r := ArmRun{Arm: a, Seed: uint64(unit), WorldHash: "world-" + id, ExogenousHash: "exo-" + id,
+			Streams: []Stream{{Domain: "human", Seed: "h-" + id}, {Domain: "exogenous", Seed: "x-" + id},
+				{Domain: "helper", Seed: "p-" + id}},
+			PolicyHash: "policy-" + string(a), Scenario: c.Scenario}
+		for i := 0; i < 2; i++ {
+			o := armOutcome(a, i, true)
+			// Harm-free: the outcome resolves and nothing adverse is observed.
+			o.DelayedOutcome = "resolved"
+			o.Benefit = core.ObservedGroupQuantity(.2)
+			o.Burden = core.ObservedGroupQuantity(0)
+			o.Appropriateness = core.ObservedGroupQuantity(.5)
+			o.BurdenReduction = core.ObservedGroupQuantity(0)
+			if v, ok := later[a]; ok && i < len(v) {
+				o.Observations = append(o.Observations, TierEvidence{Person: person(i), Tier: AttributedLater,
+					Provenance: SyntheticProvenance,
+					Source:     core.ID(fmt.Sprintf("%s:%s:later:%s", id, a, person(i))),
+					Observer:   person(i), At: 5, Metric: "reported_benefit", Value: core.ObservedGroupQuantity(v[i])})
+			}
+			r.Outcomes = append(r.Outcomes, o)
+		}
+		c.Runs = append(c.Runs, r)
+	}
+	return &c
+}
+
+// A candidate favoured in one independent world and not in another has not
+// shown uplift: that is disagreement between worlds. Without this rule a single
+// favourable world could carry the result.
+func TestIndependentWorldsMustAgree(t *testing.T) {
+	// Positive control: both units favour the candidate, so the comparison is
+	// allowed to proceed past this rule.
+	agree := sealed(
+		pairedUnit(1, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}),
+		pairedUnit(2, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}))
+	f, e := CompareArms(agree, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal("positive control:", e)
+	}
+	if strings.Contains(f.Evidence, "independent world units disagree") {
+		t.Fatalf("units that agree were reported as disagreeing: %q", f.Evidence)
+	}
+	// Now flip the second world only. Nothing else changes.
+	disagree := sealed(
+		pairedUnit(1, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}),
+		pairedUnit(2, map[Arm][]float64{NoAssistant: {.5, .5}, MultiPerspective: {.1, .1}}))
+	f, e = CompareArms(disagree, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatal("uplift was credited while one independent world pointed the other way")
+	}
+	// The wording matters: the per-person overlap message also contains the
+	// word "disagree", so matching on that alone passes whether or not the
+	// world-level rule ran. The failure must be attributed to the WORLDS
+	// disagreeing, with their counts, not to margins overlapping.
+	if !strings.Contains(f.Evidence, "independent world units disagree") {
+		t.Fatalf("world disagreement is not named in the evidence: %q", f.Evidence)
+	}
+	if !strings.Contains(f.Evidence, "1 favour") {
+		t.Fatalf("the evidence does not report how the worlds split: %q", f.Evidence)
+	}
+}
+
+// A unit is summarised by its WEAKEST paired person. Taking its strongest would
+// let one person carry a world in which someone else did worse.
+func TestAUnitIsCarriedByItsWeakestPersonNotItsStrongest(t *testing.T) {
+	// Person 0 gains, person 1 loses, in both worlds. The unit summary must be
+	// negative, so no uplift may be reported.
+	mixed := sealed(
+		pairedUnit(1, map[Arm][]float64{NoAssistant: {.1, .5}, MultiPerspective: {.9, .1}}),
+		pairedUnit(2, map[Arm][]float64{NoAssistant: {.1, .5}, MultiPerspective: {.9, .1}}))
+	f, e := CompareArms(mixed, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatal("a unit was carried by its most favourable person while another person did worse")
+	}
+	if f.Margin == nil {
+		t.Fatal("no margin was reported for a paired comparison")
+	}
+	if f.Margin.High > 0 {
+		t.Fatalf("the unit summary took a favourable person rather than the weakest: %+v", f.Margin)
+	}
+}
+
+// A person observed in only one arm is missing from the other. Missingness is
+// not evidence of a difference, and must not be read as one.
+func TestAPersonObservedInOnlyOneArmIsNotEvidence(t *testing.T) {
+	both := sealed(
+		pairedUnit(1, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}),
+		pairedUnit(2, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}))
+	if _, e := CompareArms(both, NoAssistant, MultiPerspective); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	// Observe person 1 in the candidate arm only, in one world.
+	oneArmed := sealed(
+		pairedUnit(1, map[Arm][]float64{NoAssistant: {.1}, MultiPerspective: {.5, .5}}),
+		pairedUnit(2, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}))
+	f, e := CompareArms(oneArmed, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatal("a person present in only one arm was counted as evidence of a difference")
+	}
+	if !strings.Contains(f.Evidence, "only one arm") {
+		t.Fatalf("one-armed observation is not named in the evidence: %q", f.Evidence)
+	}
+}
+
+// The most important property in this file. "No uplift was found" only means
+// something if this contract is CAPABLE of finding uplift. A comparison that
+// can never return pass is not a cautious evaluation, it is a constant, and
+// every honesty assertion built on it — including the compiled gate's — would
+// be vacuous. Given evidence that genuinely separates the arms across
+// independent worlds, with no harm and nothing unobserved, it must say so.
+func TestUpliftIsReachableSoRefusingItMeansSomething(t *testing.T) {
+	clear := sealed(
+		pairedUnit(1, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}),
+		pairedUnit(2, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}))
+	f, e := CompareArms(clear, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status != Pass {
+		t.Fatalf("evidence that separates every pair across independent worlds was refused: %q (%s)", f.Status, f.Evidence)
+	}
+	if len(f.Harms) != 0 {
+		t.Fatalf("a harm-free fixture reported harm: %+v", f.Harms)
+	}
+	if f.Margin == nil || f.Margin.Units < MinIndependentUnits {
+		t.Fatalf("a passing finding reported no clustered margin: %+v", f.Margin)
+	}
+	// Even here the synthetic ceiling holds: this is not human validity.
+	if !f.SyntheticOnly || f.HumanValidity != NotTested {
+		t.Fatalf("a passing finding dropped its synthetic ceiling: synthetic=%v validity=%q", f.SyntheticOnly, f.HumanValidity)
+	}
+	// And narrowing the separation until the arms overlap must withdraw it.
+	overlap := sealed(
+		pairedUnit(1, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .05}}),
+		pairedUnit(2, map[Arm][]float64{NoAssistant: {.1, .1}, MultiPerspective: {.5, .5}}))
+	f, e = CompareArms(overlap, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatal("uplift survived a pair that does not separate")
+	}
+}
