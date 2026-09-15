@@ -667,13 +667,18 @@ type PersonRecord struct {
 	Evidence           []EvidenceRef      `json:"evidence"`
 }
 
-// EvidenceRef names the tier and source record behind one measurement, so the
-// emitted report can be traced back rather than taken on trust.
+// EvidenceRef carries one measurement as it was recorded: the tier and source
+// record behind it, and the measured value and status themselves. Exporting
+// only provenance metadata would make an unknown or discordant later report
+// serialize identically to an observed one, so a report consumer could not
+// audit the data a comparison actually used.
 type EvidenceRef struct {
-	Tier   EvidenceTier     `json:"tier"`
-	Source core.ID          `json:"source"`
-	Metric string           `json:"metric"`
-	At     core.LogicalTime `json:"at"`
+	Tier   EvidenceTier       `json:"tier"`
+	Source core.ID            `json:"source"`
+	Metric string             `json:"metric"`
+	At     core.LogicalTime   `json:"at"`
+	Value  core.GroupQuantity `json:"value"`
+	Status core.OutcomeStatus `json:"status"`
 }
 
 // ScenarioCoverage states, per required #58 scenario family, whether this
@@ -793,7 +798,8 @@ func SummariseUplift(cs []Comparison) (UpliftSummary, error) {
 			for _, o := range r.Outcomes {
 				refs := []EvidenceRef{}
 				for _, ob := range o.Observations {
-					refs = append(refs, EvidenceRef{Tier: ob.Tier, Source: ob.Source, Metric: ob.Metric, At: ob.At})
+					refs = append(refs, EvidenceRef{Tier: ob.Tier, Source: ob.Source, Metric: ob.Metric,
+						At: ob.At, Value: ob.Value, Status: ob.Value.Status})
 				}
 				s.People = append(s.People, PersonRecord{Scenario: c.Scenario, Seed: c.Seed, WorldHash: r.WorldHash,
 					Arm: r.Arm, Person: o.Person, Benefit: o.Benefit, Burden: o.Burden,
