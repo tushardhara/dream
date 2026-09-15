@@ -132,6 +132,70 @@ change every private condition: varying one would pass while the helper leaked
 the other. This is a bounded invariance check over the conditions these scenes
 carry, not an exhaustive privacy proof, and it says so in the report.
 
+## Addendum 2: closing R1 — arms implemented in the consumers
+
+The owner ruled on PR #72 that implementing the arm/control paths in the
+existing offline synthetic consumers is this ticket's work rather than a scope
+expansion. All eight required families now execute through matched arms: 55
+comparisons, 187 executed arms, all four arms, and no uplift claimed anywhere.
+
+**The control is enforced, never conventional.** Four consumers already had an
+arm-aware helper path where the assistance contract forbids the no-assistant
+arm from selecting any action but WAIT. Three flows had no arm concept at all —
+group, repair and listening — and each gained one as an **opt-in versioned
+envelope** (`group-assistance.v2`, `repair-flow.v2`, `listening-flow.v2`),
+leaving v1 byte-identical for every existing caller. In all three the control
+returns before any capability is approved and before any history is read: a
+helper that never looks, not one that looks and answers WAIT. An arm on a v1
+request is rejected rather than silently ignored, which is how an evaluation
+ends up comparing several labels for one policy.
+
+**The arms map onto what each helper already computes.** The group and repair
+helpers both build one perspective per participant, so simple assistance takes
+none, single perspective takes the asking user's own, and multi perspective
+takes every affected member's. The listening flow's mode and share flags already
+decide whose accounts the helper may read and whether separately authored
+summaries are disclosed. Nothing was invented to fill an arm.
+
+**Where an arm has no faithful realisation it is reported unexecuted.**
+Explicit-preference assistance has none in the listening flow, which requires at
+least one account proposal by contract, so the nearest configuration would be
+identical to single perspective. Multi-perspective has none in the temporal
+consumer. Both are reported not executed rather than listed as a second label
+for one policy — which the evaluation's own policy-receipt rule would catch and
+name anyway.
+
+### Three further defects this closed
+
+**A crippled control is an asymmetry, not an absence.** The contract rejected
+any arm in which nobody acted. In the temporal consumer whether people act is a
+property of the SCENE and identical across arms — the eligibility gate leaves
+everyone a single option in `daily_2`, `agreed_break`, `no_contact` and
+`sparse`, and elsewhere everyone has a real alternative and correctly declines.
+Both are results this evaluation exists to see, and the guard made half the
+life_changes scenes unusable. What #58 asks to detect is a control crippled
+RELATIVE to the candidates, so that is what is now checked, where arms are
+comparable. `PersonOutcome.CouldAct` separates "chose not to" from "had no
+choice", read from the real candidate list.
+
+**Whether the assistant reached the people at all.** `ArmRun.HumanHash` records
+what the PEOPLE decided. In every consumer wired here the humans decide
+byte-identically across arms: the assistant's output is not an input to their
+choice. That does not invalidate a comparison — an intervention can change what
+someone experiences without changing what they do — but a null result there is
+not evidence about the policy. It qualifies a finding rather than refusing one,
+and fires for 103 arm-pair/scenario combinations on the real run.
+
+**A trap declined.** `RepairResponse.Expectation` reads "unresolved" in the
+no-assistant arm and "sustained_follow_through_observed" in the others, and is
+tempting to map onto a delayed outcome. It would be wrong: the relationship
+history is the same authored schedule in every arm, and the control reads
+"unresolved" because the helper did not look, not because anything went worse
+for anyone. Mapping it would have made the control appear to harm people and
+handed every candidate arm an uplift it did not earn — exactly the fabricated
+result #58 asks to detect. What the helper reported is the policy receipt, not
+the outcome.
+
 ### What R1 now is, and is not
 
 Three consumers execute: ordinary life, assistance, and recipient response.
@@ -143,6 +207,13 @@ satisfied by measuring nothing. Every comparison is now decided on paired
 evidence and every one is `inconclusive` on **observed** harm rather than on
 absent measurement.
 
-**Two of eight families are covered.** That is not R1 met, and nothing here
-should be read as meeting it. `make uplift-check` prints the six uncovered
-families and their reasons on every run.
+**All eight families are covered**, and `uplift-check` asserts it rather than
+printing it, so losing one fails the gate.
+
+What is still NOT established, and is printed on every run: seven families draw
+from a single undifferentiated RNG stream because their consumers do not
+separate human, exogenous and helper draws; five of the eight carry no
+delayed-outcome instrument at all, so their comparisons are behavioural only;
+and in 103 arm-pair/scenario combinations the assistant's output never reached
+the human decision. Every comparison is `inconclusive` on observed harm. No arm
+is credited with uplift, and none of this establishes human validity.

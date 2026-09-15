@@ -30,7 +30,17 @@ func Fixture() (*Local, error) {
 	return l, nil
 }
 func response(ctx context.Context, l *Local, id core.ID, at core.LogicalTime) (assistance.RepairResponse, error) {
-	r, e := l.Request("bob", id, at)
+	return armedResponse(ctx, l, id, at, "")
+}
+
+func armedResponse(ctx context.Context, l *Local, id core.ID, at core.LogicalTime, arm assistance.Arm) (assistance.RepairResponse, error) {
+	var r assistance.RepairRequest
+	var e error
+	if arm == "" {
+		r, e = l.Request("bob", id, at)
+	} else {
+		r, e = l.ArmedRequest("bob", id, at, arm)
+	}
 	if e != nil {
 		return assistance.RepairResponse{}, e
 	}
@@ -88,6 +98,13 @@ func Period(l *Local, index int, follow bool) error {
 	return l.Submit("bob", id("recipient-later"), id("practical"), "interpretation", "", "later", later, at+9, gb)
 }
 func Scenario(ctx context.Context, follow bool) (*Local, ScenarioReport, error) {
+	return ScenarioArm(ctx, follow, "")
+}
+
+// ScenarioArm runs the same authored command schedule under one matched arm.
+// The participants' actions, submissions and boundaries are identical in every
+// arm — the arm varies only what the helper may look at and report back.
+func ScenarioArm(ctx context.Context, follow bool, arm assistance.Arm) (*Local, ScenarioReport, error) {
 	l, e := Fixture()
 	if e != nil {
 		return nil, ScenarioReport{}, e
@@ -100,7 +117,7 @@ func Scenario(ctx context.Context, follow bool) (*Local, ScenarioReport, error) 
 		if e := Period(l, i, follow && i > 0); e != nil {
 			return l, out, e
 		}
-		r, e := response(ctx, l, core.ID(fmt.Sprintf("period-%d", i)), core.LogicalTime(12+i*20))
+		r, e := armedResponse(ctx, l, core.ID(fmt.Sprintf("period-%d", i)), core.LogicalTime(12+i*20), arm)
 		if e != nil {
 			return l, out, e
 		}
@@ -112,13 +129,13 @@ func Scenario(ctx context.Context, follow bool) (*Local, ScenarioReport, error) 
 			return l, out, e
 		}
 		if i == 1 {
-			out.Pause, e = response(ctx, l, "pause", 65)
+			out.Pause, e = armedResponse(ctx, l, "pause", 65, arm)
 			if e != nil {
 				return l, out, e
 			}
 		}
 	}
-	out.Ending, e = response(ctx, l, "ending", 70)
+	out.Ending, e = armedResponse(ctx, l, "ending", 70, arm)
 	if e != nil {
 		return l, out, e
 	}

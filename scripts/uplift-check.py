@@ -37,7 +37,7 @@ def main() -> int:
     ran = {u["arm"] for u in r["executed_manifest"]}
     assert set(r["arms_executed"]) == ran, (r["arms_executed"], sorted(ran))
     # Real execution across families and seeds, not an authored record set.
-    assert r["comparisons"] >= 52, r["comparisons"]
+    assert r["comparisons"] >= 55, r["comparisons"]
 
     findings = r["findings"]
     assert len(findings) >= 4, findings
@@ -82,7 +82,9 @@ def main() -> int:
                 "uncovered family gives no reason", c)
         else:
             assert c["family"] in backed, ("coverage not backed by the executed manifest", c)
-    assert any(c["covered"] for c in coverage), "no family is actually executed"
+    # R1's acceptance criterion: every required family executed through matched
+    # arms. This is asserted, not merely printed, so losing a family fails here.
+    assert not uncovered, ("required scenario families are not executed", uncovered)
 
     # Arms that produced the same policy output did the same thing. Recomputed
     # here from the manifest: no pair of arms that ran identically everywhere
@@ -165,7 +167,11 @@ def main() -> int:
         print("NOTE: these families draw from a single undifferentiated rng stream; their "
               "consumer does not separate human, exogenous and helper draws: " + ", ".join(single))
 
-    print(f"NOTE: {len(uncovered)} of 8 required scenario families are NOT covered: {', '.join(uncovered)}")
+    if uncovered:
+        print(f"NOTE: {len(uncovered)} of 8 required scenario families are NOT covered: {', '.join(uncovered)}")
+    else:
+        print(f"NOTE: all 8 required scenario families executed through matched arms "
+              f"({r['comparisons']} comparisons, {len(manifest)} executed arms)")
 
     print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "
           "per-person burden/unwanted/boundary/delayed retained; engagement metrics disqualified; "

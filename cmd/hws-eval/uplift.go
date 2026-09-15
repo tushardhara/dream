@@ -28,10 +28,12 @@ var realArms = []struct {
 // assumed: a family is blocked because no consumer can form a matched
 // comparison for it, and saying which is the difference between a gap someone
 // can close and a gap nobody can see.
-var upliftBlockers = []evals.FamilyNote{
-	{Family: "repair", Reason: "no experiment package executes the repair consumer across arms; only a client exists"},
-	{Family: "conflict_goals", Reason: "no consumer executes conflicting goals across arms"},
-}
+// upliftBlockers records why a required family is not executed. It is empty:
+// every required family now runs through matched arms. The mechanism is kept
+// because a family can become blocked again — a consumer losing its control
+// arm, say — and a bare "not covered" would hide whether that is an unwired
+// gap or one nobody can close.
+var upliftBlockers = []evals.FamilyNote{}
 
 // upliftSeeds are the bounded independent world units per family.
 var upliftSeeds = []uint64{11, 23}
@@ -52,7 +54,7 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 	}
 	for _, more := range []func(context.Context) ([]evals.Comparison, error){
 		responseComparisons, boundaryComparisons, domainComparisons,
-		temporalComparisons, groupComparisons,
+		temporalComparisons, groupComparisons, repairComparisons, listeningComparisons,
 	} {
 		cs, e := more(ctx)
 		if e != nil {

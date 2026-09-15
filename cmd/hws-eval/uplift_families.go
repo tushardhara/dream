@@ -10,6 +10,8 @@ import (
 	"github.com/tushardhara/dream/examples/boundaryexperiment"
 	"github.com/tushardhara/dream/examples/domainexperiment"
 	"github.com/tushardhara/dream/examples/groupexperiment"
+	"github.com/tushardhara/dream/examples/listeningclient"
+	"github.com/tushardhara/dream/examples/repairclient"
 	"github.com/tushardhara/dream/examples/temporalexperiment"
 	"github.com/tushardhara/dream/simulator/behavior"
 )
@@ -270,4 +272,110 @@ func groupComparisons(ctx context.Context) ([]evals.Comparison, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// repairComparisons executes the repair follow-through consumer across all four
+// arms over both authored schedules.
+//
+// A trap worth naming, because it is exactly the fabricated uplift #58 asks to
+// detect. RepairResponse.Expectation reads "unresolved" in the no-assistant arm
+// and "sustained_follow_through_observed" or "repeated_breach_observed" in the
+// others. It is tempting to map that onto a delayed outcome — and it would be
+// wrong. The relationship history is the SAME authored schedule in every arm;
+// the control reads "unresolved" because the helper did not look, not because
+// anything went worse for anyone. Mapping it would make the control appear to
+// harm people and hand every candidate arm an uplift it did not earn. What the
+// helper reported is the policy receipt, not the outcome, and it is recorded as
+// exactly that.
+func repairComparisons(ctx context.Context) ([]evals.Comparison, error) {
+	out := []evals.Comparison{}
+	for _, follow := range []bool{false, true} {
+		name := "repeated_apology_breach"
+		if follow {
+			name = "acknowledgement_follow_through"
+		}
+		c := evals.Comparison{Version: evals.UpliftVersion,
+			Scenario: core.ID("scenario:repair:" + name),
+			Family:   "repair", Seed: 1,
+			Affected: []core.ID{"alice", "bob"}}
+		for _, m := range helperArms {
+			_, rep, e := repairclient.ScenarioArm(ctx, follow, m.consumer)
+			if e != nil {
+				return nil, fmt.Errorf("repair/%s/%s: %w", name, m.consumer, e)
+			}
+			r := evals.ArmRun{Arm: m.arm, Seed: 1,
+				WorldHash:     assistance.Digest("repair-fixture/" + name),
+				ExogenousHash: assistance.Digest(rep.Actions),
+				Streams:       []evals.Stream{{Domain: "repair", Seed: assistance.Digest("repair/" + name)}},
+				PolicyHash:    assistance.Digest(rep.Periods),
+				// The participants' actions come from an authored command
+				// schedule identical in every arm, so this receipt is shared by
+				// construction and the comparison will say the assistant did not
+				// reach any decision — which is true: no choice is modelled here.
+				HumanHash: assistance.Digest(rep.Actions),
+				Scenario:  c.Scenario}
+			if rep.Periods[len(rep.Periods)-1].Next != "WAIT" {
+				r.HelperActs++
+			}
+			for _, person := range c.Affected {
+				// Nobody chooses in this consumer: the schedule is authored, so
+				// no one acted and no one had an action available. That holds in
+				// every arm alike, which is why it is not a crippled control.
+				r.Outcomes = append(r.Outcomes, unmeasured(person))
+			}
+			c.Runs = append(c.Runs, r)
+		}
+		if e := c.Validate(); e != nil {
+			return nil, fmt.Errorf("repair/%s: %w", name, e)
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// listeningComparisons executes the goal-aware listening consumer. It runs
+// three arms: explicit-preference/simple assistance has no faithful realisation
+// in this flow, which requires at least one account proposal by contract, so
+// the nearest configuration would be identical to single perspective. It is
+// reported not executed rather than listed as a second label for one policy.
+func listeningComparisons(ctx context.Context) ([]evals.Comparison, error) {
+	c := evals.Comparison{Version: evals.UpliftVersion,
+		Scenario: core.ID("scenario:conflict_goals:joint_listening"),
+		Family:   "conflict_goals", Seed: 4,
+		Affected: []core.ID{"alice", "bob"}}
+	for _, a := range listeningclient.ListeningArms {
+		responses, e := listeningclient.RunArm(ctx, a.Arm)
+		if e != nil {
+			return nil, fmt.Errorf("listening/%s: %w", a.Arm, e)
+		}
+		arm := evals.NoAssistant
+		switch a.Arm {
+		case assistance.Single:
+			arm = evals.SinglePerspective
+		case assistance.Multi:
+			arm = evals.MultiPerspective
+		}
+		ordered := []assistance.ListeningResponse{responses["alice"], responses["bob"]}
+		r := evals.ArmRun{Arm: arm, Seed: 4,
+			WorldHash:     assistance.Digest("listening-accounts"),
+			ExogenousHash: assistance.Digest("listening-session"),
+			Streams:       []evals.Stream{{Domain: "listening", Seed: assistance.Digest("listening/joint")}},
+			PolicyHash:    assistance.Digest(ordered),
+			// Both speakers author their own accounts before any helper runs,
+			// and this flow models no action choice, so the people are identical
+			// across arms by construction.
+			HumanHash: assistance.Digest("listening-accounts-authored"),
+			Scenario:  c.Scenario}
+		for _, person := range c.Affected {
+			if responses[person].Next != "WAIT" {
+				r.HelperActs++
+			}
+			r.Outcomes = append(r.Outcomes, unmeasured(person))
+		}
+		c.Runs = append(c.Runs, r)
+	}
+	if e := c.Validate(); e != nil {
+		return nil, fmt.Errorf("listening: %w", e)
+	}
+	return []evals.Comparison{c}, nil
 }
