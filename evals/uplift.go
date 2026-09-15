@@ -252,12 +252,17 @@ func (p PersonOutcome) Validate() error {
 		return fmt.Errorf("invalid person outcome")
 	}
 	switch p.DelayedOutcome {
-	// "missing" and "censored" mean an instrument existed and its value did not
-	// arrive, which is adverse. "not_instrumented" means this consumer has no
-	// delayed-outcome instrument at all: that is ignorance, not harm, and is
-	// reported as uncertainty. Collapsing the two would manufacture harm
-	// findings out of a consumer that simply never measured.
-	case "unresolved", "missing", "censored", "resolved", "not_instrumented":
+	// "missing" and "censored" mean an instrument existed, an intervention
+	// happened, and its outcome did not arrive. Both are adverse.
+	//
+	// The other two are NOT adverse and must never be collapsed into them.
+	// "not_instrumented" means this consumer has no delayed-outcome instrument
+	// at all, and "no_intervention" means the instrument exists and nothing
+	// triggered it because the helper correctly did nothing. A policy that
+	// rightly stays silent produces no outcome to measure, and scoring that as
+	// a missing outcome would penalise exactly the restraint this evaluation
+	// exists to leave room for.
+	case "unresolved", "missing", "censored", "resolved", "not_instrumented", "no_intervention":
 	default:
 		return fmt.Errorf("invalid delayed outcome disposition")
 	}
@@ -592,6 +597,9 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					}
 					if o.DelayedOutcome == "not_instrumented" {
 						unknowns = append(unknowns, fmt.Sprintf("%s: this consumer has no delayed-outcome instrument", o.Person))
+					}
+					if o.DelayedOutcome == "no_intervention" {
+						unknowns = append(unknowns, fmt.Sprintf("%s: no intervention occurred, so there is no outcome to measure", o.Person))
 					}
 					if o.Benefit.Status != core.Observed {
 						unknowns = append(unknowns, fmt.Sprintf("%s: benefit not observed", o.Person))

@@ -122,6 +122,12 @@ def main() -> int:
     dispositions = {p["delayed_outcome"] for p in people}
     for want in ("missing", "censored", "resolved", "unresolved"):
         assert want in dispositions, ("no person reached this disposition", want, sorted(dispositions))
+    # A helper that correctly stays silent produces nothing to measure. Where
+    # no intervention occurred the outcome must say so rather than be scored as
+    # missing, which would make restraint look like harm.
+    assert "no_intervention" in dispositions, (
+        "no person records correct restraint; a silent helper is being scored as something else",
+        sorted(dispositions))
 
     # Paired evidence must actually exist. Without this the whole evaluation
     # could regress to "no person was observed in both arms" everywhere and
@@ -144,6 +150,7 @@ def main() -> int:
 
     print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "
           "per-person burden/unwanted/boundary/delayed retained; engagement metrics disqualified; "
+          "correct restraint is not scored as a missing outcome; "
           "executed arms match the manifest; coverage recomputed from the executed "
           "manifest; human validity NOT_TESTED")
     return 0

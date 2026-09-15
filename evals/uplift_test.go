@@ -1152,3 +1152,39 @@ func TestUncoveredFamiliesCarryTheirReason(t *testing.T) {
 		}
 	}
 }
+
+// A policy that correctly stays silent produces nothing to measure. Scoring
+// that as a missing outcome would make restraint look like harm.
+func TestNoInterventionIsUncertaintyNotHarm(t *testing.T) {
+	c := UpliftFixture()[1]
+	set := func(d string) UpliftFinding {
+		v := c
+		v.Runs = append([]ArmRun{}, c.Runs...)
+		for i := range v.Runs {
+			v.Runs[i].Outcomes = append([]PersonOutcome{}, c.Runs[i].Outcomes...)
+			for j := range v.Runs[i].Outcomes {
+				v.Runs[i].Outcomes[j].DelayedOutcome = d
+				v.Runs[i].Outcomes[j].Burden = core.UnknownGroupQuantity()
+			}
+		}
+		f, e := CompareArms([]Comparison{v}, NoAssistant, MultiPerspective)
+		if e != nil {
+			t.Fatal(d, e)
+		}
+		return f
+	}
+	if h := set("missing").Harms; len(h) == 0 {
+		t.Fatal("positive control: a missing outcome was not reported as harm")
+	}
+	f := set("no_intervention")
+	if len(f.Harms) != 0 {
+		t.Fatalf("correct restraint was reported as harm: %+v", f.Harms)
+	}
+	found := false
+	for _, u := range f.Uncertainty {
+		found = found || strings.Contains(u, "no intervention occurred")
+	}
+	if !found {
+		t.Fatalf("restraint was not reported as uncertainty: %+v", f.Uncertainty)
+	}
+}

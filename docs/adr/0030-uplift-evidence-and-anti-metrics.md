@@ -102,11 +102,22 @@ control, which this contract requires and will not fabricate; `repair` and
 `conflict_goals` have no arm-executing consumer. **Closing these requires
 implementing arms in those consumers, not wiring in the evaluator.**
 
+**6. Correct restraint is not a missing outcome.** The ordinary consumer only
+records an experience where the helper actually acted, so in the two families
+where it correctly stays silent on every opportunity no person has any
+experience at all. Defaulting those to `missing` scored warranted restraint as
+an adverse outcome — 32 fabricated harm qualifications, and precisely backwards
+for a project whose own ticket says a good policy may correctly remain silent.
+`no_intervention` now says that nothing happened, is reported as uncertainty,
+and is upgraded to `missing` only where the helper DID act and no outcome
+arrived for that person. `uplift-check` asserts the distinction is exercised.
+
 ### What R1 now is, and is not
 
 Three consumers execute: ordinary life, assistance, and recipient response.
-All four arms run. All five delayed-outcome dispositions — resolved,
-unresolved, missing, censored and not_instrumented — are exercised, and
+All four arms run. All six delayed-outcome dispositions — resolved,
+unresolved, missing, censored, not_instrumented and no_intervention — are
+exercised, and
 `uplift-check` asserts they are, because refusing to claim uplift is trivially
 satisfied by measuring nothing. Every comparison is now decided on paired
 evidence and every one is `inconclusive` on **observed** harm rather than on

@@ -133,7 +133,14 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 	o := evals.PersonOutcome{
 		Person: person, Benefit: core.UnknownGroupQuantity(), Burden: core.UnknownGroupQuantity(),
 		Appropriateness: core.UnknownGroupQuantity(), BurdenReduction: core.UnknownGroupQuantity(),
-		DelayedOutcome: "missing",
+		// Default: nothing happened to this person. This consumer only records
+		// an experience where the helper actually acted, so in the families
+		// where it correctly stays silent every person has no experience at
+		// all. Defaulting to "missing" scored that correct restraint as an
+		// adverse outcome — the opposite of what this evaluation is for. It is
+		// upgraded to "missing" below only if the helper DID act for this arm
+		// and no experience arrived for this person.
+		DelayedOutcome: "no_intervention",
 	}
 	// Acted means this person actually chose to act. A trace that exists but
 	// selected WAIT is not acting: reading it as action would bypass the
@@ -169,6 +176,15 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 			Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
 		})
 		break
+	}
+	acted := false
+	for _, o := range r.Opportunities {
+		acted = acted || o.Helper.Action != "WAIT"
+	}
+	if acted {
+		// An intervention happened in this arm. A person with no experience
+		// record is then genuinely missing an outcome, not untouched.
+		o.DelayedOutcome = "missing"
 	}
 	for _, e := range r.Experiences {
 		if e.Participant != person {
