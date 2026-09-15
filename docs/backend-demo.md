@@ -118,3 +118,13 @@ change recorded demo v1–v3 or assistance v1–v4 behavior. See
 Spanish and declared-preference coverage, disclosure restrictions and bounds.
 These are authored synthetic model fixtures; semantic listening quality,
 accessibility adequacy, real-human validity and uplift remain NOT_TESTED.
+
+## Offline multi-period repair fixture (#55)
+
+`make repair-check` builds and exercises `./bin/hws-repair`: two authored fictional
+command sequences with the same initial breach, contrasting repeated apology/breach
+with resource-consuming practical follow-through and later recipient observations.
+The helper preserves contrary immediate/later assessments and legitimate pauses
+and endings. This opt-in fixture does not change legacy demo/cognition replay.
+See [ADR0027](adr/0027-observed-repair-follow-through.md) for permission/provenance
+rules, direct negative controls, bounds and explicit human-validity limitations.
