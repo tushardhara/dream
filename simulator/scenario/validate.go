@@ -37,6 +37,13 @@ func (s Scenario) Validate() error {
 		}
 		return nil
 	}
+	unknownAges := map[core.ID]bool{}
+	for _, id := range s.Public.UnknownAges {
+		if id.Validate() != nil || unknownAges[id] {
+			return fail("$.public.unknown_ages", "invalid unknown-age declaration")
+		}
+		unknownAges[id] = true
+	}
 	humans := map[core.ID]bool{}
 	if len(s.Public.Humans) < 2 || len(s.Public.Humans) > 24 {
 		return fail("$.public.humans", "requires 2..24 synthetic adults")
@@ -46,10 +53,15 @@ func (s Scenario) Validate() error {
 		if err := add(h.ID, p+".id"); err != nil {
 			return err
 		}
-		if h.Age < 18 || h.Age > 120 || !text(h.Name) {
+		if !text(h.Name) || unknownAges[h.ID] && h.Age != 0 || !unknownAges[h.ID] && (h.Age < 18 || h.Age > 120) {
 			return fail(p, "requires an adult age 18..120 and bounded name")
 		}
 		humans[h.ID] = true
+	}
+	for id := range unknownAges {
+		if !humans[id] {
+			return fail("$.public.unknown_ages", "unknown person")
+		}
 	}
 	ref := func(id core.ID, p string) error {
 		if !humans[id] {
@@ -178,15 +190,30 @@ func (s Scenario) Validate() error {
 				return fail(q, "memory requires known evidence and bounded text")
 			}
 		}
+		if len(a.Temporal) > 8 {
+			return fail(p, "temporal context bound")
+		}
+		temporalIDs := map[core.ID]bool{}
+		for _, f := range a.Temporal {
+			if f.Validate() != nil || f.Observer != a.ID || !humans[f.With] || !known[f.Source] || f.ConfirmedAt != 0 || f.ObservedThrough != 0 || temporalIDs[f.Account] {
+				return fail(p, "invalid genesis temporal context")
+			}
+			temporalIDs[f.Account] = true
+		}
 		if len(a.Contexts) > 8 {
 			return fail(p, "relationship context bound")
 		}
 		seenContexts := map[core.ID]bool{}
+		seenDomainAccounts := map[core.ID]bool{}
 		for _, c := range a.Contexts {
-			if c.Validate(a.ID, c.Other) != nil || c.Valid.Start != 0 || seenContexts[c.Other] {
+			if c.Validate(a.ID, c.Other) != nil || c.Valid.Start != 0 || c.Version == 1 && seenContexts[c.Other] || c.Version == 2 && seenDomainAccounts[c.Account] {
 				return fail(p, "invalid observer relationship context")
 			}
-			seenContexts[c.Other] = true
+			if c.Version == 1 {
+				seenContexts[c.Other] = true
+			} else {
+				seenDomainAccounts[c.Account] = true
+			}
 			found := false
 			for _, r := range a.Relationships {
 				if r.Other == c.Other {

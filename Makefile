@@ -28,6 +28,11 @@ build:
 	go build -trimpath -o bin/hws-eval ./cmd/hws-eval
 	go build -trimpath -o bin/hws-generate ./cmd/hws-generate
 	go build -trimpath -o bin/hws-demo ./cmd/hws-demo
+	go build -trimpath -o bin/hws-assistance ./cmd/hws-assistance
+	go build -trimpath -o bin/hws-listening ./cmd/hws-listening
+	go build -trimpath -o bin/hws-repair ./cmd/hws-repair
+	go build -trimpath -o bin/hws-group ./cmd/hws-group
+	go build -trimpath -o bin/hws-ordinary ./cmd/hws-ordinary
 help-check: build
 	./bin/hws --help
 	./bin/hws-api --help
@@ -36,7 +41,12 @@ help-check: build
 	./bin/hws-eval --help
 	./bin/hws-generate --help
 	./bin/hws-demo --help
-verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check demo-check
+	./bin/hws-assistance --help
+	./bin/hws-listening --help
+	./bin/hws-repair --help
+	./bin/hws-group --help
+	./bin/hws-ordinary --help
+verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check demo-check listening-check repair-check group-check ordinary-check uplift-check
 live-provider soak:
 	@echo "BLOCKED: requires explicit owner authorization, provider/budget/infrastructure configuration and a later implemented runner."; exit 1
 
@@ -52,8 +62,27 @@ container-build:
 container-check:
 	python3 scripts/container-check.py
 
+uplift-check:
+	python3 scripts/uplift-check.py
+
 evaluation-check:
 	python3 scripts/evaluation-check.py
 
 demo-check:
 	python3 scripts/demo-check.py
+
+.PHONY: listening-check
+listening-check: build
+	python3 scripts/listening-check.py
+
+.PHONY: repair-check
+repair-check: build
+	python3 scripts/repair-check.py
+
+.PHONY: group-check
+group-check: build
+	python3 scripts/group-check.py
+
+.PHONY: ordinary-check
+ordinary-check: build
+	python3 scripts/ordinary-check.py

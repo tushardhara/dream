@@ -83,6 +83,7 @@ func NewPolicyService(journal MemoryJournal, authority ContextAuthority, recorde
 }
 
 type SafeContextItem struct {
+	Reporter                           core.ID `json:",omitempty"`
 	Source                             core.ID
 	Observer                           core.ID
 	Subject                            core.Subject
@@ -132,7 +133,7 @@ type ApprovedContext struct {
 }
 
 func (p ContextProposal) validate() bool {
-	if p.Version != 1 || p.Query.Validate() != nil || p.Binding.Validate() != nil || p.Recipient.Validate() != nil || len(p.Sources) == 0 || !relationIDs(p.Sources, 16) {
+	if (p.Version != 1 && p.Version != 2) || p.Query.Validate() != nil || p.Binding.Validate() != nil || p.Recipient.Validate() != nil || len(p.Sources) == 0 || !relationIDs(p.Sources, 16) {
 		return false
 	}
 	if (core.Grant{Actor: p.Query.Actor, Recipient: p.Recipient, Purpose: p.Query.Purpose, Operation: p.Operation}).Validate() != nil {
@@ -251,7 +252,11 @@ func (p *PolicyService) evaluate(ctx context.Context, proposal ContextProposal) 
 			return SafeContext{}, [32]byte{}, policyDeny("context_budget", ordinal), nil
 		}
 		learned, _ := learnedAt(*e.Content, q.Actor)
-		safe.items = append(safe.items, SafeContextItem{Source: id, Observer: e.Event.Meta.Observer, Subject: e.Event.Subject, Kind: e.Content.Kind, Confidence: e.Event.Meta.Confidence, OccurredAt: e.Event.OccurredAt, LearnedAt: learned, Valid: e.Event.Meta.Valid, Parents: e.Event.Meta.Parents, Supporting: e.Event.Meta.Supporting, Contradicting: e.Event.Meta.Contradicting, Text: e.Content.Text})
+		var reporter core.ID
+		if proposal.Version == 2 {
+			reporter = e.Event.Meta.Source
+		}
+		safe.items = append(safe.items, SafeContextItem{Reporter: reporter, Source: id, Observer: e.Event.Meta.Observer, Subject: e.Event.Subject, Kind: e.Content.Kind, Confidence: e.Event.Meta.Confidence, OccurredAt: e.Event.OccurredAt, LearnedAt: learned, Valid: e.Event.Meta.Valid, Parents: e.Event.Meta.Parents, Supporting: e.Event.Meta.Supporting, Contradicting: e.Event.Meta.Contradicting, Text: e.Content.Text})
 	}
 	encoded, err := json.Marshal(safe.Items())
 	if err != nil || len(encoded) > 32768 {
