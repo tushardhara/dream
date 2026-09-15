@@ -1120,3 +1120,35 @@ func TestMatchedStreamsAreOrderIndependent(t *testing.T) {
 	c.Runs[3].Streams = []Stream{st[2], st[0], {Domain: "exogenous", Seed: "different"}}
 	assertErr(t, c.Validate(), "do not share the matched rng streams")
 }
+
+// An uncovered family must say why. A note for a family that IS covered is
+// ignored, so a stale blocker cannot mask real coverage.
+func TestUncoveredFamiliesCarryTheirReason(t *testing.T) {
+	c := comparison()
+	s, e := SummariseUplift([]Comparison{c},
+		FamilyNote{Family: "repair", Reason: "no consumer executes this across arms"},
+		FamilyNote{Family: "ordinary_joy", Reason: "STALE: this family is actually executed"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, sc := range s.ScenarioCoverage {
+		switch sc.Family {
+		case "repair":
+			if !strings.Contains(sc.Note, "no consumer executes this across arms") {
+				t.Fatalf("uncovered family lost its reason: %q", sc.Note)
+			}
+		case "ordinary_joy":
+			if !sc.Covered {
+				t.Fatal("positive control: the executed family is not covered")
+			}
+			if strings.Contains(sc.Note, "STALE") {
+				t.Fatalf("a stale blocker was applied to a covered family: %q", sc.Note)
+			}
+		case "group_burden":
+			// No note supplied: the generic note must still stand alone.
+			if !strings.Contains(sc.Note, "NOT COVERED") {
+				t.Fatalf("a family with no reason lost its note: %q", sc.Note)
+			}
+		}
+	}
+}

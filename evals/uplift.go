@@ -859,9 +859,19 @@ func UnknownIfAbsent(a Arm, person int) core.GroupQuantity {
 	return core.ObservedGroupQuantity(.3)
 }
 
+// FamilyNote records why a required family is not executed. A bare "not
+// covered" tells a reader nothing about whether the family is merely unwired or
+// has no consumer capable of a matched comparison at all.
+type FamilyNote struct {
+	Family string `json:"family"`
+	Reason string `json:"reason"`
+}
+
 // SummariseUplift evaluates every candidate arm against the no-assistant
 // control and reports the result honestly, including when there is none.
-func SummariseUplift(cs []Comparison) (UpliftSummary, error) {
+// Optional notes explain why an uncovered family is uncovered; a note for a
+// family that IS covered is ignored, so a stale note cannot mask real coverage.
+func SummariseUplift(cs []Comparison, notes ...FamilyNote) (UpliftSummary, error) {
 	s := UpliftSummary{Version: UpliftVersion, SyntheticOnly: true, HumanValidity: NotTested,
 		LiveProviderSemanticQuality: NotTested, CrossModelTransfer: NotTested, RealThirtyDayStudy: NotTested,
 		Comparisons: len(cs), Arms: Arms,
@@ -926,6 +936,18 @@ func SummariseUplift(cs []Comparison) (UpliftSummary, error) {
 	}
 	s.Executed = ExecutedManifest(cs)
 	s.ScenarioCoverage = coverage(cs)
+	reasons := map[string]string{}
+	for _, n := range notes {
+		reasons[n.Family] = n.Reason
+	}
+	for i, sc := range s.ScenarioCoverage {
+		if sc.Covered {
+			continue
+		}
+		if r, ok := reasons[sc.Family]; ok && r != "" {
+			s.ScenarioCoverage[i].Note = sc.Note + "; " + r
+		}
+	}
 	return s, nil
 }
 

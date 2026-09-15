@@ -74,6 +74,12 @@ def main() -> int:
         if not c["covered"]:
             assert "NOT COVERED" in c["note"], c
             assert c["family"] not in backed, ("family executed but reported uncovered", c)
+            # Every uncovered family must say WHY, not just that it is. A bare
+            # "not covered" hides whether the family is merely unwired or has no
+            # consumer that can form a matched comparison at all.
+            generic, _, reason = c["note"].partition(";")
+            assert "NOT COVERED" in generic and len(reason.strip()) > 20, (
+                "uncovered family gives no reason", c)
         else:
             assert c["family"] in backed, ("coverage not backed by the executed manifest", c)
     assert any(c["covered"] for c in coverage), "no family is actually executed"

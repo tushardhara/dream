@@ -23,6 +23,20 @@ var realArms = []struct {
 	{"permitted_context", evals.SinglePerspective},
 }
 
+// upliftBlockers record why each required family is not executed. Each reason
+// was established by reading the consumer's actual signature and behaviour, not
+// assumed: a family is blocked because no consumer can form a matched
+// comparison for it, and saying which is the difference between a gap someone
+// can close and a gap nobody can see.
+var upliftBlockers = []evals.FamilyNote{
+	{Family: "selective_boundaries", Reason: "boundaryexperiment.Run takes a signal and no arm, so it executes one policy and cannot form a matched comparison"},
+	{Family: "role_domain_trust", Reason: "domainexperiment.Run takes a relationship focus and no arm, so it executes one policy and cannot form a matched comparison"},
+	{Family: "group_burden", Reason: "groupexperiment.Run takes a case and no arm, so it executes one policy and cannot form a matched comparison"},
+	{Family: "life_changes", Reason: "temporalexperiment.Run is arm-varying but its policies map only onto simple and multi_perspective; it has no no-assistant control, which this contract requires and will not fabricate"},
+	{Family: "repair", Reason: "no experiment package executes the repair consumer across arms; only a client exists"},
+	{Family: "conflict_goals", Reason: "no consumer executes conflicting goals across arms"},
+}
+
 // upliftSeeds are the bounded independent world units per family.
 var upliftSeeds = []uint64{11, 23}
 
