@@ -253,3 +253,79 @@ func TestDispositionsAndUnwantedComeFromTheRecipientsAccount(t *testing.T) {
 		t.Fatal("positive control: no censored later observation exists to map")
 	}
 }
+
+// The privacy check must be able to fail. A detector that cannot detect is
+// worse than none: it turns an unmeasured zero into a measured-looking one.
+func TestTheHelperLeakDetectorActuallyDetects(t *testing.T) {
+	scene := responseexperiment.Scene{Expectation: -1, Observation: "observed", ShareReport: true, Followup: true}
+	a, e := responseexperiment.Run(context.Background(), scene, assistance.Simple, 11, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Two arms genuinely differ in helper output, so this is a real positive.
+	b, e := responseexperiment.Run(context.Background(), scene, assistance.Multi, 11, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !helperOutputDiffers(a, b) {
+		t.Fatal("the detector cannot tell two genuinely different helper outputs apart")
+	}
+	if helperOutputDiffers(a, a) {
+		t.Fatal("the detector reports a difference between a run and itself")
+	}
+}
+
+// And the property it checks must actually hold on the real consumer: changing
+// only the recipient's private conditions must not move the helper's output.
+func TestPrivateRecipientStateDoesNotReachTheHelper(t *testing.T) {
+	for _, sc := range responseScenes {
+		for _, m := range helperArms {
+			for _, seed := range upliftSeeds {
+				base, e := responseexperiment.Run(context.Background(), sc.scene, m.consumer, seed, nil)
+				if e != nil {
+					t.Fatal(e)
+				}
+				leak, e := privateStateLeaks(context.Background(), sc.scene, m.consumer, seed, base)
+				if e != nil {
+					t.Fatalf("%s/%s/%d: %v", sc.name, m.consumer, seed, e)
+				}
+				if leak {
+					t.Fatalf("%s/%s/%d: private recipient state reached the helper's output", sc.name, m.consumer, seed)
+				}
+			}
+		}
+	}
+}
+
+// The privacy probe is only as good as its variant. A variant that changes
+// nothing, or changes only one of the private conditions, would pass while the
+// helper leaked the other.
+func TestThePrivateVariantChangesEveryPrivateCondition(t *testing.T) {
+	for _, sc := range responseScenes {
+		v, e := privateVariant(sc.scene)
+		if e != nil {
+			t.Fatalf("%s: %v", sc.name, e)
+		}
+		if v.Expectation == sc.scene.Expectation {
+			t.Fatalf("%s: the variant keeps the same private expectation", sc.name)
+		}
+		if v.PrivateFear == sc.scene.PrivateFear {
+			t.Fatalf("%s: the variant keeps the same private fear", sc.name)
+		}
+		// Nothing public may change, or a difference in helper output would no
+		// longer be evidence of a leak.
+		v.Expectation, v.PrivateFear = sc.scene.Expectation, sc.scene.PrivateFear
+		if v != sc.scene {
+			t.Fatalf("%s: the variant changed something the helper is allowed to see", sc.name)
+		}
+	}
+	// A scene whose private conditions are at their own midpoint cannot be
+	// varied this way, and is refused rather than silently run as a no-op.
+	if _, e := privateVariant(responseexperiment.Scene{Expectation: 0, PrivateFear: .5}); e == nil {
+		t.Fatal("a vacuous private variant was accepted")
+	}
+	// Changing only one condition is refused too.
+	if _, e := privateVariant(responseexperiment.Scene{Expectation: 1, PrivateFear: .5}); e == nil {
+		t.Fatal("a variant that changes only the expectation was accepted")
+	}
+}

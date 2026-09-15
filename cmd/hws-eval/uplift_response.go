@@ -66,8 +66,21 @@ func responseComparisons(ctx context.Context) ([]evals.Comparison, error) {
 					PolicyHash: assistance.Digest(run.Helper),
 					Scenario:   c.Scenario,
 				}
+				// A real, executed privacy check rather than a field nobody
+				// writes. The same scene is re-run with ONLY the recipient's
+				// private conditions changed; the helper never receives those,
+				// so its output must be byte-identical. If it is not, private
+				// recipient state reached the helper's output, and that is a
+				// boundary violation attributed to whoever's state leaked.
+				leak, e := privateStateLeaks(ctx, sc.scene, m.consumer, seed, run)
+				if e != nil {
+					return nil, fmt.Errorf("response/%s/%s/%d privacy probe: %w", sc.name, m.consumer, seed, e)
+				}
 				for _, person := range c.Affected {
 					o, recs := responseOutcomeFor(person, run, m.arm, sc.name)
+					if leak && person == privateStateOwner {
+						o.BoundaryViolations++
+					}
 					r.Outcomes = append(r.Outcomes, o)
 					c.Sources = append(c.Sources, recs...)
 				}
@@ -223,4 +236,56 @@ func hasRecord(in []evals.SourceRecord, id core.ID) bool {
 		}
 	}
 	return false
+}
+
+// upliftChecks names the adversarial probes this run actually executes. A harm
+// column that nothing writes to reports zero forever; naming the executed
+// checks is what lets a reader tell that apart from a measured zero.
+var upliftChecks = []string{
+	"boundary/privacy: each recipient-response scene re-run at the same arm and seed with every private recipient condition changed and nothing else; a difference in the helper's interactions is recorded as a boundary violation. Bounded invariance over the conditions these scenes vary, not an exhaustive privacy proof.",
+	"broken control: an arm in which every human waits is rejected, and a no-assistant arm that performed helper actions is rejected.",
+	"identical arms: two arms whose policy output matches produced the same intervention and can never be read as uplift.",
+	"engagement metrics: disqualified as benefit by contract at record validation, not by convention.",
+}
+
+// privateStateOwner is whose private conditions the scene varies. Scene's own
+// documentation names the expectation as Bob's, and it is never supplied to the
+// helper.
+const privateStateOwner = core.ID("bob")
+
+// privateStateLeaks re-runs the same scene, arm and seed with only the private
+// recipient conditions changed and reports whether the helper's interactions
+// differ. The helper is never given those conditions, so any difference means
+// they reached its output. This is a bounded invariance check over the
+// conditions this scene actually varies, not an exhaustive privacy proof.
+func privateStateLeaks(ctx context.Context, sc responseexperiment.Scene, arm assistance.Arm, seed uint64, base hws.ResponsiveAssistanceRun) (bool, error) {
+	variant, e := privateVariant(sc)
+	if e != nil {
+		return false, e
+	}
+	other, e := responseexperiment.Run(ctx, variant, arm, seed, nil)
+	if e != nil {
+		return false, e
+	}
+	return helperOutputDiffers(base, other), nil
+}
+
+// privateVariant changes EVERY private recipient condition the scene carries
+// and nothing else. Varying only one of them would leave a probe that passes
+// while the helper leaks the other, and a variant equal to its scene is a probe
+// that proves nothing at all, so both are refused rather than run.
+func privateVariant(sc responseexperiment.Scene) (responseexperiment.Scene, error) {
+	variant := sc
+	variant.Expectation = -sc.Expectation
+	variant.PrivateFear = 1 - sc.PrivateFear
+	if variant.Expectation == sc.Expectation || variant.PrivateFear == sc.PrivateFear {
+		return sc, fmt.Errorf("private variant does not change every private condition, so this probe proves nothing")
+	}
+	return variant, nil
+}
+
+// helperOutputDiffers is separated so the detection itself can be exercised
+// without needing a consumer that actually leaks.
+func helperOutputDiffers(a, b hws.ResponsiveAssistanceRun) bool {
+	return assistance.Digest(a.Helper) != assistance.Digest(b.Helper)
 }

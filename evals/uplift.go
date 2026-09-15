@@ -760,8 +760,12 @@ type UpliftSummary struct {
 	ScenarioCoverage []ScenarioCoverage `json:"scenario_coverage"`
 	// Executed is the frozen manifest of arms that actually ran. Coverage is
 	// derived from it, so a reader can audit the claim rather than trust it.
-	Executed    []ExecutedUnit `json:"executed_manifest"`
-	Limitations []string       `json:"limitations"`
+	Executed []ExecutedUnit `json:"executed_manifest"`
+	// Checks names the adversarial probes that were actually executed during
+	// this run. It exists so a zero in a harm column can be read as a measured
+	// zero rather than as a column nothing ever writes to.
+	Checks      []string `json:"executed_checks"`
+	Limitations []string `json:"limitations"`
 }
 
 // PersonRecord is one person's result in one arm of one comparison.
@@ -874,6 +878,9 @@ type FamilyNote struct {
 	Family string `json:"family"`
 	Reason string `json:"reason"`
 }
+
+// ExecutedCheck records an adversarial probe the run actually performed.
+type ExecutedCheck struct{ Description string }
 
 // SummariseUplift evaluates every candidate arm against the no-assistant
 // control and reports the result honestly, including when there is none.

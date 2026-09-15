@@ -129,6 +129,16 @@ def main() -> int:
         "no person records correct restraint; a silent helper is being scored as something else",
         sorted(dispositions))
 
+    # A harm column nothing writes to reports zero forever. The executed checks
+    # are what let a reader tell a measured zero from an unmeasured one, so the
+    # boundary/privacy probe must be named and every person must carry the
+    # column it writes to.
+    checks = r["executed_checks"]
+    assert any("boundary" in c for c in checks), ("no boundary/privacy probe was executed", checks)
+    assert any("identical arms" in c for c in checks), ("no identical-arm check was executed", checks)
+    for p in people:
+        assert isinstance(p["boundary_violations"], int), p
+
     # Paired evidence must actually exist. Without this the whole evaluation
     # could regress to "no person was observed in both arms" everywhere and
     # still pass every other assertion here, because refusing to claim uplift
@@ -151,6 +161,7 @@ def main() -> int:
     print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "
           "per-person burden/unwanted/boundary/delayed retained; engagement metrics disqualified; "
           "correct restraint is not scored as a missing outcome; "
+          "boundary/privacy probe executed (measured zero, not an unwritten column); "
           "executed arms match the manifest; coverage recomputed from the executed "
           "manifest; human validity NOT_TESTED")
     return 0

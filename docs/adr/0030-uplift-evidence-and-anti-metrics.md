@@ -112,6 +112,26 @@ for a project whose own ticket says a good policy may correctly remain silent.
 and is upgraded to `missing` only where the helper DID act and no outcome
 arrived for that person. `uplift-check` asserts the distinction is exercised.
 
+**7. A harm column nothing writes to is not a measurement.**
+`BoundaryViolations` was declared, validated, read as harm and serialised — and
+never assigned by any adapter. Every person reported zero boundary violations,
+which a reader could easily take as evidence the arms respected boundaries. It
+was evidence that nothing looked. The recipient-response consumer documents an
+invariance the helper must satisfy, so the adapter now executes it: each scene
+is re-run at the same arm and seed with EVERY private recipient condition
+changed and nothing else, and a difference in the helper's interactions is
+recorded as a boundary violation attributed to whoever's state leaked. The
+result is still zero — but it is now a measured zero. `UpliftSummary.Checks`
+names the probes a run actually executed, and `uplift-check` requires the
+boundary probe to be among them, so this distinction is machine-visible rather
+than a claim in a document.
+
+The detector is exercised against two genuinely different helper outputs so it
+cannot silently stop detecting, and the variant is refused if it would not
+change every private condition: varying one would pass while the helper leaked
+the other. This is a bounded invariance check over the conditions these scenes
+carry, not an exhaustive privacy proof, and it says so in the report.
+
 ### What R1 now is, and is not
 
 Three consumers execute: ordinary life, assistance, and recipient response.
