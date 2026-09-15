@@ -276,3 +276,36 @@ func TestResponsivePreferenceAndKnowledgeFailClosed(t *testing.T) {
 		t.Fatal("revoked own preference ignored")
 	}
 }
+
+func TestResponsiveRequiresExplicitDomainCapability(t *testing.T) {
+	sc, e := ResponsiveScenario(5, 1, 11)
+	if e != nil {
+		t.Fatal(e)
+	}
+	engine := rt.Capabilities()
+	old := engine
+	old.Capabilities = nil
+	for _, c := range engine.Capabilities {
+		if c != "relationships.v3" {
+			old.Capabilities = append(old.Capabilities, c)
+		}
+	}
+	if _, e = sc.Genesis(old); e == nil {
+		t.Fatal("old engine accepted authored domain responses")
+	}
+	if _, e = sc.Genesis(engine); e != nil {
+		t.Fatal(e)
+	}
+	legacy, e := RelationalScenario(5, 1, 11)
+	if e != nil {
+		t.Fatal(e)
+	}
+	a, e := legacy.Genesis(old)
+	if e != nil {
+		t.Fatal(e)
+	}
+	b, e := legacy.Genesis(engine)
+	if e != nil || !reflect.DeepEqual(a, b) {
+		t.Fatal("new capability changed frozen legacy genesis", e)
+	}
+}

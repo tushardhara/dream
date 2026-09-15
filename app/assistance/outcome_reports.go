@@ -23,19 +23,27 @@ type OutcomeReport struct {
 type OutcomeAction struct {
 	Version                                string
 	Interaction, Action, Sender, Recipient core.ID
-	At                                     core.LogicalTime
+	At, EffectAt                           core.LogicalTime
+	Replies                                []core.ID
 }
 
 // OutcomeReports is a current permission projection, not a truth aggregator.
 // Each observer/phase remains independent. Revoked corrections cannot resurrect
 // old accounts. No report is created merely because the helper delivered a step.
 func OutcomeReports(i Interaction, action OutcomeAction, log []core.OutcomeObservation, helper core.ID, at core.LogicalTime) ([]OutcomeReport, error) {
-	if i.Helper != helper || helper.Validate() != nil || !UsesDomainContext(i.Version) || i.Focus == nil || i.Focus.Validate() != nil || !i.Delivered || i.Result.Selected < 0 || i.Result.Selected >= len(i.Result.Candidates) || core.ValidateOutcomeLog(log) != nil {
+	if i.Result.Version != i.Version || i.ID.Validate() != nil || i.At.Validate() != nil || at.Validate() != nil || action.At > at || i.Scope == nil || i.Scope.Validate() != nil || i.Scope.Initiator != i.User || i.Helper != helper || helper.Validate() != nil || !UsesDomainContext(i.Version) || i.Focus == nil || i.Focus.Validate() != nil || !i.Delivered || i.Result.Selected < 0 || i.Result.Selected >= len(i.Result.Candidates) || core.ValidateOutcomeLog(log) != nil {
 		return nil, ErrInvalid
 	}
 	selected := i.Result.Candidates[i.Result.Selected]
-	if selected.Action != Propose || selected.Recipient != i.User || i.Scope == nil || action.Version != OutcomeReportVersion || action.Interaction != i.ID || action.Action.Validate() != nil || action.Sender != i.User || action.Recipient != i.Scope.Target || action.Recipient == i.User || action.At <= i.At {
+	if selected.Action != Propose || selected.Recipient != i.User || action.Version != OutcomeReportVersion || action.Interaction != i.ID || action.Action.Validate() != nil || action.Sender != i.User || action.Recipient != i.Scope.Target || action.Recipient == i.User || action.At <= i.At || action.EffectAt <= action.At || action.EffectAt-action.At > 1000000 || len(action.Replies) > 16 {
 		return nil, ErrInvalid
+	}
+	replies := map[core.ID]bool{}
+	for _, id := range action.Replies {
+		if id.Validate() != nil || id == action.Action || replies[id] {
+			return nil, ErrInvalid
+		}
+		replies[id] = true
 	}
 	out := []OutcomeReport{}
 	focus := *i.Focus
@@ -49,7 +57,7 @@ func OutcomeReports(i Interaction, action OutcomeAction, log []core.OutcomeObser
 			if o.Interaction != i.ID {
 				continue
 			}
-			if o.Action != action.Action || (o.Basis != "self_report" && o.Basis != "unobserved") || o.Meta.Observer != o.Participant || o.Meta.Source != o.Participant || o.OccurredAt < action.At {
+			if o.Action != action.Action || (o.Basis != "self_report" && o.Basis != "unobserved") || o.Meta.Observer != o.Participant || o.Meta.Source != o.Participant || o.OccurredAt < action.At || o.Position == "recipient" && o.OccurredAt < action.EffectAt || o.Reply != "" && !replies[o.Reply] {
 				return nil, ErrInvalid
 			}
 			if o.Position == "recipient" && (o.Participant != action.Recipient || o.Other != i.User) || o.Position == "sender" && (o.Participant != i.User || o.Other != action.Recipient) {

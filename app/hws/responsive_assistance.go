@@ -195,6 +195,11 @@ func RunResponsiveAssistance(ctx context.Context, world ResponsiveAssistanceWorl
 			}
 			if phase == "immediate" && selected.Delivered() && selected.Recipient == delivery.Sender {
 				rd.Observation.Reply = human.ID
+				for j := range out.Actions {
+					if out.Actions[j].Action == delivery.Action {
+						out.Actions[j].Replies = append(out.Actions[j].Replies, human.ID)
+					}
+				}
 			}
 			if f.ShareReport {
 				for _, h := range out.Helper {
@@ -226,7 +231,7 @@ func RunResponsiveAssistance(ctx context.Context, world ResponsiveAssistanceWorl
 			interactionID := core.ID("native-interaction:" + string(human.ID))
 			if suggestion != nil && selected.Kind == behavior.Coordinate && selected.Recipient == suggestion.Scope.Target {
 				interactionID = suggestion.ID
-				out.Actions = append(out.Actions, assistance.OutcomeAction{Version: assistance.OutcomeReportVersion, Interaction: interactionID, Action: human.ID, Sender: f.Actor, Recipient: selected.Recipient, At: f.At})
+				out.Actions = append(out.Actions, assistance.OutcomeAction{Version: assistance.OutcomeReportVersion, Interaction: interactionID, Action: human.ID, Sender: f.Actor, Recipient: selected.Recipient, At: f.At, EffectAt: f.At + selected.Duration})
 			}
 			pending = append(pending, responseDelivery{Interaction: interactionID, Action: human.ID, Sender: f.Actor, Recipient: selected.Recipient, Kind: selected.Kind, At: f.At + selected.Duration})
 			id := core.ID("expected:" + string(human.ID))

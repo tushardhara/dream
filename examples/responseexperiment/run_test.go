@@ -192,7 +192,7 @@ func TestHelperReportsCurrentRightsCorrectionsAndActionBinding(t *testing.T) {
 	if e != nil || len(original) == 0 {
 		t.Fatal("reports", e)
 	}
-	for _, which := range []string{"revoked", "wrong_recipient", "wrong_action", "future"} {
+	for _, which := range []string{"revoked", "wrong_recipient", "wrong_action", "future", "before_effect", "forged_reply"} {
 		raw, _ := json.Marshal(run.Outcomes)
 		var log []core.OutcomeObservation
 		_ = json.Unmarshal(raw, &log)
@@ -208,6 +208,20 @@ func TestHelperReportsCurrentRightsCorrectionsAndActionBinding(t *testing.T) {
 			receipt.Action = "unrelated"
 		case "future":
 			receipt.At = 101
+		case "before_effect":
+			for i := range log {
+				if log[i].Action == action.Action && log[i].Position == "recipient" {
+					log[i].OccurredAt = action.At
+					log[i].LearnedAt = action.At
+				}
+			}
+		case "forged_reply":
+			for i := range log {
+				if log[i].Action == action.Action && log[i].Position == "recipient" {
+					log[i].Reply = "nonexistent-reply"
+				}
+			}
+
 		}
 		got, e := assistance.OutcomeReports(interaction, receipt, log, interaction.Helper, 100)
 		if e == nil && len(got) != 0 {
