@@ -209,7 +209,10 @@ func (h GroupHistory) Validate() error {
 	idsSeen := map[ID]bool{}
 	decisions := map[ID]GroupDecision{}
 	for _, d := range h.Decisions {
-		if d.Validate() != nil || idsSeen[d.Meta.ID] {
+		if e := d.Validate(); e != nil {
+			return fmt.Errorf("invalid group decision record: %w", e)
+		}
+		if idsSeen[d.Meta.ID] {
 			return fmt.Errorf("invalid/duplicate group decision record")
 		}
 		if _, ok := decisions[d.ID]; ok {
@@ -227,7 +230,10 @@ func (h GroupHistory) Validate() error {
 	latest := map[[3]ID]ID{}
 	var learned LogicalTime
 	for _, a := range h.Accounts {
-		if a.Validate() != nil || idsSeen[a.Meta.ID] || a.LearnedAt < learned {
+		if e := a.Validate(); e != nil {
+			return fmt.Errorf("invalid group account record: %w", e)
+		}
+		if idsSeen[a.Meta.ID] || a.LearnedAt < learned {
 			return fmt.Errorf("invalid/duplicate group account record")
 		}
 		learned = a.LearnedAt

@@ -3,6 +3,7 @@ package groupexperiment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/tushardhara/dream/app/assistance"
 	"github.com/tushardhara/dream/core"
@@ -254,8 +255,10 @@ func TestGroupHistoryDirectContractRejections(t *testing.T) {
 		"forged member account":   func(c *Case) { c.Native.History.Accounts[19].Meta.Observer = Person(0) },
 		"foreign private lineage": func(c *Case) { c.Native.History.Accounts[19].Meta.Parents = []core.ID{"account:0:0"} },
 		"future experience":       func(c *Case) { a := &c.Native.History.Accounts[0]; a.OccurredAt = 2; a.Meta.Valid.Start = 2 },
-		"omitted affected member": func(c *Case) { c.Native.History.Decisions[3].Affected = c.Native.History.Decisions[3].Affected[:4] },
-		"retroactive consent":     func(c *Case) { c.Native.History.Accounts[0].ApprovedOptions = []core.ID{"solo-care"} },
+		"member outside affected set": func(c *Case) {
+			c.Native.History.Decisions[3].Members = append(c.Native.History.Decisions[3].Members, "person:99")
+		},
+		"retroactive consent": func(c *Case) { c.Native.History.Accounts[0].ApprovedOptions = []core.ID{"solo-care"} },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -647,5 +650,74 @@ func TestGroupDecisionBusinessIdentityIndependentOfEvidence(t *testing.T) {
 	h.Decisions[len(h.Decisions)-1].ID = c.Native.Decision
 	if h.Validate() == nil {
 		t.Fatal("duplicate business identity accepted without downstream accounts")
+	}
+}
+
+// Each reviewed guard has a passing otherwise-valid control and a negative that
+// asserts its exact root cause. History must preserve record-level causes with
+// %w; rejection by a different guard does not establish the claimed coverage.
+func TestGroupReviewedGuardReachability(t *testing.T) {
+	cases := []struct {
+		name, want      string
+		prepare, change func(*Case)
+		validate        func(Case) error
+		wrapped         bool
+	}{
+		{name: "member outside affected set", want: "member omitted from affected set", wrapped: true,
+			change: func(c *Case) {
+				c.Native.History.Decisions[3].Members = append(c.Native.History.Decisions[3].Members, "person:99")
+			}},
+		{name: "absent member asserts co-presence", want: "unobserved co-presence asserted", wrapped: true,
+			change: func(c *Case) { c.Native.History.Accounts[0].Participation = "absent" }},
+		{name: "plan invents observed burden", want: "planning invents experienced effects", wrapped: true,
+			change: func(c *Case) { c.Native.History.Accounts[19].Burden = core.ObservedGroupQuantity(5) }},
+		{name: "account changes decision intention", want: "foreign group account/decision",
+			change: func(c *Case) { c.Native.History.Accounts[0].Intention = "some-other-intention" }},
+		{name: "co-presence outside affected set", want: "foreign co-presence participant",
+			change: func(c *Case) {
+				c.Native.History.Accounts[0].CoPresent = append(c.Native.History.Accounts[0].CoPresent, "person:99")
+			}},
+		{name: "approval for nonexistent option", want: "agreement to unknown option",
+			change: func(c *Case) { c.Native.History.Accounts[19].ApprovedOptions = []core.ID{"no-such-option"} }},
+		{name: "correction predates prior recording", want: "foreign group account correction",
+			prepare: func(c *Case) {
+				c.Native.History.Accounts = append(c.Native.History.Accounts, correction(*c, 19, "review-correction", 33))
+			},
+			change: func(c *Case) { c.Native.History.Accounts[20].Meta.RecordedAt = time.Unix(31, 0).UTC() }},
+		{name: "missing physical personal capacity", want: "unknown total personal capacity",
+			change: func(c *Case) { delete(c.Budget.Personal, Person(0)) },
+			validate: func(c Case) error {
+				return core.GroupOptionFeasible(c.Native.History, c.Reservations, c.Budget, c.Native.Decision, "shared-care", 33, planGrants())
+			}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := fixture(t, 5, false)
+			if tc.prepare != nil {
+				tc.prepare(&c)
+			}
+			validate := tc.validate
+			if validate == nil {
+				validate = func(c Case) error { return c.Native.History.Validate() }
+			}
+			if e := validate(c); e != nil {
+				t.Fatalf("positive control: %v", e)
+			}
+			tc.change(&c)
+			e := validate(c)
+			if e == nil {
+				t.Fatalf("missing guard: %s", tc.want)
+			}
+			if tc.wrapped && errors.Unwrap(e) == nil {
+				t.Fatalf("record-level cause was discarded: %v", e)
+			}
+			root := e
+			for errors.Unwrap(root) != nil {
+				root = errors.Unwrap(root)
+			}
+			if root.Error() != tc.want {
+				t.Fatalf("wrong guard: got %v; want root cause %q", e, tc.want)
+			}
+		})
 	}
 }
