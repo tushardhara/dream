@@ -92,6 +92,9 @@ func TestAmbiguousFineAndExplicitCorrectionChangeAssistance(t *testing.T) {
 				}
 				a.Preferences.Language, a.Preferences.Style, a.Preferences.Channel = language, style, "transcript"
 				a.Clauses = []core.ListeningClause{{Key: "acceptance", Kind: "hypothesis", About: "alice", Text: "Possible acceptance", Confidence: .3}, {Key: "fatigue", Kind: "hypothesis", About: "alice", Text: "Possible fatigue or pause", Confidence: .3}}
+				if language == "es" {
+					a.Clauses[0].Text, a.Clauses[1].Text = "Posible aceptación", "Posible cansancio o pausa"
+				}
 				l := privateFixture(t, a)
 				first := execute(t, l, request(l, "alice", "first", 3, "private", false), "supported")
 				if first.Next != "ask_goal" || len(first.Options) != 4 || first.PartnerState != "unknown" || first.Own.DesiredHelp != "unknown" {
@@ -104,6 +107,9 @@ func TestAmbiguousFineAndExplicitCorrectionChangeAssistance(t *testing.T) {
 				corrected := a
 				corrected.Source, corrected.Corrects, corrected.Confirmation = "corrected", a.Source, "corrected"
 				corrected.DesiredHelp, corrected.Original = "coordinate", "I meant I want a practical plan."
+				if language == "es" {
+					corrected.Original = "Quería decir que quiero un plan práctico."
+				}
 				must(t, l.PutAccount("alice", corrected, 20))
 				second := execute(t, l, request(l, "alice", "second", 21, "private", false), "supported")
 				if second.Next != "offer_plan" || second.Own.Source != "corrected" || assistance.Digest(old) != assistance.Digest(l.records[0]) {

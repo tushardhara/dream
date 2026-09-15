@@ -239,3 +239,28 @@ func TestForeignAuthorshipCannotBecomeOwnListeningAccount(t *testing.T) {
 		t.Fatal("foreign authorship treated as this participant's account", out, err)
 	}
 }
+
+func TestCurrentParticipantPauseStopsJointUseAndPrivateInvitations(t *testing.T) {
+	for _, mode := range []string{"joint", "private"} {
+		t.Run(mode, func(t *testing.T) {
+			l := budget(t)
+			b := l.current["bob"]
+			b.Source, b.Corrects, b.Confirmation, b.DesiredHelp = "bob-paused", b.Source, "corrected", "pause"
+			must(t, l.PutAccount("bob", b, 4))
+			r := request(l, "alice", "peer-paused", 5, mode, mode == "joint")
+			r.Invite = true
+			must(t, l.Register("alice", r))
+			capture := &captureProvider{inner: model.Fake{}}
+			out, err := l.Host(model.Listening{Provider: capture}).Execute(context.Background(), r)
+			must(t, err)
+			if out.Next != "WAIT" || out.Own != nil || len(out.Shared) != 0 || out.Invitation != "" || len(capture.inputs) != 0 || len(l.records) != 0 {
+				t.Fatal("current participant pause ignored despite older willingness", out)
+			}
+			// Another person's pause does not remove private, non-inviting support.
+			private := execute(t, l, request(l, "alice", "independent", 6, "private", false), "supported")
+			if private.Next != "acknowledge" || private.PartnerState != "unknown" {
+				t.Fatal("peer pause removed independent private value", private)
+			}
+		})
+	}
+}

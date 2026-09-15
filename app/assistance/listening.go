@@ -54,6 +54,7 @@ func (r ListeningRequest) Validate() error {
 type ListeningSnapshot struct {
 	Now        core.LogicalTime
 	Current    map[core.ID]core.ID
+	Paused     map[core.ID]bool // current participant-selected pause, in this focus
 	Boundaries []core.Boundary
 }
 
@@ -128,6 +129,12 @@ func listeningScope(r ListeningRequest, class core.InteractionClass) core.Intera
 }
 
 func listeningBoundary(r ListeningRequest, s ListeningSnapshot) bool {
+	// An explicit current request to pause helper participation overrides older
+	// willingness. Trusted policy can enforce it without exposing a private account
+	// to the model or allowing the requester to omit that account from an invitation.
+	if (r.Mode == "joint" || r.Invite || len(r.Summaries) > 0) && (s.Paused[r.User] || s.Paused[r.Other]) {
+		return false
+	}
 	class := core.PrivatePreparation
 	if r.Mode == "joint" {
 		class = core.Discussion
@@ -158,8 +165,13 @@ func (h ListeningHost) Execute(ctx context.Context, request ListeningRequest) (L
 		return ListeningResponse{}, ErrInvalid
 	}
 	snapshot, err := h.Journal.Snapshot(ctx, r)
-	if err != nil || snapshot.Now != r.At || len(snapshot.Current) > 2 || ctx.Err() != nil {
+	if err != nil || snapshot.Now != r.At || len(snapshot.Current) > 2 || len(snapshot.Paused) != len(snapshot.Current) || ctx.Err() != nil {
 		return ListeningResponse{}, ErrDenied
+	}
+	for owner := range snapshot.Current {
+		if _, known := snapshot.Paused[owner]; !known {
+			return ListeningResponse{}, ErrDenied
+		}
 	}
 	if !listeningBoundary(r, snapshot) {
 		return listeningWait(), nil

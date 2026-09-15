@@ -63,6 +63,10 @@ independent value. Joint mode uses the existing bilateral discussion gate. Summa
 sharing additionally needs current summary-sharing willingness. An invitation to
 shared discussion is a fixed optional template, gated by bilateral discussion
 preferences and returned only to the requesting person. It sends no outreach.
+The policy snapshot separately carries each participant's explicit current pause
+in this domain/frame. It blocks joint use and invitations before model access,
+even if older willingness remains or the requester omits the paused person's
+private account. It does not block another person's non-inviting private support.
 
 Reading a private account is not permission to share it. A confirmed participant
 selects a separate authored summary source. Its exact text is quoted by the
@@ -120,7 +124,7 @@ or UI, and no claim that these templates establish accessibility adequacy.
 | Ambiguous fine remains uncertain; correction changes assistance | TestAmbiguousFineAndExplicitCorrectionChangeAssistance; TestUnconfirmedMeaningCannotBePromotedByConfidentModel |
 | Happy promotion and sad time apart coexist; concealed state not exposed | TestMixedFeelingsAndPartnerPrivacy; TestJointPartnerPrivateInterpretationCannotIdentifySourceInQuestion |
 | Private/joint grants differ; revocation blocks sharing and identifying paraphrases | TestListeningRequestRejectsPrivateToJointGrantSubstitution; TestSharingGrantsRevocationAndRestrictedParaphraseLineage; TestRevocationDuringModelPreventsCommitAndReplay; TestRevocationAtAtomicCommitBlocksPreviouslyValidatedSummary |
-| Unknown partner, declined mediation and unequal power preserve independent value | TestDeclinedMediationAndUnequalPowerKeepPrivatePreparation; TestBoundaryWithdrawalDuringModelPreventsDelivery |
+| Unknown partner, declined mediation and unequal power preserve independent value | TestDeclinedMediationAndUnequalPowerKeepPrivatePreparation; TestBoundaryWithdrawalDuringModelPreventsDelivery; TestCurrentParticipantPauseStopsJointUseAndPrivateInvitations |
 
 Other controls cover source/observer/report binding, unknown fields/versions,
 unsupported model claims, missing interpreter, correction scope, current private

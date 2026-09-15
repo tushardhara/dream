@@ -190,10 +190,12 @@ func (l *Local) Snapshot(ctx context.Context, r assistance.ListeningRequest) (as
 		return assistance.ListeningSnapshot{}, assistance.ErrDenied
 	}
 	current := map[core.ID]core.ID{}
+	paused := map[core.ID]bool{}
 	for owner, a := range l.current {
 		current[owner] = a.Source
+		paused[owner] = a.Focus == r.Focus && a.DesiredHelp == "pause"
 	}
-	return assistance.ListeningSnapshot{Now: l.now, Current: current, Boundaries: copyValue(l.boundaries)}, nil
+	return assistance.ListeningSnapshot{Now: l.now, Current: current, Paused: paused, Boundaries: copyValue(l.boundaries)}, nil
 }
 func (l *Local) History(ctx context.Context, r assistance.ListeningRequest) ([]assistance.ListeningRecord, error) {
 	defer l.lock(ctx)()
