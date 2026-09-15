@@ -134,6 +134,24 @@ type SourceRecord struct {
 	At       core.LogicalTime `json:"at"`
 	About    core.ID          `json:"about"`
 	Content  string           `json:"content"`
+	// Arm is the run this record was collected in. A record collected in one
+	// arm is not evidence about another, so evidence may not borrow it.
+	Arm Arm `json:"arm"`
+	// Metric and Value are the measurement AS COLLECTED. Evidence citing this
+	// record must report the same measurement: a claimed value cannot change
+	// while its source stays the same.
+	Metric string             `json:"metric"`
+	Value  core.GroupQuantity `json:"value"`
+}
+
+func sameQuantity(a, b core.GroupQuantity) bool {
+	if a.Status != b.Status {
+		return false
+	}
+	if a.Value == nil || b.Value == nil {
+		return a.Value == nil && b.Value == nil
+	}
+	return *a.Value == *b.Value
 }
 
 // tierRequires names the source-record kind that can justify each tier.
@@ -145,7 +163,7 @@ var tierRequires = map[EvidenceTier]string{
 }
 
 func (r SourceRecord) Validate() error {
-	if r.ID.Validate() != nil || r.Subject.Validate() != nil || r.Observer.Validate() != nil || r.At < 0 || r.Content == "" {
+	if r.ID.Validate() != nil || r.Subject.Validate() != nil || r.Observer.Validate() != nil || r.At < 0 || r.Content == "" || r.Metric == "" || !r.Arm.Valid() {
 		return fmt.Errorf("invalid source record")
 	}
 	known := false
@@ -169,7 +187,7 @@ func (r SourceRecord) Validate() error {
 
 // resolve binds one piece of evidence to the record it claims to come from and
 // checks that the record actually justifies the claimed tier.
-func resolve(o TierEvidence, sources map[core.ID]SourceRecord) error {
+func resolve(o TierEvidence, arm Arm, sources map[core.ID]SourceRecord) error {
 	rec, ok := sources[o.Source]
 	if !ok {
 		return fmt.Errorf("evidence cites an unresolved source record")
@@ -182,6 +200,14 @@ func resolve(o TierEvidence, sources map[core.ID]SourceRecord) error {
 	}
 	if rec.At != o.At {
 		return fmt.Errorf("evidence time disagrees with its source record")
+	}
+	// A record collected in another arm is not this arm's evidence.
+	if rec.Arm != arm {
+		return fmt.Errorf("evidence borrows a source record collected in arm %q", rec.Arm)
+	}
+	// The measurement must be the one the record actually holds.
+	if rec.Metric != o.Metric || !sameQuantity(rec.Value, o.Value) {
+		return fmt.Errorf("evidence measurement disagrees with its source record")
 	}
 	if o.Tier == AttributedLater {
 		about, ok := sources[rec.About]
@@ -362,7 +388,7 @@ func (c Comparison) Validate() error {
 				return fmt.Errorf("arm reports a person outside the affected roster")
 			}
 			for _, ob := range o.Observations {
-				if e := resolve(ob, sources); e != nil {
+				if e := resolve(ob, r.Arm, sources); e != nil {
 					return fmt.Errorf("evidence for %s in arm %s: %w", o.Person, r.Arm, e)
 				}
 			}
@@ -665,11 +691,15 @@ type ScenarioCoverage struct {
 func UpliftFixture() []Comparison {
 	q := func(v float64) core.GroupQuantity { return core.ObservedGroupQuantity(v) }
 	mk := func(scenario core.ID, seed uint64, later map[Arm]float64) Comparison {
-		c := Comparison{Version: UpliftVersion, Scenario: scenario, Seed: seed, Affected: []core.ID{"person:01", "person:02"},
-			Sources: []SourceRecord{
-				{ID: core.ID("event:" + scenario + ":person:01"), Kind: "observed_choice", Subject: "person:01", Observer: "person:01", At: 0, Content: "the fixture event later reports are about"},
-				{ID: core.ID("event:" + scenario + ":person:02"), Kind: "observed_choice", Subject: "person:02", Observer: "person:02", At: 0, Content: "the fixture event later reports are about"},
-			}}
+		c := Comparison{Version: UpliftVersion, Scenario: scenario, Seed: seed, Affected: []core.ID{"person:01", "person:02"}}
+		for _, a := range Arms {
+			for _, id := range []core.ID{"person:01", "person:02"} {
+				c.Sources = append(c.Sources, SourceRecord{ID: core.ID("event:" + string(scenario) + ":" + string(a) + ":" + string(id)),
+					Kind: "observed_choice", Subject: id, Observer: id, At: 0, Arm: a,
+					Metric: "observed_choice", Value: q(.1),
+					Content: "the fixture event later reports are about"})
+			}
+		}
 		for i, a := range Arms {
 			people := []PersonOutcome{}
 			for p, id := range []core.ID{"person:01", "person:02"} {
@@ -677,13 +707,14 @@ func UpliftFixture() []Comparison {
 					BurdenReduction: core.UnknownGroupQuantity(),
 					DelayedOutcome:  []string{"resolved", "unresolved"}[p], Acted: true,
 					Observations: []TierEvidence{{Person: id, Tier: BehaviouralObservation, Provenance: SyntheticProvenance,
-						Source: core.ID("event:" + scenario + ":" + id), Observer: id, At: 0, Metric: "observed_choice", Value: q(.1)}}}
+						Source: core.ID("event:" + string(scenario) + ":" + string(a) + ":" + string(id)), Observer: id, At: 0, Metric: "observed_choice", Value: q(.1)}}}
 				if v, ok := later[a]; ok && p == 0 {
 					o.Observations = append(o.Observations, TierEvidence{Person: id, Tier: AttributedLater, Provenance: SyntheticProvenance,
 						Source: core.ID(fmt.Sprintf("experience:%s:%s", scenario, a)), Observer: id, At: 5, Metric: "reported_benefit", Value: q(v)})
 					c.Sources = append(c.Sources, SourceRecord{ID: core.ID(fmt.Sprintf("experience:%s:%s", scenario, a)),
-						Kind: "later_self_report", Subject: id, Observer: id, At: 5,
-						About: core.ID("event:" + scenario + ":" + id), Content: "synthetic later self-report"})
+						Kind: "later_self_report", Subject: id, Observer: id, At: 5, Arm: a,
+						Metric: "reported_benefit", Value: q(v),
+						About: core.ID("event:" + string(scenario) + ":" + string(a) + ":" + string(id)), Content: "synthetic later self-report"})
 				}
 				people = append(people, o)
 			}

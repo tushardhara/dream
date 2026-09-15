@@ -108,10 +108,12 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 		}
 		eventID = core.ID(fmt.Sprintf("choice:%s:%s:%d:%s", r.Family, arm, r.Seed, person))
 		recs = append(recs, evals.SourceRecord{ID: eventID, Kind: "observed_choice", Subject: person,
-			Observer: person, At: core.LogicalTime(t.Frame), Content: fmt.Sprintf("selected %v", kind)})
+			Observer: person, At: t.Decision.Human.At, Arm: arm,
+			Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
+			Content: fmt.Sprintf("selected %v", kind)})
 		o.Observations = append(o.Observations, evals.TierEvidence{
 			Person: person, Tier: evals.BehaviouralObservation, Provenance: evals.SyntheticProvenance,
-			Source: eventID, Observer: person, At: core.LogicalTime(t.Frame),
+			Source: eventID, Observer: person, At: t.Decision.Human.At,
 			Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
 		})
 		break
@@ -144,12 +146,13 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 		// A later self-report is evidence when there is an observed event for it
 		// to be later than. An UNKNOWN benefit is still a report and is retained
 		// as its own observation: absence of a value is not absence of a report.
-		if eventID != "" && e.LearnedAt > core.LogicalTime(firstFrame(person, r)) {
+		if eventID != "" && e.LearnedAt > firstActionTime(person, r) {
 			// Records are namespaced by arm: the same experience identity recurs
 			// in each arm's run and they are distinct observations.
 			recID := core.ID(fmt.Sprintf("report:%s:%s:%d:%s", r.Family, arm, r.Seed, e.ID))
 			recs = append(recs, evals.SourceRecord{ID: recID, Kind: "later_self_report", Subject: e.Participant,
-				Observer: e.Observer, At: e.LearnedAt, About: eventID, Content: "participant self-report"})
+				Observer: e.Observer, At: e.LearnedAt, About: eventID, Arm: arm,
+				Metric: "reported_benefit", Value: e.Benefit, Content: "participant self-report"})
 			o.Observations = append(o.Observations, evals.TierEvidence{
 				Person: person, Tier: evals.AttributedLater, Provenance: evals.SyntheticProvenance,
 				Source: recID, Observer: e.Observer, At: e.LearnedAt,
@@ -160,11 +163,13 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 	return o, recs
 }
 
-// firstFrame is the frame of this person's first observed action.
-func firstFrame(person core.ID, r ordinaryexperiment.Report) int {
+// firstActionTime is the LOGICAL TIME of this person's first observed action.
+// A frame index is not a logical time: comparing a later report against a frame
+// number compares incompatible units.
+func firstActionTime(person core.ID, r ordinaryexperiment.Report) core.LogicalTime {
 	for _, t := range r.Traces {
 		if t.Actor == person && t.Decision.Human.Candidates[t.Decision.Human.Selected].Offer.Kind != behavior.Wait {
-			return t.Frame
+			return t.Decision.Human.At
 		}
 	}
 	return 0
