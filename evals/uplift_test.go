@@ -849,3 +849,20 @@ func TestSourceRecordNeedsArmAndMetric(t *testing.T) {
 	noMetric.Metric = ""
 	assertErr(t, noMetric.Validate(), "invalid source record")
 }
+
+// R3: an event link may not cross arms either. Checking only the citing
+// record's arm left borrowing possible through About.
+func TestR3LaterReportCannotBeAboutAnotherArmsEvent(t *testing.T) {
+	c := UpliftFixture()[1]
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	target := c.Runs[3].Outcomes[0].Observations[1].Source
+	other := c.Runs[0].Outcomes[0].Observations[0].Source
+	for i := range c.Sources {
+		if c.Sources[i].ID == target {
+			c.Sources[i].About = other
+		}
+	}
+	assertErr(t, c.Validate(), "is about an event from arm")
+}

@@ -214,6 +214,13 @@ func resolve(o TierEvidence, arm Arm, sources map[core.ID]SourceRecord) error {
 		if !ok {
 			return fmt.Errorf("later self-report is about an unresolved event")
 		}
+		// The event reported on must belong to the same run. Checking only the
+		// citing record's arm left borrowing possible through the event link.
+		// This does not require the event's actor to be the reporter: a valid
+		// third-party account of someone else's event stays possible.
+		if about.Arm != arm {
+			return fmt.Errorf("later self-report is about an event from arm %q", about.Arm)
+		}
 		if rec.At <= about.At {
 			return fmt.Errorf("later self-report is not later than the event it reports")
 		}
