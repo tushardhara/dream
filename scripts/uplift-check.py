@@ -48,19 +48,35 @@ def main() -> int:
         for field in ("person", "benefit", "burden", "unwanted_interventions", "boundary_violations", "delayed_outcome"):
             assert field in p, (field, p)
 
-    # Scenario coverage is stated honestly, including what is NOT covered.
+    # Scenario coverage is stated honestly, including what is NOT covered, and
+    # every covered family must be backed by the executed manifest rather than
+    # by a scenario name. The gate recomputes coverage from the manifest on the
+    # compiled binary's own output, so a coverage claim the manifest does not
+    # support fails here.
     coverage = r["scenario_coverage"]
     assert len(coverage) == 8, coverage
+    manifest = r["executed_manifest"]
+    assert manifest, "no executed manifest was emitted"
+    control, candidate = {}, {}
+    for u in manifest:
+        assert u["people_with_outcomes"] > 0, u
+        side = control if u["arm"] == "none" else candidate
+        side.setdefault(u["family"], set()).add((u["scenario"], u["seed"]))
+    backed = {f for f in control if control[f] & candidate.get(f, set())}
     uncovered = [c["family"] for c in coverage if not c["covered"]]
     for c in coverage:
         if not c["covered"]:
             assert "NOT COVERED" in c["note"], c
+            assert c["family"] not in backed, ("family executed but reported uncovered", c)
+        else:
+            assert c["family"] in backed, ("coverage not backed by the executed manifest", c)
     assert any(c["covered"] for c in coverage), "no family is actually executed"
     print(f"NOTE: {len(uncovered)} of 8 required scenario families are NOT covered: {', '.join(uncovered)}")
 
     print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "
           "per-person burden/unwanted/boundary/delayed retained; engagement metrics disqualified; "
-          "unimplemented arms reported not-executed; human validity NOT_TESTED")
+          "unimplemented arms reported not-executed; coverage recomputed from the executed "
+          "manifest; human validity NOT_TESTED")
     return 0
 
 

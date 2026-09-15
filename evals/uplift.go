@@ -326,7 +326,12 @@ func (a ArmRun) Validate() error {
 type Comparison struct {
 	Version  string  `json:"version"`
 	Scenario core.ID `json:"scenario"`
-	Seed     uint64  `json:"seed"`
+	// Family is the required #58 scenario family this comparison executes. It
+	// is declared explicitly and checked against RequiredFamilies, never
+	// inferred from the scenario name: a scenario whose name happens to
+	// contain a family string is not evidence that the family was executed.
+	Family string `json:"family"`
+	Seed   uint64 `json:"seed"`
 	// Affected is defined independently of any arm. Every arm must report an
 	// outcome for exactly these people, so a third party's cost cannot be
 	// dropped from one arm and vanish from the comparison.
@@ -340,6 +345,9 @@ type Comparison struct {
 func (c Comparison) Validate() error {
 	if c.Version != UpliftVersion || c.Scenario.Validate() != nil || len(c.Affected) < 2 {
 		return fmt.Errorf("invalid comparison envelope")
+	}
+	if !RequiredFamily(c.Family) {
+		return fmt.Errorf("comparison does not declare a required scenario family")
 	}
 	sources := map[core.ID]SourceRecord{}
 	for _, rec := range c.Sources {
@@ -653,7 +661,10 @@ type UpliftSummary struct {
 	// outcomes survive into the emitted result instead of being summarised away.
 	People           []PersonRecord     `json:"per_person"`
 	ScenarioCoverage []ScenarioCoverage `json:"scenario_coverage"`
-	Limitations      []string           `json:"limitations"`
+	// Executed is the frozen manifest of arms that actually ran. Coverage is
+	// derived from it, so a reader can audit the claim rather than trust it.
+	Executed    []ExecutedUnit `json:"executed_manifest"`
+	Limitations []string       `json:"limitations"`
 }
 
 // PersonRecord is one person's result in one arm of one comparison.
@@ -702,8 +713,8 @@ type ScenarioCoverage struct {
 // real people.
 func UpliftFixture() []Comparison {
 	q := func(v float64) core.GroupQuantity { return core.ObservedGroupQuantity(v) }
-	mk := func(scenario core.ID, seed uint64, later map[Arm]float64) Comparison {
-		c := Comparison{Version: UpliftVersion, Scenario: scenario, Seed: seed, Affected: []core.ID{"person:01", "person:02"}}
+	mk := func(scenario core.ID, family string, seed uint64, later map[Arm]float64) Comparison {
+		c := Comparison{Version: UpliftVersion, Scenario: scenario, Family: family, Seed: seed, Affected: []core.ID{"person:01", "person:02"}}
 		for _, a := range Arms {
 			for _, id := range []core.ID{"person:01", "person:02"} {
 				c.Sources = append(c.Sources, SourceRecord{ID: core.ID("event:" + string(scenario) + ":" + string(a) + ":" + string(id)),
@@ -737,9 +748,9 @@ func UpliftFixture() []Comparison {
 	}
 	return []Comparison{
 		// No independently attributed later evidence at all: NOT_TESTED.
-		mk("scenario:ordinary_joy", 11, nil),
+		mk("scenario:ordinary_joy", "ordinary_joy", 11, nil),
 		// Attributed later evidence that does NOT favour the assisted arm.
-		mk("scenario:repair", 23, map[Arm]float64{NoAssistant: .6, MultiPerspective: .2}),
+		mk("scenario:repair", "repair", 23, map[Arm]float64{NoAssistant: .6, MultiPerspective: .2}),
 	}
 }
 
@@ -816,6 +827,7 @@ func SummariseUplift(cs []Comparison) (UpliftSummary, error) {
 			}
 		}
 	}
+	s.Executed = ExecutedManifest(cs)
 	s.ScenarioCoverage = coverage(cs)
 	return s, nil
 }
@@ -826,22 +838,100 @@ var RequiredFamilies = []string{
 	"conflict_goals", "role_domain_trust", "life_changes", "repair", "group_burden",
 }
 
-func coverage(cs []Comparison) []ScenarioCoverage {
-	executed := map[string]bool{}
-	for _, c := range cs {
-		for _, f := range RequiredFamilies {
-			if strings.Contains(string(c.Scenario), f) {
-				executed[f] = true
-			}
+// RequiredFamily reports whether name is one of the required #58 families.
+// Matching is exact: substring containment is not membership.
+func RequiredFamily(name string) bool {
+	for _, f := range RequiredFamilies {
+		if f == name {
+			return true
 		}
+	}
+	return false
+}
+
+// ExecutedUnit is one arm of one comparison that actually ran and produced
+// outcomes for real people in the roster. The manifest is assembled from these
+// units alone, so nothing enters coverage by being named.
+type ExecutedUnit struct {
+	Family   string  `json:"family"`
+	Scenario core.ID `json:"scenario"`
+	Seed     uint64  `json:"seed"`
+	Arm      Arm     `json:"arm"`
+	People   int     `json:"people_with_outcomes"`
+}
+
+// ExecutedManifest is the frozen record of what this run actually executed,
+// in a stable order. It is the only thing coverage is computed from.
+func ExecutedManifest(cs []Comparison) []ExecutedUnit {
+	out := []ExecutedUnit{}
+	for _, c := range cs {
+		for _, r := range c.Runs {
+			if len(r.Outcomes) == 0 {
+				continue
+			}
+			out = append(out, ExecutedUnit{Family: c.Family, Scenario: c.Scenario,
+				Seed: c.Seed, Arm: r.Arm, People: len(r.Outcomes)})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Family != out[j].Family {
+			return out[i].Family < out[j].Family
+		}
+		if out[i].Scenario != out[j].Scenario {
+			return out[i].Scenario < out[j].Scenario
+		}
+		if out[i].Seed != out[j].Seed {
+			return out[i].Seed < out[j].Seed
+		}
+		return out[i].Arm < out[j].Arm
+	})
+	return out
+}
+
+// coverage credits a family only when the executed manifest contains a real
+// comparison for it: the no-assistant control AND at least one candidate arm,
+// both with outcomes, within a single scenario and seed. A lone arm is not a
+// comparison, and a family named by a scenario string that executed nothing is
+// reported NOT COVERED.
+func coverage(cs []Comparison) []ScenarioCoverage {
+	type unit struct {
+		scenario core.ID
+		seed     uint64
+	}
+	control := map[string]map[unit]bool{}
+	candidate := map[string]map[unit]bool{}
+	// Families outside RequiredFamilies need no filter here: the report loop
+	// below iterates RequiredFamilies, so an unrecognised family is never read.
+	for _, u := range ExecutedManifest(cs) {
+		side := candidate
+		if u.Arm == NoAssistant {
+			side = control
+		}
+		if side[u.Family] == nil {
+			side[u.Family] = map[unit]bool{}
+		}
+		side[u.Family][unit{u.Scenario, u.Seed}] = true
 	}
 	out := []ScenarioCoverage{}
 	for _, f := range RequiredFamilies {
-		note := "executed through the real consumer path"
-		if !executed[f] {
+		covered, arms := false, 0
+		for k := range control[f] {
+			if candidate[f][k] {
+				covered = true
+			}
+		}
+		for range candidate[f] {
+			arms++
+		}
+		note := "executed through the real consumer path: control and at least one candidate arm produced outcomes"
+		switch {
+		case covered:
+		case arms > 0:
+			note = "NOT COVERED: candidate arms executed but no matched no-assistant control in the same scenario and seed"
+		default:
 			note = "NOT COVERED: no executed comparison for this family in this run"
 		}
-		out = append(out, ScenarioCoverage{Family: f, Covered: executed[f], Note: note})
+		out = append(out, ScenarioCoverage{Family: f, Covered: covered, Note: note})
 	}
 	return out
 }

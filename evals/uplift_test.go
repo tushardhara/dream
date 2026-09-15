@@ -45,7 +45,7 @@ func armRun(a Arm, stream string) ArmRun {
 }
 
 func comparison() Comparison {
-	c := Comparison{Version: UpliftVersion, Scenario: "scenario:ordinary", Seed: 7, Affected: []core.ID{person(0), person(1)}}
+	c := Comparison{Version: UpliftVersion, Scenario: "scenario:ordinary", Family: "ordinary_joy", Seed: 7, Affected: []core.ID{person(0), person(1)}}
 	for i, a := range Arms {
 		c.Runs = append(c.Runs, armRun(a, string(rune('a'+i))+"-stream"))
 	}
@@ -865,4 +865,116 @@ func TestR3LaterReportCannotBeAboutAnotherArmsEvent(t *testing.T) {
 		}
 	}
 	assertErr(t, c.Validate(), "is about an event from arm")
+}
+
+// R1: coverage must be a receipt of execution, not a name match. These probes
+// establish each half separately: that a family cannot be credited by naming,
+// and that a genuinely executed family still is.
+func TestR1FamilyMustBeDeclaredAndRequired(t *testing.T) {
+	c := comparison()
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	undeclared := c
+	undeclared.Family = ""
+	assertErr(t, undeclared.Validate(), "required scenario family")
+	// A family name that merely contains a required one is not that family.
+	nearMiss := c
+	nearMiss.Family = "ordinary_joyful"
+	assertErr(t, nearMiss.Validate(), "required scenario family")
+}
+
+func TestR1CoverageIgnoresScenarioNamesAndReadsTheExecutedManifest(t *testing.T) {
+	covered := func(s UpliftSummary, family string) bool {
+		for _, sc := range s.ScenarioCoverage {
+			if sc.Family == family {
+				return sc.Covered
+			}
+		}
+		t.Fatalf("family %q absent from coverage", family)
+		return false
+	}
+	// A scenario whose name contains "repair" but which executes the
+	// ordinary_joy family must not credit repair. The old substring rule did.
+	c := comparison()
+	c.Scenario, c.Family = "scenario:repair_of_ordinary_joy", "ordinary_joy"
+	for i := range c.Runs {
+		c.Runs[i].Scenario = c.Scenario
+	}
+	ledger(&c)
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	s, e := SummariseUplift([]Comparison{c})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if covered(s, "repair") {
+		t.Fatal("a family was credited by scenario name alone")
+	}
+	if !covered(s, "ordinary_joy") {
+		t.Fatal("the executed family was not credited")
+	}
+	// The manifest backing that claim must name the arms that actually ran.
+	if len(s.Executed) != len(c.Runs) {
+		t.Fatalf("manifest records %d executed arms, comparison ran %d", len(s.Executed), len(c.Runs))
+	}
+	for _, u := range s.Executed {
+		if u.Family != "ordinary_joy" || u.People != len(c.Affected) {
+			t.Fatalf("manifest unit misreports its execution: %+v", u)
+		}
+	}
+}
+
+func TestR1CandidateArmsWithoutAMatchedControlAreNotCoverage(t *testing.T) {
+	c := comparison()
+	// Keep one candidate arm and drop the control. Validation would reject this
+	// comparison, but SummariseUplift does not re-validate its input, so this
+	// is the reachable path on which coverage must not credit the family: no
+	// baseline/candidate pair is both-executed, so CompareArms never runs and
+	// coverage is what decides.
+	c.Runs = c.Runs[1:2]
+	s, e := SummariseUplift([]Comparison{c})
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, sc := range s.ScenarioCoverage {
+		if sc.Family != "ordinary_joy" {
+			continue
+		}
+		if sc.Covered {
+			t.Fatal("candidate arms alone were counted as coverage")
+		}
+		if !strings.Contains(sc.Note, "no matched no-assistant control") {
+			t.Fatalf("note does not say why it is uncovered: %q", sc.Note)
+		}
+	}
+}
+
+// An arm that produced no outcomes ran nobody. Counting it as execution would
+// let an empty arm supply the control half of a "covered" comparison.
+func TestR1AnArmWithNoOutcomesIsNotExecution(t *testing.T) {
+	// Positive control: the same single arm, with its outcomes intact, is
+	// recorded as one executed unit. Only the emptying below may change that.
+	c := comparison()
+	c.Runs = c.Runs[:1]
+	s, e := SummariseUplift([]Comparison{c})
+	if e != nil {
+		t.Fatal("positive control:", e)
+	}
+	if len(s.Executed) != 1 || s.Executed[0].People != len(c.Affected) {
+		t.Fatalf("positive control manifest is wrong: %+v", s.Executed)
+	}
+	// A single unpaired arm keeps CompareArms out of the path, so the manifest
+	// is what reports execution here.
+	empty := c
+	empty.Runs = []ArmRun{c.Runs[0]}
+	empty.Runs[0].Outcomes = nil // the no-assistant control ran nobody
+	s, e = SummariseUplift([]Comparison{empty})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(s.Executed) != 0 {
+		t.Fatalf("an arm that produced no outcomes was recorded as executed: %+v", s.Executed)
+	}
 }

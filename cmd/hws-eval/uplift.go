@@ -36,6 +36,7 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 			c := evals.Comparison{
 				Version:  evals.UpliftVersion,
 				Scenario: core.ID(fmt.Sprintf("scenario:ordinary_joy:%s", family)),
+				Family:   "ordinary_joy",
 				Seed:     seed,
 				Affected: []core.ID{"a", "b"},
 			}
