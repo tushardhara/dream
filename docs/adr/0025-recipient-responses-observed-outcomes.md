@@ -100,8 +100,9 @@ outcome fields by observer. No private appraisal is automatically sent to a peer
 
 The helper's existing contract delivers fixed advice only to its requesting user.
 `RunResponsiveAssistance` preserves this: a delivered coordination suggestion adds
-an optional affordance in a later matching domain/frame/scope. Only an independently
-selected native Coordinate action reaches the other human. An `OutcomeAction`
+an optional affordance in a later matching domain/frame/scope. Already available native coordination options are not duplicated or attributed to
+advice. Only an independently selected new Coordinate affordance reaches the
+other human as an advice-linked action. An `OutcomeAction`
 receipt binds that actual choice, effect time and actual reply identities to its originating advice. Advice delivery alone
 creates neither another person's observation nor a benefit label.
 
@@ -153,13 +154,17 @@ temporal experiment or change #48's clarification cooldown semantics.
   historical reports, revoked correction non-resurrection and rejected action,
   recipient and time mismatches. Private-context invariance and actual v3 own
   export tests cover bounded privacy controls.
+- `TestAdviceDoesNotDuplicateExistingHumanOption` compares actual no-helper and
+  multi-perspective runs with an existing coordination option. Advice neither
+  changes the native choices nor receives an action/outcome attribution.
 - Recorded native/runtime/helper replay and corruption tests cover the new paths;
   existing v1/v2 tests continue to exercise frozen legacy reconstruction.
-- Fourteen compiling mutations were caught by behavioral assertions: unconditional
+- Seventeen compiling mutations were caught by behavioral assertions: unconditional
   supportive labels; ignored context/private state; ignored corrections; learning
   from sender expectations; cross-domain reads; missing-as-observed; ignored demo
   or helper learning; bypassed report rights; foreign export; wrong-domain writes;
-  ignored action binding; leaked private account IDs. Sources were restored after
+  ignored action binding; leaked private account IDs; duplicate native options;
+  observations before the action effect; unrecorded reply identities. Sources were restored after
   every mutation. This is bounded sensitivity evidence, not exhaustive proof.
 
 The committed [16-seed report](../evaluation/recipient-response-v1.json) covers six

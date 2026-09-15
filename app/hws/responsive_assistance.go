@@ -150,11 +150,19 @@ func RunResponsiveAssistance(ctx context.Context, world ResponsiveAssistanceWorl
 		}
 		var suggestion *assistance.Interaction
 		if h, ok := advice[f.Actor]; ok && h.At < f.At && h.Scope.Target == s.Scoped.Scope.Target && h.Scope.Class == core.Coordination && h.Scope.Topic == s.Scoped.Scope.Topic && h.Focus.Domain == profile.Domain && h.Focus.RoleContext == profile.RoleContext && s.Scoped.Scope.Class == core.Coordination {
-			copy := h
-			suggestion = &copy
-			s.Scoped.Situation.Offers = append(s.Scoped.Situation.Offers, behavior.ActionOffer{Kind: behavior.Coordinate, Recipient: h.Scope.Target, Evidence: []core.ID{s.Scoped.Situation.Observation.Event.Event}, Duration: 1})
-			if out.FirstIntervention < 0 {
-				out.FirstIntervention = i
+			existing := false
+			for _, offer := range s.Scoped.Situation.Offers {
+				existing = existing || offer.Kind == behavior.Coordinate && offer.Recipient == h.Scope.Target
+			}
+			// Existing native options neither need duplication nor establish
+			// that a later choice originated from this helper suggestion.
+			if !existing {
+				copy := h
+				suggestion = &copy
+				s.Scoped.Situation.Offers = append(s.Scoped.Situation.Offers, behavior.ActionOffer{Kind: behavior.Coordinate, Recipient: h.Scope.Target, Evidence: []core.ID{s.Scoped.Situation.Observation.Event.Event}, Duration: 1})
+				if out.FirstIntervention < 0 {
+					out.FirstIntervention = i
+				}
 			}
 			delete(advice, f.Actor)
 		}

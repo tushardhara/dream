@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/tushardhara/dream/app/assistance"
+	"github.com/tushardhara/dream/app/hws"
 	"github.com/tushardhara/dream/core"
+	"github.com/tushardhara/dream/simulator/behavior"
 )
 
 func TestActualHelperRecipientOutcomes(t *testing.T) {
@@ -290,5 +292,35 @@ func TestHelperReportsCurrentRightsCorrectionsAndActionBinding(t *testing.T) {
 		if o.ID == prior.Meta.ID || o.ID == correction.Meta.ID {
 			t.Fatal("revoked correction resurrected old conclusion")
 		}
+	}
+}
+
+func TestAdviceDoesNotDuplicateExistingHumanOption(t *testing.T) {
+	world := World(Scene{Expectation: -1, Observation: "observed", ShareReport: true, Followup: true})
+	for i := range world.Frames {
+		f := &world.Frames[i]
+		if f.Actor != "alice" || f.Situation.Scoped.Scope.Class != core.Coordination {
+			continue
+		}
+		f.Situation.Scoped.Situation.Offers[0].Kind = behavior.Coordinate
+	}
+	runs := []hws.ResponsiveAssistanceRun{}
+	for _, arm := range []assistance.Arm{assistance.None, assistance.Multi} {
+		helper, e := newStep(arm)
+		if e != nil {
+			t.Fatal(e)
+		}
+		manifest := hws.NewResponsiveAssistanceManifest(world, arm, 11)
+		run, e := hws.RunResponsiveAssistance(context.Background(), world, manifest, helper, nil)
+		if e != nil {
+			t.Fatal(e)
+		}
+		runs = append(runs, run)
+	}
+	if assistance.Digest(runs[0].Humans) != assistance.Digest(runs[1].Humans) {
+		t.Fatal("advice duplicated or changed an already available native choice")
+	}
+	if len(runs[1].Actions) != 0 || len(runs[1].Reports) != 0 || runs[1].FirstIntervention != -1 {
+		t.Fatal("pre-existing action attributed to helper advice")
 	}
 }

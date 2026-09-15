@@ -110,14 +110,14 @@ func World(scene Scene) hws.ResponsiveAssistanceWorld {
 	}
 	return w
 }
-func Run(ctx context.Context, scene Scene, arm assistance.Arm, seed uint64, recorded *hws.ResponsiveAssistanceRun) (hws.ResponsiveAssistanceRun, error) {
+func newStep(arm assistance.Arm) (*step, error) {
 	// Public reports are fixed across private recipient conditions. The helper's
 	// context never contains scene.Expectation, native private state or outcomes.
 	focus := core.RelationshipFocus{Version: core.RelationshipFocusVersion, Domain: core.PracticalCoordination, RoleContext: "everyday"}
 	profiles := []core.RelationshipContext{assistanceclient.DomainProfile("alice", "bob", "alice-public", focus.Domain, focus.RoleContext, .5, .5), assistanceclient.DomainProfile("bob", "alice", "bob-public", focus.Domain, focus.RoleContext, .5, .5)}
 	local, r, e := assistanceclient.DomainFixture(arm, focus, profiles)
 	if e != nil {
-		return hws.ResponsiveAssistanceRun{}, e
+		return nil, e
 	}
 	r.Scope.Class = core.Coordination
 	for _, owner := range r.Participants {
@@ -126,10 +126,17 @@ func Run(ctx context.Context, scene Scene, arm assistance.Arm, seed uint64, reco
 			other = "bob"
 		}
 		if e = local.AppendBoundary(owner, preference(owner, other, core.Coordination)); e != nil {
-			return hws.ResponsiveAssistanceRun{}, e
+			return nil, e
 		}
 	}
 	engine := &step{local: local, request: r, host: local.Host(assistance.FakePlanner{})}
+	return engine, nil
+}
+func Run(ctx context.Context, scene Scene, arm assistance.Arm, seed uint64, recorded *hws.ResponsiveAssistanceRun) (hws.ResponsiveAssistanceRun, error) {
+	engine, e := newStep(arm)
+	if e != nil {
+		return hws.ResponsiveAssistanceRun{}, e
+	}
 	world := World(scene)
 	manifest := hws.NewResponsiveAssistanceManifest(world, arm, seed)
 	return hws.RunResponsiveAssistance(ctx, world, manifest, engine, recorded)
