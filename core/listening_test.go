@@ -25,6 +25,27 @@ func TestListeningAccountPreservesMixedFeelingsAndUncertainty(t *testing.T) {
 	}
 }
 
+func TestListeningSummaryRequiresASeparateSource(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		summary ID
+		valid   bool
+	}{
+		{name: "sharing is optional", valid: true},
+		{name: "separately authored words", summary: "chosen-summary", valid: true},
+		{name: "raw original account is not a summary", summary: "account"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := listeningAccount()
+			a.Confirmation = "confirmed"
+			a.Summary = tc.summary
+			if err := a.Validate(); (err == nil) != tc.valid {
+				t.Fatalf("summary source %q with original %q: Validate() = %v, want valid=%t", a.Summary, a.Source, err, tc.valid)
+			}
+		})
+	}
+}
+
 func TestListeningContractRejectsInventedCertaintyAndUnconfirmedSharing(t *testing.T) {
 	for _, mutation := range []string{"version", "goal", "certain hypothesis", "winner", "unconfirmed summary", "correction missing", "self correction", "invalid preference", "duplicate feelings", "duplicate clause"} {
 		t.Run(mutation, func(t *testing.T) {
