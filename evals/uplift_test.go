@@ -12,6 +12,14 @@ func ptr(c Comparison) *Comparison { return &c }
 
 func person(i int) core.ID { return core.ID([]string{"person:01", "person:02"}[i]) }
 
+// armEvidence namespaces a source id by arm, because a record collected in one
+// arm is a different record from the one collected in another.
+func armEvidence(a Arm, p core.ID, tier EvidenceTier, v float64) TierEvidence {
+	e := evidence(p, tier, v)
+	e.Source = core.ID(string(a) + ":" + string(e.Source))
+	return e
+}
+
 func evidence(p core.ID, tier EvidenceTier, v float64) TierEvidence {
 	e := TierEvidence{Person: p, Tier: tier, Provenance: SyntheticProvenance, Metric: "reported_benefit", Value: core.ObservedGroupQuantity(v)}
 	e.Observer, e.At = p, 5
@@ -19,19 +27,21 @@ func evidence(p core.ID, tier EvidenceTier, v float64) TierEvidence {
 	return e
 }
 
-func outcome(i int, acted bool) PersonOutcome {
+func outcome(i int, acted bool) PersonOutcome { return armOutcome(NoAssistant, i, acted) }
+
+func armOutcome(a Arm, i int, acted bool) PersonOutcome {
 	_ = fmt.Sprint
 	return PersonOutcome{
 		Person: person(i), Benefit: core.ObservedGroupQuantity(.2), Burden: core.UnknownGroupQuantity(),
 		BurdenReduction: core.UnknownGroupQuantity(),
 		Appropriateness: core.ObservedGroupQuantity(.5), DelayedOutcome: "unresolved", Acted: acted,
-		Observations: []TierEvidence{evidence(person(i), BehaviouralObservation, .1)},
+		Observations: []TierEvidence{armEvidence(a, person(i), BehaviouralObservation, .1)},
 	}
 }
 
 func armRun(a Arm, stream string) ArmRun {
 	return ArmRun{Arm: a, Seed: 7, WorldHash: "world-1", ExogenousHash: "exo-1", RNGStream: stream,
-		Scenario: "scenario:ordinary", Outcomes: []PersonOutcome{outcome(0, true), outcome(1, false)}}
+		Scenario: "scenario:ordinary", Outcomes: []PersonOutcome{armOutcome(a, 0, true), armOutcome(a, 1, false)}}
 }
 
 func comparison() Comparison {
@@ -59,20 +69,29 @@ func sealed(cs ...*Comparison) []Comparison {
 }
 
 func ledger(c *Comparison) {
-	c.Sources = []SourceRecord{{ID: "event:opportunity", Kind: "observed_choice", Subject: person(0),
-		Observer: person(0), At: 0, Content: "the event later reports are about"}}
-	seen := map[core.ID]bool{"event:opportunity": true}
+	c.Sources = []SourceRecord{}
+	seen := map[core.ID]bool{}
+	for _, a := range Arms {
+		c.Sources = append(c.Sources, SourceRecord{ID: core.ID(string(a) + ":event:opportunity"),
+			Kind: "observed_choice", Subject: person(0), Observer: person(0), At: 0, Arm: a,
+			Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
+			Content: "the event later reports are about"})
+		seen[core.ID(string(a)+":event:opportunity")] = true
+	}
 	for _, r := range c.Runs {
 		for _, o := range r.Outcomes {
 			for _, ob := range o.Observations {
+				// Records are per-arm: the same evidence id in another arm is a
+				// different record, so the key includes the arm.
 				if seen[ob.Source] {
 					continue
 				}
 				seen[ob.Source] = true
 				rec := SourceRecord{ID: ob.Source, Kind: tierRequires[ob.Tier], Subject: ob.Person,
-					Observer: ob.Observer, At: ob.At, Content: "synthetic fixture record"}
+					Observer: ob.Observer, At: ob.At, Arm: r.Arm, Metric: ob.Metric, Value: ob.Value,
+					Content: "synthetic fixture record"}
 				if ob.Tier == AttributedLater {
-					rec.About = "event:opportunity"
+					rec.About = core.ID(string(r.Arm) + ":event:opportunity")
 				}
 				c.Sources = append(c.Sources, rec)
 			}
@@ -644,7 +663,8 @@ func TestHarmRetainedWhenNothingIsPaired(t *testing.T) {
 func TestR3TierMustBeJustifiedByTheResolvedRecord(t *testing.T) {
 	c := comparison()
 	c.Sources = append(c.Sources, SourceRecord{ID: "assertion:invented", Kind: "system_assertion",
-		Subject: person(0), Observer: person(0), At: 3, Content: "a system assertion"})
+		Subject: person(0), Observer: person(0), At: 3, Arm: MultiPerspective,
+		Metric: "reported_benefit", Value: core.ObservedGroupQuantity(.9), Content: "a system assertion"})
 	o := TierEvidence{Person: person(0), Tier: SystemAssertion, Provenance: SyntheticProvenance,
 		Source: "assertion:invented", Observer: person(0), At: 3, Metric: "reported_benefit",
 		Value: core.ObservedGroupQuantity(.9)}
@@ -685,7 +705,8 @@ func TestLaterSelfReportMustBeLaterThanItsEvent(t *testing.T) {
 // Every source-ledger guard, each asserting its exact root cause.
 func TestSourceLedgerGuardsAreAttributable(t *testing.T) {
 	good := SourceRecord{ID: "rec:1", Kind: "later_self_report", Subject: person(0), Observer: person(0),
-		At: 5, About: "event:opportunity", Content: "a later self-report"}
+		At: 5, About: "event:opportunity", Arm: NoAssistant, Metric: "reported_benefit",
+		Value: core.ObservedGroupQuantity(.5), Content: "a later self-report"}
 	if e := good.Validate(); e != nil {
 		t.Fatal("positive control: clean source record rejected:", e)
 	}
@@ -717,7 +738,8 @@ func TestSourceLedgerGuardsAreAttributable(t *testing.T) {
 	t.Run("ledger wraps a bad record", func(t *testing.T) {
 		c := comparison()
 		c.Sources = append(c.Sources, SourceRecord{ID: "rec:bad", Kind: "system_assertion",
-			Subject: person(0), Observer: person(0), At: 1, Content: ""})
+			Subject: person(0), Observer: person(0), At: 1, Arm: NoAssistant,
+			Metric: "reported_benefit", Value: core.ObservedGroupQuantity(.1), Content: ""})
 		assertErr(t, c.Validate(), "source ledger")
 	})
 	t.Run("duplicate record", func(t *testing.T) {
@@ -788,4 +810,59 @@ func TestUnitsMustAgreeAndMarginIsClusteredAtUnits(t *testing.T) {
 	if f.Margin == nil || f.Margin.Units != 2 || !strings.Contains(f.Margin.Method, "per-unit summaries") {
 		t.Fatalf("margin must be clustered at independent units: %+v", f.Margin)
 	}
+}
+
+// R3(i): a claimed value cannot change while its source record stays the same.
+func TestR3EvidenceValueMustMatchItsSourceRecord(t *testing.T) {
+	c := comparison()
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	// tamper with ONLY the reported quantity; leave the ledger untouched
+	c.Runs[1].Outcomes[0].Observations[0].Value = core.ObservedGroupQuantity(.99)
+	assertErr(t, c.Validate(), "measurement disagrees with its source record")
+}
+
+// R3(ii): one arm may not borrow another arm's collected record.
+func TestR3EvidenceCannotBorrowAnotherArmsRecord(t *testing.T) {
+	c := comparison()
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	// hand the candidate arm the baseline arm's report verbatim
+	c.Runs[3].Outcomes[0].Observations[0] = c.Runs[0].Outcomes[0].Observations[0]
+	assertErr(t, c.Validate(), "borrows a source record collected in arm")
+}
+
+// A source record must name the arm it was collected in and what it measured.
+func TestSourceRecordNeedsArmAndMetric(t *testing.T) {
+	good := SourceRecord{ID: "rec:9", Kind: "system_assertion", Subject: person(0), Observer: person(0),
+		At: 1, Arm: NoAssistant, Metric: "reported_benefit", Value: core.ObservedGroupQuantity(.2),
+		Content: "an assertion"}
+	if e := good.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	noArm := good
+	noArm.Arm = ""
+	assertErr(t, noArm.Validate(), "invalid source record")
+	noMetric := good
+	noMetric.Metric = ""
+	assertErr(t, noMetric.Validate(), "invalid source record")
+}
+
+// R3: an event link may not cross arms either. Checking only the citing
+// record's arm left borrowing possible through About.
+func TestR3LaterReportCannotBeAboutAnotherArmsEvent(t *testing.T) {
+	c := UpliftFixture()[1]
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	target := c.Runs[3].Outcomes[0].Observations[1].Source
+	other := c.Runs[0].Outcomes[0].Observations[0].Source
+	for i := range c.Sources {
+		if c.Sources[i].ID == target {
+			c.Sources[i].About = other
+		}
+	}
+	assertErr(t, c.Validate(), "is about an event from arm")
 }

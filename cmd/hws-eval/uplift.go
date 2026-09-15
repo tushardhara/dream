@@ -98,6 +98,7 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 	recs := []evals.SourceRecord{}
 	eventID := core.ID("")
 	firstReport := false
+	seenOpportunity := map[core.ID]bool{}
 	for _, t := range r.Traces {
 		if t.Actor != person {
 			continue
@@ -108,10 +109,12 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 		}
 		eventID = core.ID(fmt.Sprintf("choice:%s:%s:%d:%s", r.Family, arm, r.Seed, person))
 		recs = append(recs, evals.SourceRecord{ID: eventID, Kind: "observed_choice", Subject: person,
-			Observer: person, At: core.LogicalTime(t.Frame), Content: fmt.Sprintf("selected %v", kind)})
+			Observer: person, At: t.Decision.Human.At, Arm: arm,
+			Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
+			Content: fmt.Sprintf("selected %v", kind)})
 		o.Observations = append(o.Observations, evals.TierEvidence{
 			Person: person, Tier: evals.BehaviouralObservation, Provenance: evals.SyntheticProvenance,
-			Source: eventID, Observer: person, At: core.LogicalTime(t.Frame),
+			Source: eventID, Observer: person, At: t.Decision.Human.At,
 			Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
 		})
 		break
@@ -141,15 +144,24 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 			o.Burden = core.UnknownGroupQuantity()
 			o.BurdenReduction = e.BurdenReduction
 		}
-		// A later self-report is evidence when there is an observed event for it
-		// to be later than. An UNKNOWN benefit is still a report and is retained
-		// as its own observation: absence of a value is not absence of a report.
-		if eventID != "" && e.LearnedAt > core.LogicalTime(firstFrame(person, r)) {
+		// A later self-report is about the OPPORTUNITY it actually reports, not
+		// an unrelated earlier action that merely happened first. The event
+		// record is emitted for that opportunity, in this arm.
+		oppID, oppAt, found := opportunityFor(e.Opportunity, person, r, arm)
+		if found && e.LearnedAt > oppAt {
+			if !seenOpportunity[oppID] {
+				seenOpportunity[oppID] = true
+				recs = append(recs, evals.SourceRecord{ID: oppID, Kind: "observed_choice",
+					Subject: person, Observer: person, At: oppAt, Arm: arm,
+					Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
+					Content: fmt.Sprintf("opportunity %s", e.Opportunity)})
+			}
 			// Records are namespaced by arm: the same experience identity recurs
 			// in each arm's run and they are distinct observations.
 			recID := core.ID(fmt.Sprintf("report:%s:%s:%d:%s", r.Family, arm, r.Seed, e.ID))
 			recs = append(recs, evals.SourceRecord{ID: recID, Kind: "later_self_report", Subject: e.Participant,
-				Observer: e.Observer, At: e.LearnedAt, About: eventID, Content: "participant self-report"})
+				Observer: e.Observer, At: e.LearnedAt, About: oppID, Arm: arm,
+				Metric: "reported_benefit", Value: e.Benefit, Content: "participant self-report"})
 			o.Observations = append(o.Observations, evals.TierEvidence{
 				Person: person, Tier: evals.AttributedLater, Provenance: evals.SyntheticProvenance,
 				Source: recID, Observer: e.Observer, At: e.LearnedAt,
@@ -160,11 +172,26 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 	return o, recs
 }
 
-// firstFrame is the frame of this person's first observed action.
-func firstFrame(person core.ID, r ordinaryexperiment.Report) int {
+// opportunityFor resolves the actual opportunity a later report is about, and
+// its logical time, within this run and arm.
+// The record is per person: each participant's later report is about their own
+// experience of that opportunity, so each carries its own attributable event.
+func opportunityFor(opp core.ID, person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (core.ID, core.LogicalTime, bool) {
+	for _, o := range r.Opportunities {
+		if o.Helper.ID == opp {
+			return core.ID(fmt.Sprintf("opportunity:%s:%s:%d:%s:%s", r.Family, arm, r.Seed, opp, person)), o.Helper.At, true
+		}
+	}
+	return "", 0, false
+}
+
+// firstActionTime is the LOGICAL TIME of this person's first observed action.
+// A frame index is not a logical time: comparing a later report against a frame
+// number compares incompatible units.
+func firstActionTime(person core.ID, r ordinaryexperiment.Report) core.LogicalTime {
 	for _, t := range r.Traces {
 		if t.Actor == person && t.Decision.Human.Candidates[t.Decision.Human.Selected].Offer.Kind != behavior.Wait {
-			return t.Frame
+			return t.Decision.Human.At
 		}
 	}
 	return 0
