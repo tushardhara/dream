@@ -313,14 +313,14 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		return UpliftFinding{}, fmt.Errorf("no comparisons supplied")
 	}
 	scenarios := map[core.ID]bool{}
-	var base, cand []float64
-	units := map[string]bool{}
-	attributed := 0
-	// Harm and missingness are qualifications on any reported difference, not
-	// residue to be averaged away. A benefit number never cancels a boundary
-	// violation, an unwanted intervention or an outcome nobody could observe.
+	// The estimand is matched WITHIN a world unit. A world is identified by what
+	// actually generated it, not by its label: renaming a scenario cannot turn
+	// one world into two independent units.
+	type unit struct{ base, cand []float64 }
+	units := map[string]*unit{}
 	harms := []string{}
 	basePeople, candPeople := map[core.ID]bool{}, map[core.ID]bool{}
+	attributed := 0
 	for _, c := range cs {
 		if e := c.Validate(); e != nil {
 			return UpliftFinding{}, e
@@ -336,6 +336,10 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		for _, r := range c.Runs {
 			if r.Arm != baseline && r.Arm != candidate {
 				continue
+			}
+			key := r.WorldHash + "\x00" + r.ExogenousHash
+			if units[key] == nil {
+				units[key] = &unit{}
 			}
 			for _, o := range r.Outcomes {
 				if r.Arm == baseline {
@@ -356,17 +360,14 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					}
 				}
 				for _, ob := range o.Observations {
-					// Only independently attributed later evidence can support
-					// an uplift claim. Assertions and prompted answers cannot.
 					if ob.Tier != AttributedLater || ob.Value.Status != core.Observed {
 						continue
 					}
 					attributed++
-					units[string(c.Scenario)+"/"+r.WorldHash] = true
 					if r.Arm == baseline {
-						base = append(base, *ob.Value.Value)
+						units[key].base = append(units[key].base, *ob.Value.Value)
 					} else {
-						cand = append(cand, *ob.Value.Value)
+						units[key].cand = append(units[key].cand, *ob.Value.Value)
 					}
 				}
 			}
@@ -377,19 +378,21 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 			out.Scenario = s
 		}
 	}
-	if attributed == 0 || len(base) == 0 || len(cand) == 0 {
+	// Missingness is preserved: a unit observed in only one arm is NOT evidence
+	// about the difference, and is reported rather than absorbed.
+	paired, unpaired := 0, 0
+	for _, u := range units {
+		if len(u.base) > 0 && len(u.cand) > 0 {
+			paired++
+		} else if len(u.base) > 0 || len(u.cand) > 0 {
+			unpaired++
+		}
+	}
+	if attributed == 0 || paired == 0 {
+		out.Status = NotTested
+		out.Evidence = fmt.Sprintf("no world unit was observed in both arms (%d one-armed unit(s), %d attributed observation(s))", unpaired, attributed)
 		return out, nil
 	}
-	// Uncertainty is clustered by independent scenario/world units, not by
-	// observation: repeated measurements of one world are one unit, and a
-	// single unit can never establish a difference.
-	if len(units) < MinIndependentUnits {
-		out.Status = Inconclusive
-		out.Evidence = fmt.Sprintf("%d independent scenario unit(s); at least %d are required before any difference is reported", len(units), MinIndependentUnits)
-		return out, nil
-	}
-	// Matched individuals: an arm that quietly changes who is measured is not a
-	// comparison of the same people.
 	if len(basePeople) != len(candPeople) {
 		out.Status = Inconclusive
 		out.Evidence = "arms do not measure the same people"
@@ -402,7 +405,6 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 			return out, nil
 		}
 	}
-	// Positive-looking harmful help can never be reported as uplift.
 	if len(harms) > 0 {
 		sort.Strings(harms)
 		out.Status = Inconclusive
@@ -410,19 +412,32 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		out.Evidence = fmt.Sprintf("%s shows harm or unobservable outcomes; no uplift may be reported (%s)", candidate, strings.Join(harms, "; "))
 		return out, nil
 	}
-	sort.Float64s(base)
-	sort.Float64s(cand)
-	// A deliberately strict, transparent separation: every attributed later
-	// observation for the candidate must exceed every one for the baseline.
-	// A difference in means is not reported as uplift, because a single
-	// favourable observation must never be able to claim it.
-	if cand[0] > base[len(base)-1] {
-		out.Status = Pass
-		out.Evidence = fmt.Sprintf("attributed later evidence separates arms without overlap across %d independent units (%d observations)", len(units), attributed)
+	if paired < MinIndependentUnits {
+		out.Status = Inconclusive
+		out.Evidence = fmt.Sprintf("%d paired world unit(s); at least %d are required before any difference is reported", paired, MinIndependentUnits)
 		return out, nil
 	}
-	out.Status = Inconclusive
-	out.Evidence = fmt.Sprintf("attributed later evidence overlaps across %d independent units (%d observations); no uplift established", len(units), attributed)
+	if unpaired > 0 {
+		out.Status = Inconclusive
+		out.Evidence = fmt.Sprintf("%d world unit(s) observed in only one arm; missingness is not evidence of a difference", unpaired)
+		return out, nil
+	}
+	// Every paired unit must favour the candidate without overlap. One unit
+	// pointing the other way is disagreement, not uplift.
+	for _, u := range units {
+		if len(u.base) == 0 || len(u.cand) == 0 {
+			continue
+		}
+		sort.Float64s(u.base)
+		sort.Float64s(u.cand)
+		if u.cand[0] <= u.base[len(u.base)-1] {
+			out.Status = Inconclusive
+			out.Evidence = fmt.Sprintf("paired world units disagree or overlap across %d unit(s) (%d observations); no uplift established", paired, attributed)
+			return out, nil
+		}
+	}
+	out.Status = Pass
+	out.Evidence = fmt.Sprintf("every one of %d paired world units separates without overlap (%d observations)", paired, attributed)
 	return out, nil
 }
 

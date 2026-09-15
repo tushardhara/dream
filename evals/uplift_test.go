@@ -270,8 +270,8 @@ func TestSingleFavourableObservationCannotClaimUplift(t *testing.T) {
 	if f.Status == Pass {
 		t.Fatalf("one independent unit claimed uplift: %+v", f)
 	}
-	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "independent scenario unit") {
-		t.Fatalf("want an independent-unit refusal, got %q / %q", f.Status, f.Evidence)
+	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "paired world unit") {
+		t.Fatalf("want a paired-unit refusal, got %q / %q", f.Status, f.Evidence)
 	}
 }
 
@@ -291,7 +291,7 @@ func TestOverlappingEvidenceIsNotUplift(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "overlaps") {
+	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "overlap") {
 		t.Fatalf("overlapping evidence must not be uplift: %q / %q", f.Status, f.Evidence)
 	}
 }
@@ -443,4 +443,83 @@ func TestNewContractGuardsAreAttributable(t *testing.T) {
 		c.Runs[2].Outcomes[1].Observations[0].Person = "person:99"
 		assertErr(t, c.Validate(), "arm reports a person outside the affected roster")
 	})
+}
+
+// --- Regressions for the Codex refresh review (probes 1 and 2) ---
+
+// Probe 1: a difference between worlds each observed in only ONE arm is not
+// matched-arm uplift. Missingness must be preserved, not absorbed.
+func TestUnpairedWorldsAreNotUplift(t *testing.T) {
+	a, b := twoUnits()
+	// world A: only the baseline arm has later evidence
+	a.Runs[0].Outcomes[0].Observations = append(a.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
+	// world B: only the candidate arm has later evidence
+	b.Runs[3].Outcomes[0].Observations = append(b.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
+	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatalf("unpaired worlds reported as uplift: %+v", f)
+	}
+	if !strings.Contains(f.Evidence, "both arms") {
+		t.Fatalf("the result must say no unit was observed in both arms, got %q", f.Evidence)
+	}
+}
+
+// Probe 2: relabelling a scenario must not turn one world into two
+// independent units.
+func TestRenamingAScenarioDoesNotCreateIndependentUnits(t *testing.T) {
+	a := comparison()
+	a.Runs[0].Outcomes[0].Observations = append(a.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
+	a.Runs[3].Outcomes[0].Observations = append(a.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
+	b := a
+	b.Runs = append([]ArmRun{}, a.Runs...)
+	// same WorldHash, ExogenousHash, seed, people and records — only labels differ
+	b.Scenario = "scenario:relabelled"
+	for i := range b.Runs {
+		b.Runs[i].Scenario = b.Scenario
+	}
+	f, e := CompareArms([]Comparison{a, b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatalf("a relabelled copy of one world manufactured independent support: %+v", f)
+	}
+}
+
+// A genuine paired separation across two distinct worlds is still reportable.
+func TestPairedSeparationAcrossDistinctWorldsIsReported(t *testing.T) {
+	a, b := twoUnits()
+	for _, c := range []*Comparison{a, b} {
+		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
+		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .8))
+	}
+	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status != Pass || !strings.Contains(f.Evidence, "paired world units") {
+		t.Fatalf("a genuine paired separation should be reported: %q / %q", f.Status, f.Evidence)
+	}
+}
+
+// Probe 3 on the paired estimand: recorded harm still blocks any conclusion.
+func TestHarmBlocksEvenAGenuinePairedSeparation(t *testing.T) {
+	a, b := twoUnits()
+	for _, c := range []*Comparison{a, b} {
+		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
+		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
+		h := &c.Runs[3].Outcomes[1]
+		h.Benefit, h.Burden = core.ObservedGroupQuantity(-1), core.ObservedGroupQuantity(1)
+		h.Unwanted, h.BoundaryViolations, h.DelayedOutcome = 20, 10, "censored"
+	}
+	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass || len(f.Harms) == 0 {
+		t.Fatalf("harm must block a conclusion and be named: %+v", f)
+	}
 }
