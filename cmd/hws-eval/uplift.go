@@ -40,7 +40,11 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 	if e != nil {
 		return nil, e
 	}
-	return append(out, helper...), nil
+	response, e := responseComparisons(ctx)
+	if e != nil {
+		return nil, e
+	}
+	return append(append(out, helper...), response...), nil
 }
 
 // ordinaryComparisons executes the ordinary-life consumer (family

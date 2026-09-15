@@ -110,6 +110,25 @@ def main() -> int:
         if len(same) == len(shared):
             assert f["status"] != "pass", (
                 "uplift credited between arms that ran identically everywhere", base, cand)
+    # #58 requires missing and censored results to be RETAINED rather than
+    # dropped. An evaluation that only ran the clean scenes would satisfy every
+    # other assertion here, so the dispositions are checked to be exercised.
+    dispositions = {p["delayed_outcome"] for p in people}
+    for want in ("missing", "censored", "resolved", "unresolved"):
+        assert want in dispositions, ("no person reached this disposition", want, sorted(dispositions))
+
+    # Paired evidence must actually exist. Without this the whole evaluation
+    # could regress to "no person was observed in both arms" everywhere and
+    # still pass every other assertion here, because refusing to claim uplift
+    # is trivially satisfied by measuring nothing.
+    attributed = {}
+    for p in people:
+        n = sum(1 for e in p["evidence"] if e["tier"] == "independently_attributed_later")
+        if n:
+            attributed.setdefault((p["scenario"], p["seed"], p["person"]), set()).add(p["arm"])
+    paired = [k for k, arms in attributed.items() if "none" in arms and arms - {"none"}]
+    assert paired, "no person carries attributed later evidence in both the control and a candidate arm"
+
     single = sorted({u["family"] for u in manifest if len(u["rng_streams"]) < 2})
     if single:
         print("NOTE: these families draw from a single undifferentiated rng stream; their "
