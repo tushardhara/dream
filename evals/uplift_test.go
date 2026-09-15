@@ -271,8 +271,8 @@ func TestSingleFavourableObservationCannotClaimUplift(t *testing.T) {
 	if f.Status == Pass {
 		t.Fatalf("one independent unit claimed uplift: %+v", f)
 	}
-	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "paired world unit") {
-		t.Fatalf("want a paired-unit refusal, got %q / %q", f.Status, f.Evidence)
+	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "independent world unit") {
+		t.Fatalf("want an independent-unit refusal, got %q / %q", f.Status, f.Evidence)
 	}
 }
 
@@ -501,8 +501,11 @@ func TestPairedSeparationAcrossDistinctWorldsIsReported(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if f.Status != Pass || !strings.Contains(f.Evidence, "paired world units") {
+	if f.Status != Pass || !strings.Contains(f.Evidence, "per-person pairs") {
 		t.Fatalf("a genuine paired separation should be reported: %q / %q", f.Status, f.Evidence)
+	}
+	if f.Margin == nil || f.Margin.Units != 2 || !strings.Contains(f.Margin.Method, "not a calibrated") {
+		t.Fatalf("a reported separation must carry a clustered, honestly-labelled margin: %+v", f.Margin)
 	}
 }
 
@@ -556,5 +559,41 @@ func TestBurdenReductionIsNotBurden(t *testing.T) {
 	}
 	if o.Burden.Status == core.Observed {
 		t.Fatal("an observed burden reduction must not make burden observed")
+	}
+}
+
+// Different people observed in different arms are not paired evidence.
+func TestDifferentObservedPeopleAreNotPaired(t *testing.T) {
+	a, b := twoUnits()
+	for _, c := range []*Comparison{a, b} {
+		// only person 0 observed in the baseline arm
+		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
+		// only person 1 observed in the candidate arm
+		c.Runs[3].Outcomes[1].Observations = append(c.Runs[3].Outcomes[1].Observations, evidence(person(1), AttributedLater, .9))
+	}
+	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatalf("different people's levels were treated as a per-person improvement: %+v", f)
+	}
+}
+
+// Known harm is retained on a not-tested result with no paired observation.
+func TestHarmRetainedWhenNothingIsPaired(t *testing.T) {
+	a, b := twoUnits()
+	for _, c := range []*Comparison{a, b} {
+		c.Runs[3].Outcomes[1].BoundaryViolations = 10
+	}
+	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status != NotTested {
+		t.Fatalf("expected not-tested, got %q", f.Status)
+	}
+	if len(f.Harms) == 0 {
+		t.Fatal("known adverse evidence was discarded by the not-tested return")
 	}
 }

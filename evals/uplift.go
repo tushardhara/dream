@@ -298,9 +298,13 @@ type UpliftFinding struct {
 	Harms     []string `json:"harm_qualifications,omitempty"`
 	// Uncertainty names what was not measured. It qualifies every finding,
 	// including not-tested ones, so absence of evidence stays visible.
-	Uncertainty   []string `json:"uncertainty,omitempty"`
-	SyntheticOnly bool     `json:"synthetic_only"`
-	HumanValidity Status   `json:"real_human_validity"`
+	Uncertainty []string `json:"uncertainty,omitempty"`
+	// Margin is the observed spread of per-person paired margins, clustered by
+	// independent world unit. It is descriptive over a small bounded fixture,
+	// not a calibrated confidence interval, and says so in its method.
+	Margin        *Interval `json:"margin,omitempty"`
+	SyntheticOnly bool      `json:"synthetic_only"`
+	HumanValidity Status    `json:"real_human_validity"`
 }
 
 // MinIndependentUnits is the smallest number of independent scenario/world
@@ -320,13 +324,13 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		return UpliftFinding{}, fmt.Errorf("no comparisons supplied")
 	}
 	scenarios := map[core.ID]bool{}
-	// The estimand is matched WITHIN a world unit. A world is identified by what
-	// actually generated it, not by its label: renaming a scenario cannot turn
-	// one world into two independent units.
-	type unit struct{ base, cand []float64 }
-	units := map[string]*unit{}
+	// The estimand is matched within a world unit AND within a person. A world
+	// is identified by what generated it, never by its label; a pair exists only
+	// where the SAME person was actually observed in both arms. Different
+	// people's levels are not a per-person improvement.
+	type pair struct{ base, cand []float64 }
+	units := map[string]map[core.ID]*pair{}
 	harms, unknowns := []string{}, []string{}
-	basePeople, candPeople := map[core.ID]bool{}, map[core.ID]bool{}
 	attributed := 0
 	for _, c := range cs {
 		if e := c.Validate(); e != nil {
@@ -346,13 +350,13 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 			}
 			key := r.WorldHash + "\x00" + r.ExogenousHash
 			if units[key] == nil {
-				units[key] = &unit{}
+				units[key] = map[core.ID]*pair{}
 			}
 			for _, o := range r.Outcomes {
-				if r.Arm == baseline {
-					basePeople[o.Person] = true
-				} else {
-					candPeople[o.Person] = true
+				if units[key][o.Person] == nil {
+					units[key][o.Person] = &pair{}
+				}
+				if r.Arm == candidate {
 					if o.BoundaryViolations > 0 {
 						harms = append(harms, fmt.Sprintf("%s: %d boundary violation(s)", o.Person, o.BoundaryViolations))
 					}
@@ -362,16 +366,12 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					if o.Benefit.Status == core.Observed && o.Benefit.Value != nil && *o.Benefit.Value < 0 {
 						harms = append(harms, fmt.Sprintf("%s: observed negative benefit", o.Person))
 					}
-					// Blocking: a cost that was actually observed.
-					if o.DelayedOutcome == "missing" || o.DelayedOutcome == "censored" {
-						harms = append(harms, fmt.Sprintf("%s: %s outcome", o.Person, o.DelayedOutcome))
-					}
 					if o.Burden.Status == core.Observed && o.Burden.Value != nil && *o.Burden.Value > 0 {
 						harms = append(harms, fmt.Sprintf("%s: observed burden", o.Person))
 					}
-					// Reported, not blocking: what was simply not measured. It is
-					// carried on every finding so absence is visible rather than
-					// silently absorbed, but absence alone is not a cost.
+					if o.DelayedOutcome == "missing" || o.DelayedOutcome == "censored" {
+						harms = append(harms, fmt.Sprintf("%s: %s outcome", o.Person, o.DelayedOutcome))
+					}
 					if o.DelayedOutcome == "unresolved" {
 						unknowns = append(unknowns, fmt.Sprintf("%s: outcome unresolved", o.Person))
 					}
@@ -388,81 +388,80 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					}
 					attributed++
 					if r.Arm == baseline {
-						units[key].base = append(units[key].base, *ob.Value.Value)
+						units[key][o.Person].base = append(units[key][o.Person].base, *ob.Value.Value)
 					} else {
-						units[key].cand = append(units[key].cand, *ob.Value.Value)
+						units[key][o.Person].cand = append(units[key][o.Person].cand, *ob.Value.Value)
 					}
 				}
 			}
 		}
 	}
 	if len(scenarios) == 1 {
-		for s := range scenarios {
-			out.Scenario = s
+		for sc := range scenarios {
+			out.Scenario = sc
 		}
 	}
-	// Missingness is preserved: a unit observed in only one arm is NOT evidence
-	// about the difference, and is reported rather than absorbed.
-	paired, unpaired := 0, 0
-	for _, u := range units {
-		if len(u.base) > 0 && len(u.cand) > 0 {
-			paired++
-		} else if len(u.base) > 0 || len(u.cand) > 0 {
-			unpaired++
-		}
-	}
+	// Qualifications are attached before any decision, so a refused or
+	// not-tested result still reports what was observed and what was not.
 	sort.Strings(harms)
 	sort.Strings(unknowns)
-	out.Harms = harms
+	out.Harms = dedupe(harms)
 	out.Uncertainty = dedupe(unknowns)
-	if attributed == 0 || paired == 0 {
-		out.Status = NotTested
-		out.Evidence = fmt.Sprintf("no world unit was observed in both arms (%d one-armed unit(s), %d attributed observation(s))", unpaired, attributed)
-		return out, nil
-	}
-	if len(basePeople) != len(candPeople) {
-		out.Status = Inconclusive
-		out.Evidence = "arms do not measure the same people"
-		return out, nil
-	}
-	for id := range basePeople {
-		if !candPeople[id] {
-			out.Status = Inconclusive
-			out.Evidence = "arms do not measure the same people"
-			return out, nil
+
+	pairedUnits, pairedPeople, oneArmed := 0, 0, 0
+	margins := []float64{}
+	for _, people := range units {
+		unitHasPair := false
+		for _, pr := range people {
+			switch {
+			case len(pr.base) > 0 && len(pr.cand) > 0:
+				pairedPeople++
+				unitHasPair = true
+				sort.Float64s(pr.base)
+				sort.Float64s(pr.cand)
+				margins = append(margins, pr.cand[0]-pr.base[len(pr.base)-1])
+			case len(pr.base) > 0 || len(pr.cand) > 0:
+				oneArmed++
+			}
 		}
+		if unitHasPair {
+			pairedUnits++
+		}
+	}
+	if pairedPeople == 0 {
+		out.Status = NotTested
+		out.Evidence = fmt.Sprintf("no person was observed in both arms (%d one-armed person-observation(s), %d attributed observation(s))", oneArmed, attributed)
+		return out, nil
 	}
 	if len(harms) > 0 {
 		out.Status = Inconclusive
-		out.Evidence = fmt.Sprintf("%s shows harm or unobservable outcomes; no uplift may be reported (%s)", candidate, strings.Join(harms, "; "))
+		out.Evidence = fmt.Sprintf("%s shows harm or unobservable outcomes; no uplift may be reported (%s)", candidate, strings.Join(out.Harms, "; "))
 		return out, nil
 	}
-	if paired < MinIndependentUnits {
+	if oneArmed > 0 {
 		out.Status = Inconclusive
-		out.Evidence = fmt.Sprintf("%d paired world unit(s); at least %d are required before any difference is reported", paired, MinIndependentUnits)
+		out.Evidence = fmt.Sprintf("%d person-observation(s) exist in only one arm; missingness is not evidence of a difference", oneArmed)
 		return out, nil
 	}
-	if unpaired > 0 {
+	sort.Float64s(margins)
+	// Uncertainty is reported as the observed spread of per-person paired
+	// margins, clustered at independent world units. This is a DESCRIPTIVE
+	// range over a small bounded fixture, not a calibrated confidence interval,
+	// and it is labelled as such.
+	out.Margin = &Interval{Low: margins[0], High: margins[len(margins)-1], Units: pairedUnits,
+		Method: "descriptive range of per-person paired margins, clustered by independent world unit; not a calibrated interval"}
+	if pairedUnits < MinIndependentUnits {
 		out.Status = Inconclusive
-		out.Evidence = fmt.Sprintf("%d world unit(s) observed in only one arm; missingness is not evidence of a difference", unpaired)
+		out.Evidence = fmt.Sprintf("%d independent world unit(s) with a paired person; at least %d are required before any difference is reported", pairedUnits, MinIndependentUnits)
 		return out, nil
 	}
-	// Every paired unit must favour the candidate without overlap. One unit
-	// pointing the other way is disagreement, not uplift.
-	for _, u := range units {
-		if len(u.base) == 0 || len(u.cand) == 0 {
-			continue
-		}
-		sort.Float64s(u.base)
-		sort.Float64s(u.cand)
-		if u.cand[0] <= u.base[len(u.base)-1] {
-			out.Status = Inconclusive
-			out.Evidence = fmt.Sprintf("paired world units disagree or overlap across %d unit(s) (%d observations); no uplift established", paired, attributed)
-			return out, nil
-		}
+	if margins[0] <= 0 {
+		out.Status = Inconclusive
+		out.Evidence = fmt.Sprintf("per-person paired margins overlap or disagree across %d unit(s) (%d pairs, %d observations); no uplift established", pairedUnits, pairedPeople, attributed)
+		return out, nil
 	}
 	out.Status = Pass
-	out.Evidence = fmt.Sprintf("every one of %d paired world units separates without overlap (%d observations)", paired, attributed)
+	out.Evidence = fmt.Sprintf("every one of %d per-person pairs separates without overlap across %d independent world units (%d observations)", pairedPeople, pairedUnits, attributed)
 	return out, nil
 }
 
