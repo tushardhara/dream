@@ -333,7 +333,7 @@ func TestOverlappingEvidenceIsNotUplift(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "overlap") {
+	if f.Status != Inconclusive || !(strings.Contains(f.Evidence, "overlap") || strings.Contains(f.Evidence, "disagree")) {
 		t.Fatalf("overlapping evidence must not be uplift: %q / %q", f.Status, f.Evidence)
 	}
 }
@@ -764,4 +764,28 @@ func TestR4BurdenReductionKeepsItsSourceScale(t *testing.T) {
 	}
 	o.BurdenReduction = core.ObservedGroupQuantity(500)
 	assertErr(t, o.Validate(), "invalid burden reduction quantity")
+}
+
+// Uncertainty is computed at the independent world unit, and one unit pointing
+// the other way is disagreement between worlds rather than uplift.
+func TestUnitsMustAgreeAndMarginIsClusteredAtUnits(t *testing.T) {
+	a, b := twoUnits()
+	// world A favours the candidate, world B does not
+	a.Runs[0].Outcomes[0].Observations = append(a.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
+	a.Runs[3].Outcomes[0].Observations = append(a.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .8))
+	b.Runs[0].Outcomes[0].Observations = append(b.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .8))
+	b.Runs[3].Outcomes[0].Observations = append(b.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatalf("worlds disagreeing were reported as uplift: %+v", f)
+	}
+	if !strings.Contains(f.Evidence, "disagree") {
+		t.Fatalf("disagreement between units must be named: %q", f.Evidence)
+	}
+	if f.Margin == nil || f.Margin.Units != 2 || !strings.Contains(f.Margin.Method, "per-unit summaries") {
+		t.Fatalf("margin must be clustered at independent units: %+v", f.Margin)
+	}
 }

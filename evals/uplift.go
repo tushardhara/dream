@@ -546,13 +546,46 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		out.Evidence = fmt.Sprintf("%d person-observation(s) exist in only one arm; missingness is not evidence of a difference", oneArmed)
 		return out, nil
 	}
+	// Uncertainty is computed AT the independent world unit, not over pooled
+	// per-person margins: each unit contributes one summary, and the spread is
+	// taken across those unit summaries. Pooling people would treat several
+	// measurements of one world as independent evidence.
+	unitMargins := []float64{}
+	favouring, against := 0, 0
+	for _, people := range units {
+		inUnit := []float64{}
+		for _, pr := range people {
+			if len(pr.base) == 0 || len(pr.cand) == 0 {
+				continue
+			}
+			sort.Float64s(pr.base)
+			sort.Float64s(pr.cand)
+			inUnit = append(inUnit, pr.cand[0]-pr.base[len(pr.base)-1])
+		}
+		if len(inUnit) == 0 {
+			continue
+		}
+		sort.Float64s(inUnit)
+		// One unit, one summary: its weakest per-person margin, so a unit cannot
+		// be carried by its most favourable person.
+		unitMargins = append(unitMargins, inUnit[0])
+		if inUnit[0] > 0 {
+			favouring++
+		} else {
+			against++
+		}
+	}
+	sort.Float64s(unitMargins)
 	sort.Float64s(margins)
-	// Uncertainty is reported as the observed spread of per-person paired
-	// margins, clustered at independent world units. This is a DESCRIPTIVE
-	// range over a small bounded fixture, not a calibrated confidence interval,
-	// and it is labelled as such.
-	out.Margin = &Interval{Low: margins[0], High: margins[len(margins)-1], Units: pairedUnits,
-		Method: "descriptive range of per-person paired margins, clustered by independent world unit; not a calibrated interval"}
+	out.Margin = &Interval{Low: unitMargins[0], High: unitMargins[len(unitMargins)-1], Units: pairedUnits,
+		Method: fmt.Sprintf("spread of per-unit summaries across %d independent world unit(s); each unit contributes its weakest per-person paired margin; %d unit(s) favour %s, %d do not; descriptive over a bounded fixture, not a calibrated interval", pairedUnits, favouring, candidate, against)}
+	// A difference is reported only when EVERY independent unit agrees. One unit
+	// pointing the other way is disagreement between worlds, not uplift.
+	if against > 0 {
+		out.Status = Inconclusive
+		out.Evidence = fmt.Sprintf("independent world units disagree: %d favour %s, %d do not (%d observations); no uplift established", favouring, candidate, against, attributed)
+		return out, nil
+	}
 	if pairedUnits < MinIndependentUnits {
 		out.Status = Inconclusive
 		out.Evidence = fmt.Sprintf("%d independent world unit(s) with a paired person; at least %d are required before any difference is reported", pairedUnits, MinIndependentUnits)
