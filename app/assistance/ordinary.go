@@ -208,6 +208,13 @@ func (h OrdinaryHost) Execute(ctx context.Context, r OrdinaryRequest, recorded *
 		if tx.Err() != nil || s.Now != r.At || len(s.History) > MaxHistory || core.ValidateGroupPortfolio(s.Groups, s.Reservations, s.Budget) != nil {
 			return OrdinaryResponse{}, ErrDenied
 		}
+		// A complete portfolio can include later receipts. Never let future
+		// reservation knowledge influence this earlier ordinary request.
+		for _, reservation := range s.Reservations {
+			if reservation.At > s.Now {
+				return OrdinaryResponse{}, ErrDenied
+			}
+		}
 		if r.Arm == "none" {
 			out.Reason = "disabled"
 			return finish()

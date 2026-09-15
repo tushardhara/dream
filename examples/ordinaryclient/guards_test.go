@@ -290,3 +290,23 @@ func TestOrdinaryExplicitUnwelcomePauses(t *testing.T) {
 		t.Fatal("explicit negative ignored", o)
 	}
 }
+
+func TestOrdinaryFutureReservationDenied(t *testing.T) {
+	for _, created := range []core.LogicalTime{1, 2} {
+		l, r := fixture(t, core.OrdinaryActivity)
+		gs := []core.Grant{{Actor: "a", Recipient: "a", Purpose: "help", Operation: core.Read}, {Actor: "a", Recipient: "a", Purpose: "help", Operation: core.Derive}}
+		rs, e := core.ReserveGroup(l.groups, nil, l.budget, "ordinary-plan", "manual", "imported-care", "a", created, gs)
+		if e != nil {
+			t.Fatal(e)
+		}
+		l.reservations = rs
+		o, e := l.Host().Execute(context.Background(), r, nil)
+		if created == r.At {
+			if e != nil || o.Action != "simple_activity" {
+				t.Fatal("current reservation positive control", o, e)
+			}
+		} else if e == nil || len(l.responses) != 0 {
+			t.Fatal("future reservation used before its creation", o, e)
+		}
+	}
+}

@@ -30,7 +30,8 @@ manual matching spends three coordination-time units and slot matching one, whil
 both assign one care unit to each person. This is a defined synthetic resource
 saving, not a general claim of reduced human burden.
 
-Current host time must equal the registered request time. Registration, snapshot,
+Current host time must equal the registered request time; imported reservation
+receipts must already exist at that time (`TestOrdinaryFutureReservationDenied`). Registration, snapshot,
 permission checks, fixed rendering and response commit share one bounded critical
 section with corrections, revocation, boundaries and reservation. Cancellation
 before commit leaves no response. Replay recomputes current authority and budgets;
