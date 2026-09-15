@@ -26,20 +26,41 @@ def main() -> int:
     assert BANNED <= disqualified, BANNED - disqualified
 
     assert r["arms"][0] == "none" and len(r["arms"]) == 4, r["arms"]
-    assert r["comparisons"] >= 2, r["comparisons"]
+    # Only genuinely implemented arms may be reported as executed.
+    assert r["arms_executed"][0] == "none", r["arms_executed"]
+    assert "multi_perspective" not in r["arms_executed"], "an unimplemented arm must not be reported as executed"
+    # Real execution across families and seeds, not an authored record set.
+    assert r["comparisons"] >= 8, r["comparisons"]
 
     findings = r["findings"]
-    assert len(findings) == 3, findings
+    assert len(findings) >= 4, findings
     for f in findings:
-        assert f["baseline"] == "none", f
         assert f["synthetic_only"] is True and f["real_human_validity"] == "not-tested", f
-        # The fixture carries no evidence of uplift, so none may be claimed.
+        # Nothing observed here is uplift, so none may be claimed.
         assert f["status"] in ("not-tested", "inconclusive"), f
-    assert any(f["status"] == "inconclusive" for f in findings), "an arm with later evidence must be scored"
-    assert any(f["status"] == "not-tested" for f in findings), "an arm without later evidence must stay not-tested"
+    # The required comparison against simple assistance must be present.
+    assert any(f["baseline"] == "simple" for f in findings), "no comparison against simple assistance"
 
-    print("PASS: matched 4-arm synthetic uplift; no uplift claimed; engagement metrics disqualified; "
-          "human validity NOT_TESTED; live-provider/cross-model/30-day study NOT_TESTED")
+    # Per-person evidence must survive into the emitted result.
+    people = r["per_person"]
+    assert len(people) >= 24, len(people)
+    for p in people:
+        for field in ("person", "benefit", "burden", "unwanted_interventions", "boundary_violations", "delayed_outcome"):
+            assert field in p, (field, p)
+
+    # Scenario coverage is stated honestly, including what is NOT covered.
+    coverage = r["scenario_coverage"]
+    assert len(coverage) == 8, coverage
+    uncovered = [c["family"] for c in coverage if not c["covered"]]
+    for c in coverage:
+        if not c["covered"]:
+            assert "NOT COVERED" in c["note"], c
+    assert any(c["covered"] for c in coverage), "no family is actually executed"
+    print(f"NOTE: {len(uncovered)} of 8 required scenario families are NOT covered: {', '.join(uncovered)}")
+
+    print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "
+          "per-person burden/unwanted/boundary/delayed retained; engagement metrics disqualified; "
+          "unimplemented arms reported not-executed; human validity NOT_TESTED")
     return 0
 
 

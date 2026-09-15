@@ -10,7 +10,11 @@ import (
 func person(i int) core.ID { return core.ID([]string{"person:01", "person:02"}[i]) }
 
 func evidence(p core.ID, tier EvidenceTier, v float64) TierEvidence {
-	return TierEvidence{Person: p, Tier: tier, Provenance: SyntheticProvenance, Metric: "reported_benefit", Value: core.ObservedGroupQuantity(v)}
+	e := TierEvidence{Person: p, Tier: tier, Provenance: SyntheticProvenance, Metric: "reported_benefit", Value: core.ObservedGroupQuantity(v)}
+	if tier == AttributedLater {
+		e.Source, e.Observer, e.At = "experience:fixture", p, 5
+	}
+	return e
 }
 
 func outcome(i int, acted bool) PersonOutcome {
@@ -27,7 +31,7 @@ func armRun(a Arm, stream string) ArmRun {
 }
 
 func comparison() Comparison {
-	c := Comparison{Version: UpliftVersion, Scenario: "scenario:ordinary", Seed: 7}
+	c := Comparison{Version: UpliftVersion, Scenario: "scenario:ordinary", Seed: 7, Affected: []core.ID{person(0), person(1)}}
 	for i, a := range Arms {
 		c.Runs = append(c.Runs, armRun(a, string(rune('a'+i))+"-stream"))
 	}
@@ -62,8 +66,11 @@ func TestUpliftContractRejectionsAreAttributable(t *testing.T) {
 		{"arms share an rng stream", "share an rng stream", func(c *Comparison) {
 			c.Runs[3].RNGStream = c.Runs[0].RNGStream
 		}},
-		{"an arm is missing", "comparison must run every arm", func(c *Comparison) {
-			c.Runs = c.Runs[:3]
+		{"a comparison without the control is not a comparison", "must include the no-assistant control", func(c *Comparison) {
+			c.Runs = c.Runs[1:]
+		}},
+		{"a single arm is not a comparison", "control and at least one candidate", func(c *Comparison) {
+			c.Runs = c.Runs[:1]
 		}},
 		{"engagement cannot qualify as benefit", "metric cannot qualify as benefit", func(c *Comparison) {
 			c.Runs[1].Outcomes[0].Observations[0].Metric = "session_time"
@@ -312,4 +319,128 @@ func TestNonOverlappingSeparationAcrossUnitsIsReported(t *testing.T) {
 	if f.HumanValidity != NotTested || !f.SyntheticOnly {
 		t.Fatal("a reported separation must remain synthetic with human validity NOT_TESTED")
 	}
+}
+
+// --- Regressions reproducing Codex review 5682... on PR #69 ---
+
+// R3: relabelling a system assertion as later evidence must fail even when
+// DerivedFrom is left empty. The old guard only caught the honest case.
+func TestR3RelabelledAssertionCannotBecomeAttributedLater(t *testing.T) {
+	o := TierEvidence{Person: person(0), Tier: SystemAssertion, Provenance: SyntheticProvenance, Metric: "reported_benefit", Value: core.ObservedGroupQuantity(.9)}
+	if e := o.Validate(); e != nil {
+		t.Fatal("positive control: a plain system assertion is valid:", e)
+	}
+	o.Tier = AttributedLater // relabel only; DerivedFrom deliberately empty
+	assertErr(t, o.Validate(), "attributed later evidence needs a source record")
+
+	o.Source = "experience:1"
+	o.Observer = person(1) // not the subject
+	assertErr(t, o.Validate(), "attributed later evidence must be authored by its subject")
+}
+
+// R2: positive-looking harmful help cannot be reported as uplift.
+func TestR2HarmfulHelpCannotBeUplift(t *testing.T) {
+	a, b := twoUnits()
+	for _, c := range []*Comparison{a, b} {
+		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
+		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
+		// the other participant is harmed, exactly as the review reproduced
+		h := &c.Runs[3].Outcomes[1]
+		h.Benefit, h.Burden = core.ObservedGroupQuantity(-1), core.ObservedGroupQuantity(1)
+		h.Unwanted, h.BoundaryViolations, h.DelayedOutcome = 20, 10, "censored"
+	}
+	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatalf("harmful help reported as uplift: %+v", f)
+	}
+	if len(f.Harms) == 0 || !strings.Contains(f.Evidence, "harm") {
+		t.Fatalf("harm must be named in the result, got %+v", f)
+	}
+}
+
+// R2: duplicating one record must not manufacture independent support.
+func TestR2DuplicateRecordsDoNotCreateIndependentSupport(t *testing.T) {
+	c := comparison()
+	c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
+	dup := evidence(person(0), AttributedLater, 1)
+	c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, dup, dup)
+	f, e := CompareArms([]Comparison{c}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatalf("duplicated records within one world claimed uplift: %+v", f)
+	}
+}
+
+// R4: an arm may not drop an affected person.
+func TestR4ArmCannotOmitAnAffectedPerson(t *testing.T) {
+	c := comparison()
+	c.Runs[3].Outcomes = c.Runs[3].Outcomes[:1]
+	assertErr(t, c.Validate(), "arm omits an affected person")
+}
+
+// R4: the emitted summary keeps per-person evidence and compares against simple.
+func TestR4SummaryKeepsPerPersonEvidenceAndComparesSimple(t *testing.T) {
+	s, e := SummariseUplift(UpliftFixture())
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(s.People) == 0 {
+		t.Fatal("per-person evidence was summarised away")
+	}
+	simple := false
+	for _, f := range s.Findings {
+		if f.Baseline == SimpleAssistance {
+			simple = true
+		}
+	}
+	if !simple {
+		t.Fatal("no comparison against simple assistance")
+	}
+	for _, c := range s.ScenarioCoverage {
+		if !c.Covered && !strings.Contains(c.Note, "NOT COVERED") {
+			t.Fatalf("an uncovered family must say so: %+v", c)
+		}
+	}
+}
+
+func twoUnits() (*Comparison, *Comparison) {
+	a, b := comparison(), comparison()
+	b.Scenario, b.Seed = "scenario:repair", 9
+	for i := range b.Runs {
+		b.Runs[i].Scenario, b.Runs[i].Seed = b.Scenario, b.Seed
+		b.Runs[i].WorldHash, b.Runs[i].ExogenousHash = "world-2", "exo-2"
+	}
+	return &a, &b
+}
+
+func TestNewContractGuardsAreAttributable(t *testing.T) {
+	t.Run("attributed later evidence needs a time", func(t *testing.T) {
+		o := evidence(person(0), AttributedLater, .5)
+		if e := o.Validate(); e != nil {
+			t.Fatal("positive control:", e)
+		}
+		o.At = -1
+		assertErr(t, o.Validate(), "attributed later evidence needs an observation time")
+	})
+	t.Run("affected roster rejects duplicates", func(t *testing.T) {
+		c := comparison()
+		c.Affected = []core.ID{person(0), person(0)}
+		assertErr(t, c.Validate(), "invalid affected roster")
+	})
+	t.Run("affected roster rejects an invalid id", func(t *testing.T) {
+		c := comparison()
+		c.Affected = []core.ID{person(0), ""}
+		assertErr(t, c.Validate(), "invalid affected roster")
+	})
+	t.Run("an arm cannot report someone off the roster", func(t *testing.T) {
+		c := comparison()
+		c.Runs[2].Outcomes[1].Person = "person:99"
+		c.Runs[2].Outcomes[1].Observations[0].Person = "person:99"
+		assertErr(t, c.Validate(), "arm reports a person outside the affected roster")
+	})
 }

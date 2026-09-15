@@ -68,10 +68,22 @@ func run(args []string, out io.Writer) error {
 		return e
 	}
 	if *uplift {
-		if flags.NArg() != 0 || *image != "" || *synthetic || *dataset != "" || *config != "" || *studyPlan != "" || *study != "" || *development {
+		// --uplift is standalone: it runs no generator, provider, alignment or
+		// study operation, so every other mode and pin must be rejected rather
+		// than silently ignored.
+		if flags.NArg() != 0 || *image != "" || *synthetic || *dataset != "" || *config != "" ||
+			*studyPlan != "" || *study != "" || *development ||
+			*alignmentPlan != "" || *freezeAlignment != "" || *alignmentReceipt != "" ||
+			*verifyAlignment != "" || *sourceRevision != "" || *sourceTree != "" {
 			return fmt.Errorf("--uplift takes no other options")
 		}
-		summary, e := evals.SummariseUplift(evals.UpliftFixture())
+		// Real execution: the ordinary consumer is actually run across its
+		// families, arms and seeds, and the evaluation reads what it produced.
+		comparisons, e := realComparisons(context.Background())
+		if e != nil {
+			return e
+		}
+		summary, e := evals.SummariseUplift(comparisons)
 		if e != nil {
 			return e
 		}
