@@ -23,12 +23,31 @@ type Report struct {
 // optimiser. Only a native Coordinate choice plus every explicit agreement and
 // current boundary can reserve it. The helper itself cannot execute actions.
 func Run(ctx context.Context, c Case) (Report, error) {
+	return run(ctx, c, "")
+}
+
+// RunArm executes the same case under a matched assistant arm. The native human
+// run is identical in every arm — this withholds or varies the assistant, never
+// the people — and under the no-assistant arm the helper offers nothing at all.
+func RunArm(ctx context.Context, c Case, arm assistance.Arm) (Report, error) {
+	if !arm.Valid() {
+		return Report{}, fmt.Errorf("unknown assistant arm")
+	}
+	return run(ctx, c, arm)
+}
+
+func run(ctx context.Context, c Case, arm assistance.Arm) (Report, error) {
 	out := Report{Version: demo.GroupVersion, HumanValidity: "NOT_TESTED", GlobalWelfare: "NOT_AGGREGATED", People: len(c.Native.Scenario.Public.Humans), Execution: "WAIT", Reservations: []core.GroupReservation{}}
 	l, e := groupclient.New("group-session", c.Native.History, c.Budget, c.Reservations, c.Boundaries, c.Native.At)
 	if e != nil {
 		return out, e
 	}
-	r, e := l.Request(Person(0), "group-request", c.Native.Decision, c.Native.At)
+	var r assistance.GroupRequest
+	if arm == "" {
+		r, e = l.Request(Person(0), "group-request", c.Native.Decision, c.Native.At)
+	} else {
+		r, e = l.ArmedRequest(Person(0), "group-request", c.Native.Decision, c.Native.At, arm)
+	}
 	if e != nil {
 		return out, e
 	}

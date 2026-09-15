@@ -7,10 +7,23 @@ import (
 
 const GroupFlowVersion = "group-assistance.v1"
 
+// GroupArmVersion is an OPT-IN envelope adding matched-arm evaluation to the
+// group flow. A v1 request carries no arm and behaves exactly as before: this
+// version adds a capability, it does not change one. The arms map onto what
+// this helper already computes rather than onto invented behaviour — it builds
+// one perspective per affected member, so the perspective arms are a real
+// difference in what the helper looks at, not a relabelling.
+const GroupArmVersion = "group-assistance.v2"
+
+// GroupUsesArms reports whether a group request version carries an arm.
+func GroupUsesArms(version string) bool { return version == GroupArmVersion }
+
 type GroupRequest struct {
 	Version                                      string
 	ID, Session, User, Helper, Decision, Purpose core.ID
 	At                                           core.LogicalTime
+	// Arm is set only on GroupArmVersion requests and must be empty on v1.
+	Arm Arm
 }
 
 func (r GroupRequest) Validate() error {
@@ -19,7 +32,12 @@ func (r GroupRequest) Validate() error {
 			return ErrInvalid
 		}
 	}
-	if r.Version != GroupFlowVersion || r.User == r.Helper || r.At.Validate() != nil {
+	if r.Version != GroupFlowVersion && r.Version != GroupArmVersion || r.User == r.Helper || r.At.Validate() != nil {
+		return ErrInvalid
+	}
+	// An arm on a v1 request would be silently ignored by the v1 path, which is
+	// how an evaluation ends up comparing four labels for one policy.
+	if GroupUsesArms(r.Version) != r.Arm.Valid() {
 		return ErrInvalid
 	}
 	return nil
@@ -86,7 +104,7 @@ func (h GroupHost) Execute(ctx context.Context, r GroupRequest, recorded *GroupR
 		return GroupResponse{}, ErrInvalid
 	}
 	return h.Journal.VisitGroup(ctx, r, func(s GroupSnapshot) (GroupResponse, error) {
-		out := GroupResponse{Version: GroupFlowVersion, User: r.User, Decision: r.Decision, At: s.Now, Next: "WAIT", Alternatives: []GroupAlternative{}, Perspectives: []core.GroupPerspective{}, GlobalWelfare: "NOT_AGGREGATED"}
+		out := GroupResponse{Version: r.Version, User: r.User, Decision: r.Decision, At: s.Now, Next: "WAIT", Alternatives: []GroupAlternative{}, Perspectives: []core.GroupPerspective{}, GlobalWelfare: "NOT_AGGREGATED"}
 		if ctx.Err() != nil || s.Now < r.At || s.History.Validate() != nil || core.ValidateGroupPortfolio(s.History, s.Reservations, s.Budget) != nil || s.Budget.Validate() != nil || core.ValidateBoundaryLog(s.Boundaries) != nil {
 			return GroupResponse{}, ErrDenied
 		}
@@ -124,7 +142,30 @@ func (h GroupHost) Execute(ctx context.Context, r GroupRequest, recorded *GroupR
 			}
 			return out, nil
 		}
+		// The no-assistant control returns here having offered nothing: no
+		// perspective, no alternative, WAIT. The humans in the native run
+		// continue deciding either way — this withholds the assistant, not the
+		// people. It is enforced rather than merely produced, so a later change
+		// cannot quietly let the control start helping.
+		if GroupUsesArms(r.Version) && r.Arm == None {
+			if recorded != nil && Digest(*recorded) != Digest(out) {
+				return GroupResponse{}, ErrDenied
+			}
+			return clone(out), nil
+		}
+		// Which perspectives the helper may take is the arm. Simple assistance
+		// takes none and offers only what is feasible; single perspective sees
+		// the asking user's own account; multi perspective sees every affected
+		// member's. v1 has no arm and takes them all, unchanged.
 		for _, member := range d.Affected {
+			if GroupUsesArms(r.Version) {
+				if r.Arm == Simple {
+					break
+				}
+				if r.Arm == Single && member != r.User {
+					continue
+				}
+			}
 			p, e := core.GroupPerspectiveFor(s.History, d.Group, d.Focus, member, s.Now, grants)
 			if e != nil {
 				return GroupResponse{}, ErrDenied

@@ -11,7 +11,7 @@ import (
 
 func TestRealScopedHelperAndHumanConsumerReplay(t *testing.T) {
 	for _, signal := range []string{"disagreement", "credible_pressure"} {
-		out, e := Run(context.Background(), signal, nil)
+		out, e := Run(context.Background(), signal, assistance.Single, nil)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -24,12 +24,12 @@ func TestRealScopedHelperAndHumanConsumerReplay(t *testing.T) {
 				t.Fatal("scoped human consumer", i, d)
 			}
 		}
-		replay, e := Run(context.Background(), signal, &out)
+		replay, e := Run(context.Background(), signal, assistance.Single, &out)
 		if e != nil || assistance.Digest(out) != assistance.Digest(replay) {
 			t.Fatal("mechanical replay", e)
 		}
 		out.Human[1].BoundaryHash = "tampered"
-		if _, e := Run(context.Background(), signal, &out); e == nil {
+		if _, e := Run(context.Background(), signal, assistance.Single, &out); e == nil {
 			t.Fatal("tampered scoped replay")
 		}
 	}
