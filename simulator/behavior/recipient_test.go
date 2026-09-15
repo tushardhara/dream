@@ -167,3 +167,86 @@ func TestOutcomeLearningCorrectsContributionsAndKeepsExpectedBenefitSeparate(t *
 		t.Fatal("revocation resurrected positive assumption", denied, e)
 	}
 }
+
+func TestDomainObservationConsumerRebuildsCorrectionWithoutCrossFrameTransfer(t *testing.T) {
+	native, in := recipientFixture(t, 1)
+	in.Focus.Account = "coordination-account"
+	profile := core.RelationshipContext{Version: 2, Account: in.Focus.Account, Observer: "b", Other: "a", Domain: in.Focus.Domain, RoleContext: in.Focus.RoleContext, ContextSource: "own-context", Types: []core.ID{"knows"}, Measures: []core.RelationshipMeasure{{Kind: "expectation", Value: 1, Confidence: 1, Source: "own-context"}}}
+	account := in.Current[0]
+	account.Event = profile.Account
+	account.Rights.Resource = profile.Account
+	current := append(append([]dynamics.Perceived{}, in.Current...), account, in.Delivery.Source)
+	first, e := RespondToAction(native, in, 2, math.MaxUint64/3)
+	if e != nil {
+		t.Fatal(e)
+	}
+	log := []core.OutcomeObservation{first.Observation}
+	current = append(current, responseProof(first.Observation))
+	actor, _ := NewDomainActor("b", 0)
+	actor.Memories = []DomainMemory{{Domain: core.Finances, RoleContext: "business", Memory: []Memory{{Other: "a", Trust: .8, Evidence: []core.ID{"finance-proof"}}}}}
+	originalFinance := domainCopy(actor.Memories[0])
+	positive, e := LearnDomainObservations(actor, log, profile, 2, current)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if got := domainMemory(positive, in.Focus); len(got) != 1 || got[0].Trust <= 0 {
+		t.Fatal("domain consumer lost actual recipient learning", got)
+	}
+	later := domainCopy(in)
+	later.Phase = "later"
+	later.Delivery.Source.Event = "later-delivery"
+	later.Delivery.Source.Rights.Resource = "later-delivery"
+	later.Delivery.Source.OccurredAt = 4
+	later.Delivery.Source.LearnedAt = 4
+	laterResponse, e := RespondToAction(native, later, 4, math.MaxUint64/3)
+	if e != nil {
+		t.Fatal(e)
+	}
+	log, e = core.AppendOutcome(log, laterResponse.Observation)
+	if e != nil {
+		t.Fatal(e)
+	}
+	current = append(current, later.Delivery.Source, responseProof(laterResponse.Observation))
+	revised := domainCopy(later)
+	revised.Context.RoleExpectation.Value = -1
+	revised.Context.RoleExpectation.Evidence = "reconsidered-context"
+	revised.Context.Trust.Evidence = "reconsidered-context"
+	source := revised.Current[0]
+	source.Event = "reconsidered-context"
+	source.Rights.Resource = source.Event
+	source.OccurredAt = 5
+	source.LearnedAt = 5
+	revised.Current = []dynamics.Perceived{source}
+	correction, e := RespondToAction(native, revised, 5, math.MaxUint64/3)
+	if e != nil {
+		t.Fatal(e)
+	}
+	correction.Observation.Supersedes = laterResponse.Observation.Meta.ID
+	log, e = core.AppendOutcome(log, correction.Observation)
+	if e != nil {
+		t.Fatal(e)
+	}
+	current = append(current, source, responseProof(correction.Observation))
+	negative, e := LearnDomainObservations(positive, log, profile, 5, current)
+	if e != nil {
+		t.Fatal(e)
+	}
+	got := domainMemory(negative, in.Focus)
+	if len(got) != 1 || got[0].Trust >= 0 || len(got[0].Evidence) != 1 || got[0].Evidence[0] != correction.Observation.Meta.ID {
+		t.Fatal("correction double-counted or failed to replace contribution", got)
+	}
+	if !reflect.DeepEqual(negative.Memories[0], originalFinance) {
+		t.Fatal("recipient correction changed unrelated finance/business memory")
+	}
+	if len(negative.Human.Human.Memory) != 0 {
+		t.Fatal("unscoped memory retained")
+	}
+	for i := range current {
+		if current[i].Event == profile.Account {
+			current[i].Rights.Revoked = true
+		}
+	}
+	if _, e = LearnDomainObservations(negative, log, profile, 5, current); e == nil {
+		t.Fatal("revoked domain account learned")
+	}
+}

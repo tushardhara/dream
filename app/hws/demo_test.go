@@ -149,3 +149,66 @@ func TestRelationalDemoActorExportAndVersionBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestResponsiveDemoExportsOnlyOwnResponseHistory(t *testing.T) {
+	sc, e := demo.ResponsiveScenario(5, 2, 11)
+	if e != nil {
+		t.Fatal(e)
+	}
+	g, e := sc.Genesis(rt.Capabilities())
+	if e != nil {
+		t.Fatal(e)
+	}
+	state, e := rt.New(g, rt.Budgets{Steps: 20, Events: 20, Horizon: sc.World.Horizon})
+	if e != nil {
+		t.Fatal(e)
+	}
+	bundle := ReplayBundle{Snapshot: frozenFixture(t, state)}
+	bundle = appendReplay(t, bundle, rt.Command{Kind: "resume"}, demo.Handler{})
+	for range sc.Future {
+		bundle = appendReplay(t, bundle, rt.Command{Kind: "step"}, demo.Handler{})
+	}
+	final := bundle.Frames[len(bundle.Frames)-1].State
+	world, e := demo.Projection(final)
+	if e != nil {
+		t.Fatal(e)
+	}
+	hash, _ := world.Hash()
+	artifact, e := SealDemo(DemoArtifact{Version: world.Version, Replay: bundle, WorldHash: hash, Completed: final.Status == "completed", SimulatedHorizon: sc.World.Horizon, RealStudy: "not-run", HumanValidity: "not-tested", CrossModel: "not-tested", ProviderMode: "deterministic_fake"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	count := 0
+	for _, person := range sc.Public.Humans {
+		export, e := ExportDemoActor(artifact, artifact.Hash, person.ID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if export.Version != demo.ResponsiveVersion || export.ScopedState == nil || export.ScopedState.Human.Drives.Actor != person.ID {
+			t.Fatal("wrong current version/owner")
+		}
+		for _, o := range export.OutcomeObservations {
+			count++
+			if o.Meta.Observer != person.ID {
+				t.Fatal("foreign private outcome exported")
+			}
+		}
+		for _, d := range export.RecipientDecisions {
+			if d.Observation.Meta.Observer != person.ID {
+				t.Fatal("foreign private recipient appraisal exported")
+			}
+		}
+		raw, _ := json.Marshal(export)
+		if strings.Contains(string(raw), "DEMO_RESEARCH_LABEL_CANARY") {
+			t.Fatal("research label exported")
+		}
+		for _, o := range world.OutcomeObservations {
+			if o.Meta.Observer != person.ID && strings.Contains(string(raw), string(o.Meta.ID)) {
+				t.Fatal("foreign private receipt identity exported")
+			}
+		}
+	}
+	if count != len(world.OutcomeObservations) || count == 0 {
+		t.Fatal("response history missing from own exports")
+	}
+}

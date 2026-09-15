@@ -235,3 +235,58 @@ func OutcomeLearning(log []core.OutcomeObservation, owner core.ID, focus core.Re
 	sort.Slice(out, func(i, j int) bool { return out[i].Other < out[j].Other })
 	return out, validateActionMemory(out, owner)
 }
+
+// LearnDomainObservations rebuilds only the selected peer's domain/frame memory.
+// The retained account and its current sources must still be permitted. This
+// consumer leaves other peers/frames intact and never copies unscoped memory.
+func LearnDomainObservations(a DomainActor, log []core.OutcomeObservation, profile core.RelationshipContext, at core.LogicalTime, current []dynamics.Perceived) (DomainActor, error) {
+	owner := a.Human.Human.Drives.Actor
+	if a.Validate() != nil || profile.Version != 2 || profile.Validate(owner, profile.Other) != nil {
+		return DomainActor{}, fmt.Errorf("invalid observed domain learning")
+	}
+	focus := core.RelationshipFocus{Version: core.RelationshipFocusVersion, Domain: profile.Domain, RoleContext: profile.RoleContext, Account: profile.Account}
+	selected, e := core.SelectRelationship([]core.RelationshipContext{profile}, focus, owner, profile.Other, at)
+	if e != nil || selected.Status != "selected" {
+		return DomainActor{}, fmt.Errorf("unavailable observed domain account")
+	}
+	metadata := map[core.ID]dynamics.Perceived{}
+	for _, p := range current {
+		metadata[p.Event] = p
+	}
+	for _, id := range append(profile.Sources(), profile.Account) {
+		p, ok := metadata[id]
+		if !ok || p.Validate(owner, at) != nil {
+			return DomainActor{}, fmt.Errorf("observed domain context no longer permitted")
+		}
+	}
+	memory, e := OutcomeLearning(log, owner, focus, at, current)
+	if e != nil {
+		return DomainActor{}, e
+	}
+	next := domainCopy(a)
+	merged := []Memory{}
+	for _, m := range domainMemory(next, focus) {
+		if m.Other != profile.Other {
+			merged = append(merged, m)
+		}
+	}
+	for _, m := range memory {
+		if m.Other != profile.Other {
+			return DomainActor{}, fmt.Errorf("outcome peer/account mismatch")
+		}
+		merged = append(merged, m)
+	}
+	if len(merged) > 0 {
+		storeDomainMemory(&next, focus, merged)
+	} else {
+		for i, m := range next.Memories {
+			if m.Domain == focus.Domain && m.RoleContext == focus.RoleContext {
+				next.Memories[i].Memory = nil
+			}
+		}
+	}
+	if next.Validate() != nil {
+		return DomainActor{}, fmt.Errorf("observed domain memory bound")
+	}
+	return next, nil
+}
