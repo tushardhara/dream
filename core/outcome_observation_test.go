@@ -14,6 +14,31 @@ func outcomeObservation(id, observer, other ID, at LogicalTime, appraisal string
 	}
 	return OutcomeObservation{Version: OutcomeObservationVersion, Meta: Metadata{ID: id, Observer: observer, Source: observer, Sensitivity: Restricted, Confidence: .8, Supporting: []ID{"own-observation"}, RecordedAt: time.Unix(int64(at)+1, 0).UTC(), Rights: Rights{Resource: id, Grants: []Grant{{Actor: observer, Recipient: observer, Purpose: "simulation", Operation: Derive}}}}, Interaction: "interaction", Action: "action", Reply: "reply", Participant: observer, Other: other, Focus: RelationshipFocus{Version: RelationshipFocusVersion, Domain: PracticalCoordination, RoleContext: "everyday"}, Kind: "observed", Position: "recipient", Phase: "immediate", Basis: "self_report", OccurredAt: at, LearnedAt: at, Status: Observed, Appraisal: appraisal, Benefit: &benefit, Burden: &burden}
 }
+
+func TestUnresolvedOutcomeCannotAssertBenefitOrBurden(t *testing.T) {
+	benefit, burden, zero := .4, .1, 0.0
+	for _, tc := range []struct {
+		name            string
+		benefit, burden *float64
+		valid           bool
+	}{
+		{name: "no welfare assertion", valid: true},
+		{name: "benefit only", benefit: &benefit},
+		{name: "burden only", burden: &burden},
+		{name: "both dimensions", benefit: &benefit, burden: &burden},
+		{name: "zero benefit is still an assertion", benefit: &zero},
+		{name: "zero burden is still an assertion", burden: &zero},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := outcomeObservation("unresolved", "alice", "bob", 2, "unresolved")
+			o.Benefit, o.Burden = tc.benefit, tc.burden
+			if err := o.Validate(); (err == nil) != tc.valid {
+				t.Fatalf("observed unresolved outcome: Validate() = %v, want valid=%t", err, tc.valid)
+			}
+		})
+	}
+}
+
 func TestOutcomeAccountsCorrectionAndHistoricalProjection(t *testing.T) {
 	sender := outcomeObservation("sender", "alice", "bob", 2, "supportive")
 	sender.Kind = "expected"
