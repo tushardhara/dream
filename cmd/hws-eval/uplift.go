@@ -51,7 +51,9 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 					Scenario:  c.Scenario,
 				}
 				for _, person := range c.Affected {
-					run.Outcomes = append(run.Outcomes, outcomeFor(person, report))
+					o, recs := outcomeFor(person, report, m.arm)
+					run.Outcomes = append(run.Outcomes, o)
+					c.Sources = append(c.Sources, recs...)
 				}
 				for _, o := range report.Opportunities {
 					if o.Helper.Action != "WAIT" {
@@ -72,9 +74,11 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 	return out, nil
 }
 
-// outcomeFor derives one person's result from what the run actually observed.
-// An absent later report stays missing, never a zero benefit.
-func outcomeFor(person core.ID, r ordinaryexperiment.Report) evals.PersonOutcome {
+// outcomeFor derives one person's result from what the run actually observed,
+// together with the evaluator-owned source records that evidence cites. An
+// absent later report stays missing, never a zero benefit, and no behavioural
+// record is emitted unless a choice was actually observed.
+func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (evals.PersonOutcome, []evals.SourceRecord) {
 	o := evals.PersonOutcome{
 		Person: person, Benefit: core.UnknownGroupQuantity(), Burden: core.UnknownGroupQuantity(),
 		Appropriateness: core.UnknownGroupQuantity(), BurdenReduction: core.UnknownGroupQuantity(),
@@ -88,13 +92,28 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report) evals.PersonOutcome
 			o.Acted = true
 		}
 	}
-	for _, o2 := range r.Opportunities {
+	// A behavioural record exists only where this person actually selected an
+	// action. The selected kind is the content; a placeholder zero is not an
+	// observation.
+	recs := []evals.SourceRecord{}
+	eventID := core.ID("")
+	for _, t := range r.Traces {
+		if t.Actor != person {
+			continue
+		}
+		kind := t.Decision.Human.Candidates[t.Decision.Human.Selected].Offer.Kind
+		if kind == behavior.Wait {
+			continue
+		}
+		eventID = core.ID(fmt.Sprintf("choice:%s:%s:%d:%s", r.Family, arm, r.Seed, person))
+		recs = append(recs, evals.SourceRecord{ID: eventID, Kind: "observed_choice", Subject: person,
+			Observer: person, At: core.LogicalTime(t.Frame), Content: fmt.Sprintf("selected %v", kind)})
 		o.Observations = append(o.Observations, evals.TierEvidence{
 			Person: person, Tier: evals.BehaviouralObservation, Provenance: evals.SyntheticProvenance,
-			Source: core.ID(fmt.Sprintf("opportunity:%d", o2.Frame)), Observer: person, At: core.LogicalTime(o2.Frame),
-			Metric: "observed_choice", Value: core.ObservedGroupQuantity(0),
+			Source: eventID, Observer: person, At: core.LogicalTime(t.Frame),
+			Metric: "observed_choice", Value: core.ObservedGroupQuantity(1),
 		})
-		break // one behavioural record per person is enough to attest the run
+		break
 	}
 	for _, e := range r.Experiences {
 		if e.Participant != person {
@@ -118,13 +137,30 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report) evals.PersonOutcome
 		case "unknown":
 			o.DelayedOutcome = "unresolved"
 		}
-		if e.Benefit.Status == core.Observed {
+		// A later self-report is evidence only when there is an observed event
+		// for it to be later than, and only when it actually is later.
+		if e.Benefit.Status == core.Observed && eventID != "" && e.LearnedAt > core.LogicalTime(firstFrame(person, r)) {
+			// Records are namespaced by arm: the same experience identity recurs
+			// in each arm's run and they are distinct observations.
+			recID := core.ID(fmt.Sprintf("report:%s:%s:%d:%s", r.Family, arm, r.Seed, e.ID))
+			recs = append(recs, evals.SourceRecord{ID: recID, Kind: "later_self_report", Subject: e.Participant,
+				Observer: e.Observer, At: e.LearnedAt, About: eventID, Content: "participant self-report"})
 			o.Observations = append(o.Observations, evals.TierEvidence{
 				Person: person, Tier: evals.AttributedLater, Provenance: evals.SyntheticProvenance,
-				Source: e.ID, Observer: e.Observer, At: e.LearnedAt,
+				Source: recID, Observer: e.Observer, At: e.LearnedAt,
 				Metric: "reported_benefit", Value: e.Benefit,
 			})
 		}
 	}
-	return o
+	return o, recs
+}
+
+// firstFrame is the frame of this person's first observed action.
+func firstFrame(person core.ID, r ordinaryexperiment.Report) int {
+	for _, t := range r.Traces {
+		if t.Actor == person && t.Decision.Human.Candidates[t.Decision.Human.Selected].Offer.Kind != behavior.Wait {
+			return t.Frame
+		}
+	}
+	return 0
 }

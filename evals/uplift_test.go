@@ -1,23 +1,26 @@
 package evals
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/tushardhara/dream/core"
 )
 
+func ptr(c Comparison) *Comparison { return &c }
+
 func person(i int) core.ID { return core.ID([]string{"person:01", "person:02"}[i]) }
 
 func evidence(p core.ID, tier EvidenceTier, v float64) TierEvidence {
 	e := TierEvidence{Person: p, Tier: tier, Provenance: SyntheticProvenance, Metric: "reported_benefit", Value: core.ObservedGroupQuantity(v)}
-	if tier == AttributedLater {
-		e.Source, e.Observer, e.At = "experience:fixture", p, 5
-	}
+	e.Observer, e.At = p, 5
+	e.Source = core.ID(fmt.Sprintf("record:%s:%s:%v", tier, p, v))
 	return e
 }
 
 func outcome(i int, acted bool) PersonOutcome {
+	_ = fmt.Sprint
 	return PersonOutcome{
 		Person: person(i), Benefit: core.ObservedGroupQuantity(.2), Burden: core.UnknownGroupQuantity(),
 		BurdenReduction: core.UnknownGroupQuantity(),
@@ -36,7 +39,45 @@ func comparison() Comparison {
 	for i, a := range Arms {
 		c.Runs = append(c.Runs, armRun(a, string(rune('a'+i))+"-stream"))
 	}
+	ledger(&c)
 	return c
+}
+
+// ledger synthesises the evaluator-owned records that the fixture's evidence
+// cites, so the untouched fixture is a valid positive control. Negatives below
+// break the binding deliberately.
+// sealed rebuilds each comparison's source ledger after a test has added
+// evidence, so the citation binding stays a positive control and only the
+// property under test varies.
+func sealed(cs ...*Comparison) []Comparison {
+	out := []Comparison{}
+	for _, c := range cs {
+		ledger(c)
+		out = append(out, *c)
+	}
+	return out
+}
+
+func ledger(c *Comparison) {
+	c.Sources = []SourceRecord{{ID: "event:opportunity", Kind: "observed_choice", Subject: person(0),
+		Observer: person(0), At: 0, Content: "the event later reports are about"}}
+	seen := map[core.ID]bool{"event:opportunity": true}
+	for _, r := range c.Runs {
+		for _, o := range r.Outcomes {
+			for _, ob := range o.Observations {
+				if seen[ob.Source] {
+					continue
+				}
+				seen[ob.Source] = true
+				rec := SourceRecord{ID: ob.Source, Kind: tierRequires[ob.Tier], Subject: ob.Person,
+					Observer: ob.Observer, At: ob.At, Content: "synthetic fixture record"}
+				if ob.Tier == AttributedLater {
+					rec.About = "event:opportunity"
+				}
+				c.Sources = append(c.Sources, rec)
+			}
+		}
+	}
 }
 
 // POSITIVE CONTROL: the untouched fixture must validate, so every negative
@@ -135,7 +176,7 @@ func TestUpliftAllowsNoUplift(t *testing.T) {
 	c := comparison()
 	c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
 	c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
-	f, e := CompareArms([]Comparison{c}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(&c), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -241,7 +282,7 @@ func TestUpliftRemainingGuardsAreAttributable(t *testing.T) {
 }
 
 func TestCompareArmsRejectsInvalidRequests(t *testing.T) {
-	if _, e := CompareArms([]Comparison{comparison()}, MultiPerspective, MultiPerspective); e == nil || !strings.Contains(e.Error(), "invalid arm comparison") {
+	if _, e := CompareArms(sealed(ptr(comparison())), MultiPerspective, MultiPerspective); e == nil || !strings.Contains(e.Error(), "invalid arm comparison") {
 		t.Fatalf("comparing an arm with itself: got %v", e)
 	}
 	if _, e := CompareArms(nil, NoAssistant, MultiPerspective); e == nil || !strings.Contains(e.Error(), "no comparisons supplied") {
@@ -264,7 +305,7 @@ func TestSingleFavourableObservationCannotClaimUplift(t *testing.T) {
 	c := comparison()
 	c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
 	c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
-	f, e := CompareArms([]Comparison{c}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(&c), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -288,7 +329,7 @@ func TestOverlappingEvidenceIsNotUplift(t *testing.T) {
 		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
 		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .4))
 	}
-	f, e := CompareArms([]Comparison{a, b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(&a, &b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -309,7 +350,7 @@ func TestNonOverlappingSeparationAcrossUnitsIsReported(t *testing.T) {
 		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
 		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .8))
 	}
-	f, e := CompareArms([]Comparison{a, b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(&a, &b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -350,7 +391,7 @@ func TestR2HarmfulHelpCannotBeUplift(t *testing.T) {
 		h.Benefit, h.Burden = core.ObservedGroupQuantity(-1), core.ObservedGroupQuantity(1)
 		h.Unwanted, h.BoundaryViolations, h.DelayedOutcome = 20, 10, "censored"
 	}
-	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -368,7 +409,7 @@ func TestR2DuplicateRecordsDoNotCreateIndependentSupport(t *testing.T) {
 	c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
 	dup := evidence(person(0), AttributedLater, 1)
 	c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, dup, dup)
-	f, e := CompareArms([]Comparison{c}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(&c), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -456,7 +497,7 @@ func TestUnpairedWorldsAreNotUplift(t *testing.T) {
 	a.Runs[0].Outcomes[0].Observations = append(a.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
 	// world B: only the candidate arm has later evidence
 	b.Runs[3].Outcomes[0].Observations = append(b.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
-	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -481,7 +522,7 @@ func TestRenamingAScenarioDoesNotCreateIndependentUnits(t *testing.T) {
 	for i := range b.Runs {
 		b.Runs[i].Scenario = b.Scenario
 	}
-	f, e := CompareArms([]Comparison{a, b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(&a, &b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -497,7 +538,7 @@ func TestPairedSeparationAcrossDistinctWorldsIsReported(t *testing.T) {
 		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
 		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .8))
 	}
-	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -519,7 +560,7 @@ func TestHarmBlocksEvenAGenuinePairedSeparation(t *testing.T) {
 		h.Benefit, h.Burden = core.ObservedGroupQuantity(-1), core.ObservedGroupQuantity(1)
 		h.Unwanted, h.BoundaryViolations, h.DelayedOutcome = 20, 10, "censored"
 	}
-	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -535,7 +576,7 @@ func TestQualificationsSurviveEarlyReturns(t *testing.T) {
 	// no attributed later evidence at all -> not-tested, but harm is present
 	h := &a.Runs[3].Outcomes[1]
 	h.BoundaryViolations, h.DelayedOutcome = 4, "censored"
-	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -571,7 +612,7 @@ func TestDifferentObservedPeopleAreNotPaired(t *testing.T) {
 		// only person 1 observed in the candidate arm
 		c.Runs[3].Outcomes[1].Observations = append(c.Runs[3].Outcomes[1].Observations, evidence(person(1), AttributedLater, .9))
 	}
-	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -586,7 +627,7 @@ func TestHarmRetainedWhenNothingIsPaired(t *testing.T) {
 	for _, c := range []*Comparison{a, b} {
 		c.Runs[3].Outcomes[1].BoundaryViolations = 10
 	}
-	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	f, e := CompareArms(sealed(a, b), NoAssistant, MultiPerspective)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -596,4 +637,119 @@ func TestHarmRetainedWhenNothingIsPaired(t *testing.T) {
 	if len(f.Harms) == 0 {
 		t.Fatal("known adverse evidence was discarded by the not-tested return")
 	}
+}
+
+// R3: relabelling a system assertion fails because the RESOLVED record's kind
+// does not justify the tier. A populated Source field is not attribution.
+func TestR3TierMustBeJustifiedByTheResolvedRecord(t *testing.T) {
+	c := comparison()
+	c.Sources = append(c.Sources, SourceRecord{ID: "assertion:invented", Kind: "system_assertion",
+		Subject: person(0), Observer: person(0), At: 3, Content: "a system assertion"})
+	o := TierEvidence{Person: person(0), Tier: SystemAssertion, Provenance: SyntheticProvenance,
+		Source: "assertion:invented", Observer: person(0), At: 3, Metric: "reported_benefit",
+		Value: core.ObservedGroupQuantity(.9)}
+	c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, o)
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control: a properly cited system assertion is valid:", e)
+	}
+	// relabel only
+	c.Runs[3].Outcomes[0].Observations[len(c.Runs[3].Outcomes[0].Observations)-1].Tier = AttributedLater
+	assertErr(t, c.Validate(), "does not justify tier")
+}
+
+// Evidence that cites nothing real is not evidence.
+func TestEvidenceMustCiteAResolvedRecord(t *testing.T) {
+	c := comparison()
+	c.Runs[1].Outcomes[0].Observations[0].Source = "record:does-not-exist"
+	assertErr(t, c.Validate(), "unresolved source record")
+}
+
+// A later self-report must actually be later than the event it reports.
+func TestLaterSelfReportMustBeLaterThanItsEvent(t *testing.T) {
+	c := comparison()
+	e := evidence(person(0), AttributedLater, .4)
+	c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, e)
+	ledger(&c)
+	if err := c.Validate(); err != nil {
+		t.Fatal("positive control:", err)
+	}
+	for i := range c.Sources {
+		if c.Sources[i].ID == e.Source {
+			c.Sources[i].At = 0 // same time as the event it is about
+		}
+	}
+	c.Runs[3].Outcomes[0].Observations[len(c.Runs[3].Outcomes[0].Observations)-1].At = 0
+	assertErr(t, c.Validate(), "not later than the event")
+}
+
+// Every source-ledger guard, each asserting its exact root cause.
+func TestSourceLedgerGuardsAreAttributable(t *testing.T) {
+	good := SourceRecord{ID: "rec:1", Kind: "later_self_report", Subject: person(0), Observer: person(0),
+		At: 5, About: "event:opportunity", Content: "a later self-report"}
+	if e := good.Validate(); e != nil {
+		t.Fatal("positive control: clean source record rejected:", e)
+	}
+	t.Run("empty content", func(t *testing.T) {
+		r := good
+		r.Content = ""
+		assertErr(t, r.Validate(), "invalid source record")
+	})
+	t.Run("negative time", func(t *testing.T) {
+		r := good
+		r.At = -1
+		assertErr(t, r.Validate(), "invalid source record")
+	})
+	t.Run("unknown kind", func(t *testing.T) {
+		r := good
+		r.Kind = "hearsay"
+		assertErr(t, r.Validate(), "unknown source record kind")
+	})
+	t.Run("self-report by someone else", func(t *testing.T) {
+		r := good
+		r.Observer = person(1)
+		assertErr(t, r.Validate(), "must be authored by its subject")
+	})
+	t.Run("self-report about nothing", func(t *testing.T) {
+		r := good
+		r.About = ""
+		assertErr(t, r.Validate(), "must name the event it is about")
+	})
+	t.Run("ledger wraps a bad record", func(t *testing.T) {
+		c := comparison()
+		c.Sources = append(c.Sources, SourceRecord{ID: "rec:bad", Kind: "system_assertion",
+			Subject: person(0), Observer: person(0), At: 1, Content: ""})
+		assertErr(t, c.Validate(), "source ledger")
+	})
+	t.Run("duplicate record", func(t *testing.T) {
+		c := comparison()
+		c.Sources = append(c.Sources, c.Sources[0])
+		assertErr(t, c.Validate(), "duplicate source record")
+	})
+	t.Run("record attributes someone else", func(t *testing.T) {
+		c := comparison()
+		for i := range c.Sources {
+			if c.Sources[i].ID == c.Runs[1].Outcomes[0].Observations[0].Source {
+				c.Sources[i].Subject = person(1)
+				c.Sources[i].Observer = person(1)
+			}
+		}
+		assertErr(t, c.Validate(), "does not attribute this evidence")
+	})
+	t.Run("evidence time disagrees with its record", func(t *testing.T) {
+		c := comparison()
+		c.Runs[1].Outcomes[0].Observations[0].At = 99
+		assertErr(t, c.Validate(), "time disagrees with its source record")
+	})
+	t.Run("self-report about an unresolved event", func(t *testing.T) {
+		c := comparison()
+		e := evidence(person(0), AttributedLater, .33)
+		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, e)
+		ledger(&c)
+		for i := range c.Sources {
+			if c.Sources[i].ID == e.Source {
+				c.Sources[i].About = "event:vanished"
+			}
+		}
+		assertErr(t, c.Validate(), "about an unresolved event")
+	})
 }

@@ -122,6 +122,79 @@ func (o TierEvidence) Validate() error {
 	return o.Value.Validate(-1, 1)
 }
 
+// SourceRecord is an evaluator-owned record that evidence is read FROM. A tier
+// is justified by the kind of record behind it, not by what the caller labels
+// it: this is what stops a system assertion being relabelled as independently
+// attributed later evidence.
+type SourceRecord struct {
+	ID       core.ID          `json:"id"`
+	Kind     string           `json:"kind"`
+	Subject  core.ID          `json:"subject"`
+	Observer core.ID          `json:"observer"`
+	At       core.LogicalTime `json:"at"`
+	About    core.ID          `json:"about"`
+	Content  string           `json:"content"`
+}
+
+// tierRequires names the source-record kind that can justify each tier.
+var tierRequires = map[EvidenceTier]string{
+	SystemAssertion:        "system_assertion",
+	PromptedResponse:       "prompted_response",
+	BehaviouralObservation: "observed_choice",
+	AttributedLater:        "later_self_report",
+}
+
+func (r SourceRecord) Validate() error {
+	if r.ID.Validate() != nil || r.Subject.Validate() != nil || r.Observer.Validate() != nil || r.At < 0 || r.Content == "" {
+		return fmt.Errorf("invalid source record")
+	}
+	known := false
+	for _, k := range tierRequires {
+		known = known || k == r.Kind
+	}
+	if !known {
+		return fmt.Errorf("unknown source record kind")
+	}
+	// A later self-report is authored by its own subject about an earlier event.
+	if r.Kind == "later_self_report" {
+		if r.Observer != r.Subject {
+			return fmt.Errorf("later self-report must be authored by its subject")
+		}
+		if r.About.Validate() != nil {
+			return fmt.Errorf("later self-report must name the event it is about")
+		}
+	}
+	return nil
+}
+
+// resolve binds one piece of evidence to the record it claims to come from and
+// checks that the record actually justifies the claimed tier.
+func resolve(o TierEvidence, sources map[core.ID]SourceRecord) error {
+	rec, ok := sources[o.Source]
+	if !ok {
+		return fmt.Errorf("evidence cites an unresolved source record")
+	}
+	if rec.Kind != tierRequires[o.Tier] {
+		return fmt.Errorf("source record kind %q does not justify tier %q", rec.Kind, o.Tier)
+	}
+	if rec.Subject != o.Person || rec.Observer != o.Observer {
+		return fmt.Errorf("source record does not attribute this evidence")
+	}
+	if rec.At != o.At {
+		return fmt.Errorf("evidence time disagrees with its source record")
+	}
+	if o.Tier == AttributedLater {
+		about, ok := sources[rec.About]
+		if !ok {
+			return fmt.Errorf("later self-report is about an unresolved event")
+		}
+		if rec.At <= about.At {
+			return fmt.Errorf("later self-report is not later than the event it reports")
+		}
+	}
+	return nil
+}
+
 // PersonOutcome is one affected person's separately attributed result. Benefit
 // and burden are quantities that distinguish observed zero from unknown, so an
 // unobserved burden is never read as no burden.
@@ -219,12 +292,25 @@ type Comparison struct {
 	// outcome for exactly these people, so a third party's cost cannot be
 	// dropped from one arm and vanish from the comparison.
 	Affected []core.ID `json:"affected"`
-	Runs     []ArmRun  `json:"runs"`
+	// Sources is the evaluator-owned ledger every piece of evidence must resolve
+	// against. Evidence that cites nothing real is not evidence.
+	Sources []SourceRecord `json:"sources"`
+	Runs    []ArmRun       `json:"runs"`
 }
 
 func (c Comparison) Validate() error {
 	if c.Version != UpliftVersion || c.Scenario.Validate() != nil || len(c.Affected) < 2 {
 		return fmt.Errorf("invalid comparison envelope")
+	}
+	sources := map[core.ID]SourceRecord{}
+	for _, rec := range c.Sources {
+		if e := rec.Validate(); e != nil {
+			return fmt.Errorf("source ledger: %w", e)
+		}
+		if _, dup := sources[rec.ID]; dup {
+			return fmt.Errorf("duplicate source record")
+		}
+		sources[rec.ID] = rec
 	}
 	roster := map[core.ID]bool{}
 	for _, id := range c.Affected {
@@ -268,6 +354,11 @@ func (c Comparison) Validate() error {
 		for _, o := range r.Outcomes {
 			if !roster[o.Person] {
 				return fmt.Errorf("arm reports a person outside the affected roster")
+			}
+			for _, ob := range o.Observations {
+				if e := resolve(ob, sources); e != nil {
+					return fmt.Errorf("evidence for %s in arm %s: %w", o.Person, r.Arm, e)
+				}
 			}
 		}
 		if world == "" {
@@ -529,17 +620,25 @@ type ScenarioCoverage struct {
 func UpliftFixture() []Comparison {
 	q := func(v float64) core.GroupQuantity { return core.ObservedGroupQuantity(v) }
 	mk := func(scenario core.ID, seed uint64, later map[Arm]float64) Comparison {
-		c := Comparison{Version: UpliftVersion, Scenario: scenario, Seed: seed, Affected: []core.ID{"person:01", "person:02"}}
+		c := Comparison{Version: UpliftVersion, Scenario: scenario, Seed: seed, Affected: []core.ID{"person:01", "person:02"},
+			Sources: []SourceRecord{
+				{ID: core.ID("event:" + scenario + ":person:01"), Kind: "observed_choice", Subject: "person:01", Observer: "person:01", At: 0, Content: "the fixture event later reports are about"},
+				{ID: core.ID("event:" + scenario + ":person:02"), Kind: "observed_choice", Subject: "person:02", Observer: "person:02", At: 0, Content: "the fixture event later reports are about"},
+			}}
 		for i, a := range Arms {
 			people := []PersonOutcome{}
 			for p, id := range []core.ID{"person:01", "person:02"} {
 				o := PersonOutcome{Person: id, Benefit: q(.1), Burden: UnknownIfAbsent(a, p), Appropriateness: q(.4),
 					BurdenReduction: core.UnknownGroupQuantity(),
 					DelayedOutcome:  []string{"resolved", "unresolved"}[p], Acted: true,
-					Observations: []TierEvidence{{Person: id, Tier: BehaviouralObservation, Provenance: SyntheticProvenance, Metric: "observed_choice", Value: q(.1)}}}
+					Observations: []TierEvidence{{Person: id, Tier: BehaviouralObservation, Provenance: SyntheticProvenance,
+						Source: core.ID("event:" + scenario + ":" + id), Observer: id, At: 0, Metric: "observed_choice", Value: q(.1)}}}
 				if v, ok := later[a]; ok && p == 0 {
 					o.Observations = append(o.Observations, TierEvidence{Person: id, Tier: AttributedLater, Provenance: SyntheticProvenance,
 						Source: core.ID(fmt.Sprintf("experience:%s:%s", scenario, a)), Observer: id, At: 5, Metric: "reported_benefit", Value: q(v)})
+					c.Sources = append(c.Sources, SourceRecord{ID: core.ID(fmt.Sprintf("experience:%s:%s", scenario, a)),
+						Kind: "later_self_report", Subject: id, Observer: id, At: 5,
+						About: core.ID("event:" + scenario + ":" + id), Content: "synthetic later self-report"})
 				}
 				people = append(people, o)
 			}
