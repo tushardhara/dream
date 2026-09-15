@@ -72,9 +72,16 @@ func ordinaryComparisons(ctx context.Context) ([]evals.Comparison, error) {
 					Arm: m.arm, Seed: seed,
 					WorldHash:     assistance.Digest(worldReceipt(report)),
 					ExogenousHash: assistance.Digest(exogenousReceipt(report)),
-					RNGStream:     assistance.Digest(fmt.Sprintf("ordinary/%s/%d", family, seed)),
-					PolicyHash:    assistance.Digest(policyReceipt(report)),
-					Scenario:      c.Scenario,
+					// This consumer draws from a single versioned stream keyed
+					// by frame, actor and stage; it does not separate human,
+					// exogenous and helper draws the way the assistance
+					// generator does. One stream is recorded because one is
+					// what it has — splitting the label would claim an
+					// independence the consumer does not implement.
+					Streams: []evals.Stream{{Domain: "ordinary",
+						Seed: assistance.Digest(fmt.Sprintf("ordinary/%s/%d", family, seed))}},
+					PolicyHash: assistance.Digest(policyReceipt(report)),
+					Scenario:   c.Scenario,
 				}
 				for _, person := range c.Affected {
 					o, recs := outcomeFor(person, report, m.arm)

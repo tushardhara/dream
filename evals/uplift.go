@@ -283,17 +283,33 @@ func (p PersonOutcome) Validate() error {
 	return nil
 }
 
-// ArmRun is one arm executed against a matched world with its own RNG stream.
+// Stream is one versioned RNG stream a run drew from, named by the domain it
+// serves. See ArmRun.Streams for why independence is per domain, not per arm.
+type Stream struct {
+	Domain string `json:"domain"`
+	Seed   string `json:"seed"`
+}
+
 type ArmRun struct {
 	Arm  Arm    `json:"arm"`
 	Seed uint64 `json:"seed"`
-	// WorldHash, ExogenousHash and RNGStream are receipts of the generation
-	// this arm actually ran on, and are shared across arms by design: a matched
-	// comparison uses the same initial world, the same exogenous events and
-	// common random numbers, so the assistant policy is the only difference.
+	// WorldHash and ExogenousHash are receipts of the generation this arm
+	// actually ran on, and are shared across arms by design: a matched
+	// comparison uses the same initial world and the same exogenous events, so
+	// the assistant policy is the only difference.
 	WorldHash     string `json:"world_hash"`
 	ExogenousHash string `json:"exogenous_hash"`
-	RNGStream     string `json:"rng_stream"`
+	// Streams are the versioned RNG streams this arm drew from. #58 requires
+	// them to be independent AND the worlds and exogenous events to be matched,
+	// which are only compatible under one reading: independence is across
+	// DOMAINS — human decisions, exogenous events and the helper draw from
+	// separate versioned streams so one cannot perturb another — while the
+	// streams themselves are identical across arms. Splitting them per arm
+	// would give each arm different exogenous events, contradicting the
+	// matching in the same sentence. The repository's own generator settles it:
+	// NewAssistanceManifest derives its human, exogenous and helper seeds
+	// without reference to the arm.
+	Streams []Stream `json:"rng_streams"`
 	// PolicyHash is the receipt of what this arm's policy actually produced. It
 	// is the one identifier that may differ between arms, and when two arms
 	// share it they did the same thing: no uplift can be read between them.
@@ -307,8 +323,26 @@ func (a ArmRun) Validate() error {
 	if !a.Arm.Valid() {
 		return fmt.Errorf("unknown comparison arm")
 	}
-	if a.WorldHash == "" || a.ExogenousHash == "" || a.RNGStream == "" || a.PolicyHash == "" || a.Scenario.Validate() != nil {
+	if a.WorldHash == "" || a.ExogenousHash == "" || a.PolicyHash == "" || a.Scenario.Validate() != nil {
 		return fmt.Errorf("invalid arm run identity")
+	}
+	if len(a.Streams) == 0 {
+		return fmt.Errorf("arm records no rng stream")
+	}
+	domains, seeds := map[string]bool{}, map[string]bool{}
+	for _, st := range a.Streams {
+		if st.Domain == "" || st.Seed == "" {
+			return fmt.Errorf("invalid rng stream receipt")
+		}
+		if domains[st.Domain] {
+			return fmt.Errorf("duplicate rng stream domain %q", st.Domain)
+		}
+		// Two domains drawing the identical seed are one stream under two
+		// names, which is the coupling the independence requirement forbids.
+		if seeds[st.Seed] {
+			return fmt.Errorf("rng stream domain %q is not independent of another", st.Domain)
+		}
+		domains[st.Domain], seeds[st.Seed] = true, true
 	}
 	if len(a.Outcomes) == 0 {
 		return fmt.Errorf("arm reports no affected people")
@@ -393,7 +427,7 @@ func (c Comparison) Validate() error {
 		return fmt.Errorf("comparison must include the no-assistant control")
 	}
 	seenArm := map[Arm]bool{}
-	world, exogenous, stream := "", "", ""
+	world, exogenous, streams := "", "", ""
 	for _, r := range c.Runs {
 		if e := r.Validate(); e != nil {
 			return fmt.Errorf("arm run: %w", e)
@@ -421,7 +455,7 @@ func (c Comparison) Validate() error {
 			}
 		}
 		if world == "" {
-			world, exogenous, stream = r.WorldHash, r.ExogenousHash, r.RNGStream
+			world, exogenous, streams = r.WorldHash, r.ExogenousHash, streamKey(r.Streams)
 		}
 		// Matched design: identical initial world and exogenous events.
 		if r.WorldHash != world || r.ExogenousHash != exogenous {
@@ -432,9 +466,9 @@ func (c Comparison) Validate() error {
 		// matched design and was satisfiable only by labelling the streams
 		// differently. Drawing different numbers per arm reintroduces exactly
 		// the variance the matching exists to remove, so an arm that does not
-		// share the stream is not a matched arm.
-		if r.RNGStream != stream {
-			return fmt.Errorf("arms do not share the matched rng stream")
+		// share every stream is not a matched arm.
+		if streamKey(r.Streams) != streams {
+			return fmt.Errorf("arms do not share the matched rng streams")
 		}
 	}
 	return nil
@@ -796,11 +830,16 @@ func UpliftFixture() []Comparison {
 				}
 				people = append(people, o)
 			}
-			// Matched design: world, exogenous events and the rng stream are
+			// Matched design: world, exogenous events and every rng stream are
 			// shared across arms; only the policy receipt differs.
 			c.Runs = append(c.Runs, ArmRun{Arm: a, Seed: seed, WorldHash: "world-" + string(scenario), ExogenousHash: "exo-" + string(scenario),
-				RNGStream: fmt.Sprintf("%s/%d", scenario, seed), PolicyHash: fmt.Sprintf("policy-%s-%d", a, i),
-				Scenario: scenario, Outcomes: people})
+				Streams: []Stream{
+					{Domain: "human", Seed: fmt.Sprintf("human/%s/%d", scenario, seed)},
+					{Domain: "exogenous", Seed: fmt.Sprintf("exogenous/%s/%d", scenario, seed)},
+					{Domain: "helper", Seed: fmt.Sprintf("helper/%s/%d", scenario, seed)},
+				},
+				PolicyHash: fmt.Sprintf("policy-%s-%d", a, i),
+				Scenario:   scenario, Outcomes: people})
 		}
 		return c
 	}
@@ -917,8 +956,10 @@ type ExecutedUnit struct {
 	Arm      Arm     `json:"arm"`
 	People   int     `json:"people_with_outcomes"`
 	// PolicyHash lets a reader recompute which arms actually did the same
-	// thing, instead of taking the findings' word for it.
-	PolicyHash string `json:"policy_hash"`
+	// thing, instead of taking the findings' word for it, and Streams lets
+	// them recheck that the arms were matched and the domains independent.
+	PolicyHash string   `json:"policy_hash"`
+	Streams    []Stream `json:"rng_streams"`
 }
 
 // ExecutedManifest is the frozen record of what this run actually executed,
@@ -931,7 +972,8 @@ func ExecutedManifest(cs []Comparison) []ExecutedUnit {
 				continue
 			}
 			out = append(out, ExecutedUnit{Family: c.Family, Scenario: c.Scenario,
-				Seed: c.Seed, Arm: r.Arm, People: len(r.Outcomes), PolicyHash: r.PolicyHash})
+				Seed: c.Seed, Arm: r.Arm, People: len(r.Outcomes), PolicyHash: r.PolicyHash,
+				Streams: r.Streams})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -995,6 +1037,17 @@ func coverage(cs []Comparison) []ScenarioCoverage {
 		out = append(out, ScenarioCoverage{Family: f, Covered: covered, Note: note})
 	}
 	return out
+}
+
+// streamKey is the order-independent identity of a run's stream set, so two
+// arms that drew the same streams in a different order still match.
+func streamKey(in []Stream) string {
+	parts := []string{}
+	for _, s := range in {
+		parts = append(parts, s.Domain+"="+s.Seed)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }
 
 func dedupe(in []string) []string {

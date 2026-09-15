@@ -82,10 +82,21 @@ def main() -> int:
     # here from the manifest: no pair of arms that ran identically everywhere
     # they were compared may carry a passing uplift finding, and the report must
     # say so rather than leave the reader to assume the arms differed.
-    by_unit = {}
+    # Independent versioned RNG streams (#58), recomputed from the report: each
+    # arm's streams must be distinct per domain and identical across arms of the
+    # same comparison. Independence is per domain, not per arm — see ArmRun.
+    by_unit, streams_by_unit = {}, {}
     for u in manifest:
         by_unit.setdefault((u["scenario"], u["seed"]), {})[u["arm"]] = u["policy_hash"]
+        streams_by_unit.setdefault((u["scenario"], u["seed"]), {})[u["arm"]] = u["rng_streams"]
         assert u["policy_hash"], ("an executed arm reports no policy receipt", u)
+        doms = [st["domain"] for st in u["rng_streams"]]
+        seeds = [st["seed"] for st in u["rng_streams"]]
+        assert doms and len(set(doms)) == len(doms), ("rng stream domains repeat", u)
+        assert len(set(seeds)) == len(seeds), ("two rng stream domains share a seed", u)
+    for unit in streams_by_unit.values():
+        shared = {tuple(sorted((st["domain"], st["seed"]) for st in v)) for v in unit.values()}
+        assert len(shared) == 1, ("arms of one comparison drew different rng streams", unit)
     for f in findings:
         base, cand = f["baseline"], f["candidate"]
         shared = [a for a in by_unit.values() if base in a and cand in a]
@@ -99,6 +110,11 @@ def main() -> int:
         if len(same) == len(shared):
             assert f["status"] != "pass", (
                 "uplift credited between arms that ran identically everywhere", base, cand)
+    single = sorted({u["family"] for u in manifest if len(u["rng_streams"]) < 2})
+    if single:
+        print("NOTE: these families draw from a single undifferentiated rng stream; their "
+              "consumer does not separate human, exogenous and helper draws: " + ", ".join(single))
+
     print(f"NOTE: {len(uncovered)} of 8 required scenario families are NOT covered: {', '.join(uncovered)}")
 
     print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "

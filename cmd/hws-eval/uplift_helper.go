@@ -65,8 +65,15 @@ func helperComparisons(ctx context.Context) ([]evals.Comparison, error) {
 					Arm: m.arm, Seed: seed,
 					WorldHash:     run.Manifest.FixtureHash,
 					ExogenousHash: assistance.Digest(run.Exogenous),
-					RNGStream: assistance.Digest(fmt.Sprintf("%d/%d/%d",
-						run.Manifest.HumanSeed, run.Manifest.ExogenousSeed, run.Manifest.HelperSeed)),
+					// The three versioned streams the generator derived, each
+					// recorded under the domain it serves. They are identical
+					// across arms because NewAssistanceManifest derives them
+					// without reference to the arm.
+					Streams: []evals.Stream{
+						{Domain: "human", Seed: fmt.Sprint(run.Manifest.HumanSeed)},
+						{Domain: "exogenous", Seed: fmt.Sprint(run.Manifest.ExogenousSeed)},
+						{Domain: "helper", Seed: fmt.Sprint(run.Manifest.HelperSeed)},
+					},
 					PolicyHash: assistance.Digest(run.Helper),
 					Scenario:   c.Scenario,
 				}

@@ -40,7 +40,8 @@ func armOutcome(a Arm, i int, acted bool) PersonOutcome {
 }
 
 func armRun(a Arm, policy string) ArmRun {
-	return ArmRun{Arm: a, Seed: 7, WorldHash: "world-1", ExogenousHash: "exo-1", RNGStream: "stream-1",
+	return ArmRun{Arm: a, Seed: 7, WorldHash: "world-1", ExogenousHash: "exo-1",
+		Streams:    []Stream{{Domain: "human", Seed: "h-1"}, {Domain: "exogenous", Seed: "x-1"}, {Domain: "helper", Seed: "p-1"}},
 		PolicyHash: policy,
 		Scenario:   "scenario:ordinary", Outcomes: []PersonOutcome{armOutcome(a, 0, true), armOutcome(a, 1, false)}}
 }
@@ -125,8 +126,27 @@ func TestUpliftContractRejectionsAreAttributable(t *testing.T) {
 		{"arms share exogenous events unequally", "arms do not share the matched initial world", func(c *Comparison) {
 			c.Runs[1].ExogenousHash = "exo-2"
 		}},
-		{"an arm draws its own rng stream", "do not share the matched rng stream", func(c *Comparison) {
-			c.Runs[3].RNGStream = "a-private-stream"
+		{"an arm draws its own rng stream", "do not share the matched rng streams", func(c *Comparison) {
+			c.Runs[3].Streams[0].Seed = "a-private-stream"
+		}},
+		{"an arm drops one of the matched streams", "do not share the matched rng streams", func(c *Comparison) {
+			c.Runs[3].Streams = c.Runs[3].Streams[:2]
+		}},
+		{"an arm records no rng stream at all", "records no rng stream", func(c *Comparison) {
+			c.Runs[3].Streams = nil
+		}},
+		{"two stream domains are the same stream renamed", "not independent of another", func(c *Comparison) {
+			for i := range c.Runs {
+				c.Runs[i].Streams[1].Seed = c.Runs[i].Streams[0].Seed
+			}
+		}},
+		{"a stream domain is recorded twice", "duplicate rng stream domain", func(c *Comparison) {
+			for i := range c.Runs {
+				c.Runs[i].Streams[1].Domain = c.Runs[i].Streams[0].Domain
+			}
+		}},
+		{"a stream receipt is empty", "invalid rng stream receipt", func(c *Comparison) {
+			c.Runs[3].Streams[0].Seed = ""
 		}},
 		{"an arm reports no policy receipt", "invalid arm run identity", func(c *Comparison) {
 			c.Runs[3].PolicyHash = ""
@@ -924,8 +944,9 @@ func TestR1CoverageIgnoresScenarioNamesAndReadsTheExecutedManifest(t *testing.T)
 		t.Fatalf("manifest records %d executed arms, comparison ran %d", len(s.Executed), len(c.Runs))
 	}
 	policy := map[Arm]string{}
+	streams := map[Arm][]Stream{}
 	for _, r := range c.Runs {
-		policy[r.Arm] = r.PolicyHash
+		policy[r.Arm], streams[r.Arm] = r.PolicyHash, r.Streams
 	}
 	for _, u := range s.Executed {
 		if u.Family != "ordinary_joy" || u.People != len(c.Affected) {
@@ -935,6 +956,10 @@ func TestR1CoverageIgnoresScenarioNamesAndReadsTheExecutedManifest(t *testing.T)
 		// a reader recompute which arms actually did the same thing.
 		if u.PolicyHash != policy[u.Arm] {
 			t.Fatalf("manifest reports policy %q for arm %s, which ran %q", u.PolicyHash, u.Arm, policy[u.Arm])
+		}
+		// and its streams, so matching and domain independence are recheckable.
+		if streamKey(u.Streams) != streamKey(streams[u.Arm]) {
+			t.Fatalf("manifest reports streams %v for arm %s, which drew %v", u.Streams, u.Arm, streams[u.Arm])
 		}
 	}
 }
@@ -1077,4 +1102,21 @@ func TestNotInstrumentedIsUncertaintyNotHarm(t *testing.T) {
 	if !found {
 		t.Fatalf("an unmeasured outcome was not reported as uncertainty: %+v", f.Uncertainty)
 	}
+}
+
+// Arms that drew the same streams in a different order are still matched: the
+// order a run happens to record its receipts in is not a property of the design.
+func TestMatchedStreamsAreOrderIndependent(t *testing.T) {
+	c := comparison()
+	if e := c.Validate(); e != nil {
+		t.Fatal("positive control:", e)
+	}
+	st := c.Runs[3].Streams
+	c.Runs[3].Streams = []Stream{st[2], st[0], st[1]}
+	if e := c.Validate(); e != nil {
+		t.Fatalf("reordering one arm's stream receipts broke the match: %v", e)
+	}
+	// Reordering must not make a genuinely different stream set look matched.
+	c.Runs[3].Streams = []Stream{st[2], st[0], {Domain: "exogenous", Seed: "different"}}
+	assertErr(t, c.Validate(), "do not share the matched rng streams")
 }
