@@ -250,3 +250,66 @@ func assertErr(t *testing.T, e error, want string) {
 		t.Fatalf("rejected for the wrong reason: want %q, got %q", want, e.Error())
 	}
 }
+
+// A single favourable observation must never be able to claim uplift.
+func TestSingleFavourableObservationCannotClaimUplift(t *testing.T) {
+	c := comparison()
+	c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
+	c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .9))
+	f, e := CompareArms([]Comparison{c}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatalf("one independent unit claimed uplift: %+v", f)
+	}
+	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "independent scenario unit") {
+		t.Fatalf("want an independent-unit refusal, got %q / %q", f.Status, f.Evidence)
+	}
+}
+
+// Overlapping evidence across enough units is still not uplift.
+func TestOverlappingEvidenceIsNotUplift(t *testing.T) {
+	a, b := comparison(), comparison()
+	b.Scenario, b.Seed = "scenario:repair", 9
+	for i := range b.Runs {
+		b.Runs[i].Scenario, b.Runs[i].Seed = b.Scenario, b.Seed
+		b.Runs[i].WorldHash, b.Runs[i].ExogenousHash = "world-2", "exo-2"
+	}
+	for _, c := range []*Comparison{&a, &b} {
+		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .5))
+		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .4))
+	}
+	f, e := CompareArms([]Comparison{a, b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status != Inconclusive || !strings.Contains(f.Evidence, "overlaps") {
+		t.Fatalf("overlapping evidence must not be uplift: %q / %q", f.Status, f.Evidence)
+	}
+}
+
+// The strict criterion can still report a separation when one genuinely exists.
+func TestNonOverlappingSeparationAcrossUnitsIsReported(t *testing.T) {
+	a, b := comparison(), comparison()
+	b.Scenario, b.Seed = "scenario:repair", 9
+	for i := range b.Runs {
+		b.Runs[i].Scenario, b.Runs[i].Seed = b.Scenario, b.Seed
+		b.Runs[i].WorldHash, b.Runs[i].ExogenousHash = "world-2", "exo-2"
+	}
+	for _, c := range []*Comparison{&a, &b} {
+		c.Runs[0].Outcomes[0].Observations = append(c.Runs[0].Outcomes[0].Observations, evidence(person(0), AttributedLater, .1))
+		c.Runs[3].Outcomes[0].Observations = append(c.Runs[3].Outcomes[0].Observations, evidence(person(0), AttributedLater, .8))
+	}
+	f, e := CompareArms([]Comparison{a, b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status != Pass || !strings.Contains(f.Evidence, "without overlap") {
+		t.Fatalf("a genuine non-overlapping separation should be reported: %q / %q", f.Status, f.Evidence)
+	}
+	// Even then it stays synthetic and claims nothing about real people.
+	if f.HumanValidity != NotTested || !f.SyntheticOnly {
+		t.Fatal("a reported separation must remain synthetic with human validity NOT_TESTED")
+	}
+}

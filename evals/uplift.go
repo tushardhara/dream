@@ -244,6 +244,10 @@ type UpliftFinding struct {
 	HumanValidity Status  `json:"real_human_validity"`
 }
 
+// MinIndependentUnits is the smallest number of independent scenario/world
+// units that may support any reported difference between arms.
+const MinIndependentUnits = 2
+
 // CompareArms compares a candidate arm against a baseline over matched
 // comparisons. It reports NotTested when no independently attributed later
 // evidence exists, Inconclusive when attributed evidence does not separate the
@@ -258,6 +262,7 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	}
 	scenarios := map[core.ID]bool{}
 	var base, cand []float64
+	units := map[string]bool{}
 	attributed := 0
 	for _, c := range cs {
 		if e := c.Validate(); e != nil {
@@ -276,6 +281,7 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 						continue
 					}
 					attributed++
+					units[string(c.Scenario)+"/"+r.WorldHash] = true
 					if r.Arm == baseline {
 						base = append(base, *ob.Value.Value)
 					} else {
@@ -293,27 +299,28 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	if attributed == 0 || len(base) == 0 || len(cand) == 0 {
 		return out, nil
 	}
+	// Uncertainty is clustered by independent scenario/world units, not by
+	// observation: repeated measurements of one world are one unit, and a
+	// single unit can never establish a difference.
+	if len(units) < MinIndependentUnits {
+		out.Status = Inconclusive
+		out.Evidence = fmt.Sprintf("%d independent scenario unit(s); at least %d are required before any difference is reported", len(units), MinIndependentUnits)
+		return out, nil
+	}
 	sort.Float64s(base)
 	sort.Float64s(cand)
-	if mean(cand) > mean(base) {
+	// A deliberately strict, transparent separation: every attributed later
+	// observation for the candidate must exceed every one for the baseline.
+	// A difference in means is not reported as uplift, because a single
+	// favourable observation must never be able to claim it.
+	if cand[0] > base[len(base)-1] {
 		out.Status = Pass
-		out.Evidence = fmt.Sprintf("attributed later evidence separates arms (%d observations)", attributed)
+		out.Evidence = fmt.Sprintf("attributed later evidence separates arms without overlap across %d independent units (%d observations)", len(units), attributed)
 		return out, nil
 	}
 	out.Status = Inconclusive
-	out.Evidence = fmt.Sprintf("attributed later evidence does not favour %s (%d observations)", candidate, attributed)
+	out.Evidence = fmt.Sprintf("attributed later evidence overlaps across %d independent units (%d observations); no uplift established", len(units), attributed)
 	return out, nil
-}
-
-func mean(v []float64) float64 {
-	if len(v) == 0 {
-		return 0
-	}
-	t := 0.0
-	for _, x := range v {
-		t += x
-	}
-	return t / float64(len(v))
 }
 
 // UpliftSummary is the compiled, machine-checkable statement of what this
