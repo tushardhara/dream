@@ -63,8 +63,21 @@ func run(args []string, out io.Writer) error {
 	studyPlan := flags.String("study-plan", "", "owner-only frozen 30-real-day study plan JSON")
 	study := flags.String("study-action", "", "explicit register/status/day/abandon-expired; no scheduler or live provider")
 	development := flags.Bool("development", false, "explicit disposable/local study database")
+	uplift := flags.Bool("uplift", false, "emit the bounded synthetic matched-arm uplift summary; no generator, provider or network")
 	if e := flags.Parse(args); e != nil {
 		return e
+	}
+	if *uplift {
+		if flags.NArg() != 0 || *image != "" || *synthetic || *dataset != "" || *config != "" || *studyPlan != "" || *study != "" || *development {
+			return fmt.Errorf("--uplift takes no other options")
+		}
+		summary, e := evals.SummariseUplift(evals.UpliftFixture())
+		if e != nil {
+			return e
+		}
+		encoder := json.NewEncoder(out)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(summary)
 	}
 	alignment := alignmentOptions{*alignmentPlan, *freezeAlignment, *alignmentReceipt, *verifyAlignment, *sourceRevision, *sourceTree}
 	if alignment.used() {
