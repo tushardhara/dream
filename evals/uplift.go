@@ -252,7 +252,12 @@ func (p PersonOutcome) Validate() error {
 		return fmt.Errorf("invalid person outcome")
 	}
 	switch p.DelayedOutcome {
-	case "unresolved", "missing", "censored", "resolved":
+	// "missing" and "censored" mean an instrument existed and its value did not
+	// arrive, which is adverse. "not_instrumented" means this consumer has no
+	// delayed-outcome instrument at all: that is ignorance, not harm, and is
+	// reported as uncertainty. Collapsing the two would manufacture harm
+	// findings out of a consumer that simply never measured.
+	case "unresolved", "missing", "censored", "resolved", "not_instrumented":
 	default:
 		return fmt.Errorf("invalid delayed outcome disposition")
 	}
@@ -550,6 +555,9 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					}
 					if o.DelayedOutcome == "unresolved" {
 						unknowns = append(unknowns, fmt.Sprintf("%s: outcome unresolved", o.Person))
+					}
+					if o.DelayedOutcome == "not_instrumented" {
+						unknowns = append(unknowns, fmt.Sprintf("%s: this consumer has no delayed-outcome instrument", o.Person))
 					}
 					if o.Benefit.Status != core.Observed {
 						unknowns = append(unknowns, fmt.Sprintf("%s: benefit not observed", o.Person))

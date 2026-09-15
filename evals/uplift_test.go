@@ -1038,3 +1038,43 @@ func TestIdenticalPolicyOutputCannotBeUplift(t *testing.T) {
 		t.Fatalf("identical arms absent from uncertainty: %+v", f.Uncertainty)
 	}
 }
+
+// A consumer that never measured a delayed outcome is ignorant, not harmful.
+// Collapsing not_instrumented into "missing" would manufacture harm findings
+// out of a consumer that simply carries no instrument.
+func TestNotInstrumentedIsUncertaintyNotHarm(t *testing.T) {
+	c := UpliftFixture()[1]
+	set := func(d string) UpliftFinding {
+		v := c
+		v.Runs = append([]ArmRun{}, c.Runs...)
+		for i := range v.Runs {
+			v.Runs[i].Outcomes = append([]PersonOutcome{}, c.Runs[i].Outcomes...)
+			for j := range v.Runs[i].Outcomes {
+				v.Runs[i].Outcomes[j].DelayedOutcome = d
+				v.Runs[i].Outcomes[j].Burden = core.UnknownGroupQuantity()
+			}
+		}
+		f, e := CompareArms([]Comparison{v}, NoAssistant, MultiPerspective)
+		if e != nil {
+			t.Fatal(d, e)
+		}
+		return f
+	}
+	// Positive control: "missing" is adverse and must be named as harm.
+	if h := set("missing").Harms; len(h) == 0 {
+		t.Fatal("a missing outcome was not reported as harm")
+	}
+	f := set("not_instrumented")
+	for _, h := range f.Harms {
+		if strings.Contains(h, "not_instrumented") || strings.Contains(h, "instrument") {
+			t.Fatalf("an unmeasured outcome was reported as harm: %q", h)
+		}
+	}
+	found := false
+	for _, u := range f.Uncertainty {
+		found = found || strings.Contains(u, "no delayed-outcome instrument")
+	}
+	if !found {
+		t.Fatalf("an unmeasured outcome was not reported as uncertainty: %+v", f.Uncertainty)
+	}
+}

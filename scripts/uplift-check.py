@@ -22,15 +22,22 @@ def main() -> int:
     for field in ("real_human_validity", "live_provider_semantic_quality", "cross_model_transfer", "real_30_day_study"):
         assert r[field] == "not-tested", (field, r[field])
 
+    assert r["executed_manifest"], "no executed manifest was emitted"
+
     disqualified = set(r["metrics_disqualified_as_benefit"])
     assert BANNED <= disqualified, BANNED - disqualified
 
     assert r["arms"][0] == "none" and len(r["arms"]) == 4, r["arms"]
-    # Only genuinely implemented arms may be reported as executed.
+    # An arm may be reported executed only if the manifest shows it running.
+    # This replaces an earlier assertion that multi_perspective is never
+    # executed: the assistance consumer implements all four arms, so that arm
+    # is now genuinely run rather than absent. The invariant that matters is
+    # not which arms run, but that the claim matches the manifest.
     assert r["arms_executed"][0] == "none", r["arms_executed"]
-    assert "multi_perspective" not in r["arms_executed"], "an unimplemented arm must not be reported as executed"
+    ran = {u["arm"] for u in r["executed_manifest"]}
+    assert set(r["arms_executed"]) == ran, (r["arms_executed"], sorted(ran))
     # Real execution across families and seeds, not an authored record set.
-    assert r["comparisons"] >= 8, r["comparisons"]
+    assert r["comparisons"] >= 12, r["comparisons"]
 
     findings = r["findings"]
     assert len(findings) >= 4, findings
@@ -56,7 +63,6 @@ def main() -> int:
     coverage = r["scenario_coverage"]
     assert len(coverage) == 8, coverage
     manifest = r["executed_manifest"]
-    assert manifest, "no executed manifest was emitted"
     control, candidate = {}, {}
     for u in manifest:
         assert u["people_with_outcomes"] > 0, u
@@ -97,7 +103,7 @@ def main() -> int:
 
     print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "
           "per-person burden/unwanted/boundary/delayed retained; engagement metrics disqualified; "
-          "unimplemented arms reported not-executed; coverage recomputed from the executed "
+          "executed arms match the manifest; coverage recomputed from the executed "
           "manifest; human validity NOT_TESTED")
     return 0
 

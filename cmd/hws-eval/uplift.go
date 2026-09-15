@@ -26,11 +26,27 @@ var realArms = []struct {
 // upliftSeeds are the bounded independent world units per family.
 var upliftSeeds = []uint64{11, 23}
 
-// realComparisons executes the actual ordinary consumer — real hosts, real
-// boundaries, real native decisions — and derives evaluation records from the
-// observed results. Generation stays in the experiment; this file only reads
-// what it produced.
+// realComparisons executes the real consumers — real hosts, real boundaries,
+// real native decisions — and derives evaluation records from the observed
+// results. Generation stays in the experiments; this file only reads what they
+// produced. Each family is added here only when a consumer genuinely executes
+// it; the families with no consumer wired stay uncovered and say so.
 func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
+	out, e := ordinaryComparisons(ctx)
+	if e != nil {
+		return nil, e
+	}
+	helper, e := helperComparisons(ctx)
+	if e != nil {
+		return nil, e
+	}
+	return append(out, helper...), nil
+}
+
+// ordinaryComparisons executes the ordinary-life consumer (family
+// ordinary_joy). It implements three of the four arms; multi_perspective has
+// no implementation here and is not fabricated.
+func ordinaryComparisons(ctx context.Context) ([]evals.Comparison, error) {
 	out := []evals.Comparison{}
 	for _, family := range ordinaryexperiment.Families {
 		for _, seed := range upliftSeeds {
