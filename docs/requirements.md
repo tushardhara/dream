@@ -364,3 +364,12 @@ opt-in `group-demo.v1` consumer. Previous demo/cognitive versions remain unchang
 Unknown effects stay unknown; no welfare or coalition score is inferred.
 Histories and care preferences are authored synthetic evidence, human validity
 is NOT_TESTED, and exact-SHA independent integration remains required.
+
+## #57 ordinary enjoyment and low-burden coordination
+
+ADR-0029 maps the supplied HWS §14 / IHG §§30,37–41 extract to authentic ordinary
+primitives, current consent/effort/interruption gates and an opt-in native-life
+consumer. `make ordinary-check` records the bounded generic/context null comparison,
+quiet continuity and separate adverse/unknown self-reports. Synthetic resource
+savings keep care assignments constant. Human enjoyment efficacy remains NOT_TESTED;
+no private document, UI, live delivery or existing policy reinterpretation is used.
