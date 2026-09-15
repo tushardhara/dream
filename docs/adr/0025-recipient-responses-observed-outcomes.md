@@ -120,7 +120,10 @@ private recipient conditions vary. Only an explicit participant sharing choice
 adds permission for an outcome report. `assistance.OutcomeReports` checks current
 read permission, helper identity, the actual action receipt, participants,
 domain/frame, chronology and self attribution. Reports omit private model state,
-source/parent lineage and private account IDs. Shared reports remain separate
+source/parent lineage and private account IDs. Shared report identifiers hash only
+the permitted output fields; private observation identities and replay-input hashes
+stay internal. Changing only private identity/lineage leaves the shared report
+byte-identical. Shared reports remain separate
 records; they are not automatically fed back into the planner. Supporting source
 permission for native learning is checked independently of report permission.
 
@@ -159,12 +162,13 @@ temporal experiment or change #48's clarification cooldown semantics.
   changes the native choices nor receives an action/outcome attribution.
 - Recorded native/runtime/helper replay and corruption tests cover the new paths;
   existing v1/v2 tests continue to exercise frozen legacy reconstruction.
-- Seventeen compiling mutations were caught by behavioral assertions: unconditional
+- Eighteen compiling mutations were caught by behavioral assertions: unconditional
   supportive labels; ignored context/private state; ignored corrections; learning
   from sender expectations; cross-domain reads; missing-as-observed; ignored demo
   or helper learning; bypassed report rights; foreign export; wrong-domain writes;
   ignored action binding; leaked private account IDs; duplicate native options;
-  observations before the action effect; unrecorded reply identities. Sources were restored after
+  observations before the action effect; unrecorded reply identities; private-input
+  fingerprints in shared report identities. Sources were restored after
   every mutation. This is bounded sensitivity evidence, not exhaustive proof.
 
 The committed [16-seed report](../evaluation/recipient-response-v1.json) covers six

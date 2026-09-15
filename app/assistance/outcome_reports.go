@@ -65,7 +65,11 @@ func OutcomeReports(i Interaction, action OutcomeAction, log []core.OutcomeObser
 			}
 			reportFocus := o.Focus
 			reportFocus.Account = ""
-			out = append(out, OutcomeReport{Version: OutcomeReportVersion, ID: o.Meta.ID, Interaction: o.Interaction, Action: o.Action, Reply: o.Reply, Observer: o.Meta.Observer, Source: o.Meta.Source, Participant: o.Participant, Other: o.Other, Focus: reportFocus, Kind: o.Kind, Position: o.Position, Phase: o.Phase, Appraisal: o.Appraisal, Missing: o.Missing, Status: o.Status, OccurredAt: o.OccurredAt, LearnedAt: o.LearnedAt, Confidence: o.Meta.Confidence, Benefit: o.Benefit, Burden: o.Burden})
+			report := OutcomeReport{Version: OutcomeReportVersion, Interaction: o.Interaction, Action: o.Action, Reply: o.Reply, Observer: o.Meta.Observer, Source: o.Meta.Source, Participant: o.Participant, Other: o.Other, Focus: reportFocus, Kind: o.Kind, Position: o.Position, Phase: o.Phase, Appraisal: o.Appraisal, Missing: o.Missing, Status: o.Status, OccurredAt: o.OccurredAt, LearnedAt: o.LearnedAt, Confidence: o.Meta.Confidence, Benefit: o.Benefit, Burden: o.Burden}
+			// The internal observation identity binds private response inputs.
+			// Shared identifiers hash only the already-permitted report payload.
+			report.ID = core.ID("report:" + Digest(report)[:32])
+			out = append(out, report)
 		}
 	}
 	return clone(out), nil

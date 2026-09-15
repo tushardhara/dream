@@ -240,6 +240,16 @@ func TestHelperReportsCurrentRightsCorrectionsAndActionBinding(t *testing.T) {
 	if prior.Meta.ID == "" {
 		t.Fatal("no later recipient report")
 	}
+	priorPublicID := core.ID("")
+	for _, o := range original {
+		if o.Participant == prior.Participant && o.Position == prior.Position && o.Phase == prior.Phase && o.OccurredAt == prior.OccurredAt {
+			priorPublicID = o.ID
+		}
+	}
+	if priorPublicID == "" {
+		t.Fatal("original public report missing")
+	}
+
 	raw, _ := json.Marshal(run.Outcomes)
 	before := string(raw)
 	correction := prior
@@ -261,11 +271,13 @@ func TestHelperReportsCurrentRightsCorrectionsAndActionBinding(t *testing.T) {
 		t.Fatal(e)
 	}
 	seen := false
+	correctedPublicID := core.ID("")
 	for _, o := range now {
-		if o.ID == prior.Meta.ID {
+		if o.ID == priorPublicID {
 			t.Fatal("superseded account remained current")
 		}
-		if o.ID == correction.Meta.ID {
+		if o.LearnedAt == correction.LearnedAt && o.Participant == correction.Participant && o.Position == correction.Position && o.Phase == correction.Phase {
+			correctedPublicID = o.ID
 			seen = true
 			if o.Appraisal != "dismissive" {
 				t.Fatal("correction ignored")
@@ -289,7 +301,7 @@ func TestHelperReportsCurrentRightsCorrectionsAndActionBinding(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, o := range revoked {
-		if o.ID == prior.Meta.ID || o.ID == correction.Meta.ID {
+		if o.ID == priorPublicID || o.ID == correctedPublicID {
 			t.Fatal("revoked correction resurrected old conclusion")
 		}
 	}
@@ -322,5 +334,54 @@ func TestAdviceDoesNotDuplicateExistingHumanOption(t *testing.T) {
 	}
 	if len(runs[1].Actions) != 0 || len(runs[1].Reports) != 0 || runs[1].FirstIntervention != -1 {
 		t.Fatal("pre-existing action attributed to helper advice")
+	}
+}
+
+func TestSharedOutcomeIdentityDoesNotFingerprintPrivateInput(t *testing.T) {
+	run, e := Run(context.Background(), Scene{Expectation: -1, Observation: "observed", ShareReport: true, Followup: true}, assistance.Multi, 11, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(run.Actions) == 0 {
+		t.Fatal("no actual advice-linked action")
+	}
+	action := run.Actions[0]
+	var interaction assistance.Interaction
+	for _, h := range run.Helper {
+		if h.ID == action.Interaction {
+			interaction = h
+		}
+	}
+	original, e := assistance.OutcomeReports(interaction, action, run.Outcomes, interaction.Helper, 100)
+	if e != nil || len(original) == 0 {
+		t.Fatal(e)
+	}
+	raw, _ := json.Marshal(run.Outcomes)
+	var changed []core.OutcomeObservation
+	_ = json.Unmarshal(raw, &changed)
+	found := false
+	for i := range changed {
+		o := &changed[i]
+		if o.Action == action.Action && o.Position == "recipient" && o.Phase == "later" {
+			o.Meta.ID = "PRIVATE_CONTEXT_INPUT_HASH"
+			o.Meta.Rights.Resource = o.Meta.ID
+			o.Meta.Parents = []core.ID{"PRIVATE_SOURCE_LINEAGE"}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("missing actual later recipient account")
+	}
+	reported, e := assistance.OutcomeReports(interaction, action, changed, interaction.Helper, 100)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if assistance.Digest(original) != assistance.Digest(reported) {
+		t.Fatal("private identity/lineage changed permitted report")
+	}
+	raw, _ = json.Marshal(reported)
+	if strings.Contains(string(raw), "PRIVATE_") {
+		t.Fatal("private identity exposed")
 	}
 }
