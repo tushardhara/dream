@@ -101,3 +101,20 @@ removes one guard at a time (projection hash, unseen group, real-study claim,
 retained quota, launch deadline), requires an actual test assertion failure and
 restores the original source in `finally`. It makes no merge or provider calls;
 do not run it alongside another check or writer in the same worktree.
+
+## Offline listening fixture (#54)
+
+After `make build`, run `./bin/hws-listening` for the bounded synthetic
+budget-fight example. Alice asks to be heard; Bob asks for tomorrow's practical
+plan. Each receives their own account and only separately chosen, permitted words
+from the other person. The helper does not decide who is right. `make
+listening-check` exercises the compiled consumer and deterministic recorded
+fixture, and is included in `make verify`.
+
+The separate `listening-flow.v1` host supports participant corrections, uncertain
+meaning, optional sharing and current boundary/revocation checks. It does not
+change recorded demo v1–v3 or assistance v1–v4 behavior. See
+[ADR0026](adr/0026-goal-aware-listening.md) for criterion mapping, exact English/
+Spanish and declared-preference coverage, disclosure restrictions and bounds.
+These are authored synthetic model fixtures; semantic listening quality,
+accessibility adequacy, real-human validity and uplift remain NOT_TESTED.
