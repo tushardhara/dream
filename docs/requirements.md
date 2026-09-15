@@ -354,3 +354,13 @@ The aggregate #44 milestone still requires exact final-base/head verification,
 criterion-by-criterion original ticket reconciliation and an independent fresh
 recommendation on owner-only PR #38. These extracts do not establish full private
 PRD traceability or a completed IHG end-user product.
+
+## #56 group history and unequal burdens
+
+ADR-0028 maps bounded independent group accounts, explicit care agreements,
+current permissions/corrections, shared resource portfolios and five/24-person
+native choices to executable controls. `make group-check` exercises the compiled
+opt-in `group-demo.v1` consumer. Previous demo/cognitive versions remain unchanged.
+Unknown effects stay unknown; no welfare or coalition score is inferred.
+Histories and care preferences are authored synthetic evidence, human validity
+is NOT_TESTED, and exact-SHA independent integration remains required.
