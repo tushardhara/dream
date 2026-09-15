@@ -186,10 +186,18 @@ func Run(ctx context.Context, s Scene, policy string, age int, seed uint64, hidd
 	if e != nil {
 		return Trace{}, e
 	}
+	// "none" is the no-assistant control: the helper is still invoked, and the
+	// contract forbids it from selecting any action but WAIT, so the arm is a
+	// real absence of assistance rather than a flag producing a WAIT-shaped
+	// result. Humans continue deciding in it, exactly as in every other arm.
 	arm := assistance.Multi
-	if policy == "simple" {
+	switch policy {
+	case "none":
+		arm = assistance.None
+	case "simple":
 		arm = assistance.Simple
-	} else if policy != "temporal" && policy != "context_off" {
+	case "temporal", "context_off":
+	default:
 		return Trace{}, fmt.Errorf("unknown policy")
 	}
 	at := 3 + s.Gap
@@ -199,7 +207,9 @@ func Run(ctx context.Context, s Scene, policy string, age int, seed uint64, hidd
 	}
 	humanRequest := r
 	r.Arm = arm
-	if arm == assistance.Simple {
+	// Neither the no-assistant nor the simple arm may carry context proposals;
+	// the helper contract rejects a request that does.
+	if arm == assistance.Simple || arm == assistance.None {
 		r.Contexts = nil
 	}
 	// Preserve the same evidence and human policy across helper arms. The v3

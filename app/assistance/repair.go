@@ -7,6 +7,15 @@ import (
 
 const RepairFlowVersion = "repair-flow.v1"
 
+// RepairArmVersion is an OPT-IN envelope adding matched-arm evaluation to the
+// repair flow. v1 carries no arm and is unchanged. As with the group flow the
+// arms map onto what this helper already computes — it builds one perspective
+// per participant — rather than onto invented behaviour.
+const RepairArmVersion = "repair-flow.v2"
+
+// RepairUsesArms reports whether a repair request version carries an arm.
+func RepairUsesArms(version string) bool { return version == RepairArmVersion }
+
 // RepairFollowThroughGap is an explicit fixture duration, not a human-validity threshold.
 const RepairFollowThroughGap core.LogicalTime = 20
 
@@ -15,6 +24,8 @@ type RepairRequest struct {
 	ID, Session, Helper, User, Actor, Recipient, Purpose core.ID
 	Focus                                                core.RelationshipFocus
 	At                                                   core.LogicalTime
+	// Arm is set only on RepairArmVersion requests and must be empty on v1.
+	Arm Arm
 }
 
 func (r RepairRequest) Validate() error {
@@ -23,7 +34,12 @@ func (r RepairRequest) Validate() error {
 			return ErrInvalid
 		}
 	}
-	if r.Version != RepairFlowVersion || r.Actor == r.Recipient || r.User != r.Actor && r.User != r.Recipient || r.Helper == r.Actor || r.Helper == r.Recipient || r.Focus.Validate() != nil || r.Focus.RoleContext == "" || r.Focus.Account != "" || r.At.Validate() != nil {
+	if r.Version != RepairFlowVersion && r.Version != RepairArmVersion || r.Actor == r.Recipient || r.User != r.Actor && r.User != r.Recipient || r.Helper == r.Actor || r.Helper == r.Recipient || r.Focus.Validate() != nil || r.Focus.RoleContext == "" || r.Focus.Account != "" || r.At.Validate() != nil {
+		return ErrInvalid
+	}
+	// An arm on a v1 request would be silently ignored, which is how an
+	// evaluation ends up comparing four labels for one policy.
+	if RepairUsesArms(r.Version) != r.Arm.Valid() {
 		return ErrInvalid
 	}
 	return nil
@@ -79,9 +95,16 @@ func (h RepairHost) Execute(ctx context.Context, r RepairRequest, recorded *Repa
 		if r.User == r.Actor {
 			other = r.Recipient
 		}
-		out := RepairResponse{Version: RepairFlowVersion, User: r.User, At: r.At, Focus: r.Focus, Perspectives: []RepairPerspective{}, Expectation: "unresolved", Next: "WAIT", Options: []string{}, Evidence: []core.ID{}, RepairVerdict: "NOT_ASSESSED"}
+		out := RepairResponse{Version: r.Version, User: r.User, At: r.At, Focus: r.Focus, Perspectives: []RepairPerspective{}, Expectation: "unresolved", Next: "WAIT", Options: []string{}, Evidence: []core.ID{}, RepairVerdict: "NOT_ASSESSED"}
 		d, e := core.EvaluateBoundaries(s.Boundaries, core.InteractionScope{Version: core.InteractionScopeVersion, Initiator: r.User, Target: other, Topic: core.ID(r.Focus.Domain), Class: core.PrivatePreparation}, s.Now)
 		if e != nil || !d.Allowed {
+			return out, nil
+		}
+		// The no-assistant control returns here, before any grant is built and
+		// before any repair history is read: a helper that never looks, not one
+		// that looks and answers WAIT. The participants' own records and their
+		// own choices are untouched by it.
+		if RepairUsesArms(r.Version) && r.Arm == None {
 			return out, nil
 		}
 		grants := []core.Grant{}
@@ -179,7 +202,19 @@ func (h RepairHost) Execute(ctx context.Context, r RepairRequest, recorded *Repa
 		case len(breaches) == 1:
 			out.Expectation = "breach_observed"
 		}
+		// Which perspectives the helper may report is the arm. Simple assistance
+		// reports none and offers only the descriptive next step; single
+		// perspective reports the asking user's own; multi perspective reports
+		// both. v1 has no arm and reports both, unchanged.
 		for _, who := range []core.ID{r.Actor, r.Recipient} {
+			if RepairUsesArms(r.Version) {
+				if r.Arm == Simple {
+					break
+				}
+				if r.Arm == Single && who != r.User {
+					continue
+				}
+			}
 			out.Perspectives = append(out.Perspectives, *perspectives[who])
 		}
 		// Descriptive history changes an OPTIONAL next step, never a human action or

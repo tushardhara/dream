@@ -10,6 +10,17 @@ import (
 
 const ListeningFlowVersion = "listening-flow.v1"
 
+// ListeningArmVersion is an OPT-IN envelope adding a matched-arm label to the
+// listening flow. v1 carries no arm and is unchanged. The three assisted arms
+// need nothing from this host — which accounts the helper may read and whether
+// separately authored summaries are shared are already expressed by the
+// request the client builds — so the only behaviour this version adds is the
+// no-assistant control, which must read nothing and say nothing.
+const ListeningArmVersion = "listening-flow.v2"
+
+// ListeningUsesArms reports whether a listening request version carries an arm.
+func ListeningUsesArms(version string) bool { return version == ListeningArmVersion }
+
 type ListeningRequest struct {
 	Version                          string
 	ID, Session, Helper, User, Other core.ID
@@ -19,10 +30,17 @@ type ListeningRequest struct {
 	Mode                             string // private, joint
 	Invite                           bool
 	Accounts, Summaries              []graph.ContextProposal
+	// Arm is set only on ListeningArmVersion requests and must be empty on v1.
+	Arm Arm
 }
 
 func (r ListeningRequest) Validate() error {
-	if r.Version != ListeningFlowVersion || r.ID.Validate() != nil || r.Session.Validate() != nil || r.Helper.Validate() != nil || r.User.Validate() != nil || r.Other.Validate() != nil || r.Purpose.Validate() != nil || r.User == r.Other || r.Helper == r.User || r.Helper == r.Other || r.At.Validate() != nil || r.Focus.Validate() != nil || r.Focus.RoleContext == "" || r.Mode != "private" && r.Mode != "joint" || len(r.Accounts) < 1 || len(r.Accounts) > 2 || len(r.Summaries) > 2 {
+	if r.Version != ListeningFlowVersion && r.Version != ListeningArmVersion || r.ID.Validate() != nil || r.Session.Validate() != nil || r.Helper.Validate() != nil || r.User.Validate() != nil || r.Other.Validate() != nil || r.Purpose.Validate() != nil || r.User == r.Other || r.Helper == r.User || r.Helper == r.Other || r.At.Validate() != nil || r.Focus.Validate() != nil || r.Focus.RoleContext == "" || r.Mode != "private" && r.Mode != "joint" || len(r.Accounts) < 1 || len(r.Accounts) > 2 || len(r.Summaries) > 2 {
+		return ErrInvalid
+	}
+	// An arm on a v1 request would be silently ignored, which is how an
+	// evaluation ends up comparing four labels for one policy.
+	if ListeningUsesArms(r.Version) != r.Arm.Valid() {
 		return ErrInvalid
 	}
 	for _, group := range []struct {
@@ -174,6 +192,13 @@ func (h ListeningHost) Execute(ctx context.Context, request ListeningRequest) (L
 		}
 	}
 	if !listeningBoundary(r, snapshot) {
+		return listeningWait(), nil
+	}
+	// The no-assistant control returns here, before any capability is approved
+	// and before any account is read. It is not a helper that answers WAIT: it
+	// is a helper that never looks. The people in this session keep speaking and
+	// deciding either way.
+	if ListeningUsesArms(r.Version) && r.Arm == None {
 		return listeningWait(), nil
 	}
 	var caps []graph.ApprovedContext

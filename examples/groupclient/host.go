@@ -35,9 +35,20 @@ func New(session core.ID, h core.GroupHistory, b core.GroupBudget, rs []core.Gro
 	return &Local{session: session, history: copyValue(h), budget: copyValue(b), reservations: copyValue(rs), boundaries: copyValue(boundaries), now: now, requests: map[core.ID]assistance.GroupRequest{}, responses: map[core.ID]assistance.GroupResponse{}}, nil
 }
 func (l *Local) Request(actor, id, decision core.ID, at core.LogicalTime) (assistance.GroupRequest, error) {
+	return l.request(actor, id, decision, at, assistance.GroupFlowVersion, "")
+}
+
+// ArmedRequest builds the opt-in v2 request carrying a matched-arm label. It is
+// a separate entry point so the v1 path stays byte-identical for every existing
+// caller; the admission checks below are shared, not duplicated.
+func (l *Local) ArmedRequest(actor, id, decision core.ID, at core.LogicalTime, arm assistance.Arm) (assistance.GroupRequest, error) {
+	return l.request(actor, id, decision, at, assistance.GroupArmVersion, arm)
+}
+
+func (l *Local) request(actor, id, decision core.ID, at core.LogicalTime, version string, arm assistance.Arm) (assistance.GroupRequest, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	r := assistance.GroupRequest{Version: assistance.GroupFlowVersion, ID: id, Session: l.session, User: actor, Helper: "helper", Decision: decision, Purpose: "help", At: at}
+	r := assistance.GroupRequest{Version: version, ID: id, Session: l.session, User: actor, Helper: "helper", Decision: decision, Purpose: "help", At: at, Arm: arm}
 	if r.Validate() != nil || at < l.now {
 		return r, assistance.ErrDenied
 	}

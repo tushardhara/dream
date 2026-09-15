@@ -147,9 +147,21 @@ func (l *Local) Revoke(actor, source core.ID) error {
 // that accepts a caller's claimed actor. Tests can submit invalid proposals to
 // prove the service independently enforces policy and source matching.
 func (l *Local) Request(actor, id core.ID, mode string, focus core.RelationshipFocus, at core.LogicalTime, share, invite bool) assistance.ListeningRequest {
+	return l.request(actor, id, mode, focus, at, share, invite, assistance.ListeningFlowVersion, "")
+}
+
+// ArmedRequest builds the opt-in v2 request carrying a matched-arm label. Which
+// accounts the helper may read and whether separately authored summaries are
+// shared are still expressed by mode and share, exactly as on v1 — the arm adds
+// the label the evaluation matches on and the control the host enforces.
+func (l *Local) ArmedRequest(actor, id core.ID, mode string, focus core.RelationshipFocus, at core.LogicalTime, share, invite bool, arm assistance.Arm) assistance.ListeningRequest {
+	return l.request(actor, id, mode, focus, at, share, invite, assistance.ListeningArmVersion, arm)
+}
+
+func (l *Local) request(actor, id core.ID, mode string, focus core.RelationshipFocus, at core.LogicalTime, share, invite bool, version string, arm assistance.Arm) assistance.ListeningRequest {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	r := assistance.ListeningRequest{Version: assistance.ListeningFlowVersion, ID: id, Session: l.session, Helper: l.helper, User: actor, Other: l.other(actor), Purpose: "help", At: at, Focus: focus, Mode: mode, Invite: invite}
+	r := assistance.ListeningRequest{Version: version, ID: id, Session: l.session, Helper: l.helper, User: actor, Other: l.other(actor), Purpose: "help", At: at, Focus: focus, Mode: mode, Invite: invite, Arm: arm}
 	for _, owner := range []core.ID{actor, l.other(actor)} {
 		a, ok := l.current[owner]
 		if !ok || mode == "private" && owner != actor {
