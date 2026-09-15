@@ -29,10 +29,6 @@ var realArms = []struct {
 // comparison for it, and saying which is the difference between a gap someone
 // can close and a gap nobody can see.
 var upliftBlockers = []evals.FamilyNote{
-	{Family: "selective_boundaries", Reason: "boundaryexperiment.Run takes a signal and no arm, so it executes one policy and cannot form a matched comparison"},
-	{Family: "role_domain_trust", Reason: "domainexperiment.Run takes a relationship focus and no arm, so it executes one policy and cannot form a matched comparison"},
-	{Family: "group_burden", Reason: "groupexperiment.Run takes a case and no arm, so it executes one policy and cannot form a matched comparison"},
-	{Family: "life_changes", Reason: "temporalexperiment.Run is arm-varying but its policies map only onto simple and multi_perspective; it has no no-assistant control, which this contract requires and will not fabricate"},
 	{Family: "repair", Reason: "no experiment package executes the repair consumer across arms; only a client exists"},
 	{Family: "conflict_goals", Reason: "no consumer executes conflicting goals across arms"},
 }
@@ -54,11 +50,17 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 	if e != nil {
 		return nil, e
 	}
-	response, e := responseComparisons(ctx)
-	if e != nil {
-		return nil, e
+	for _, more := range []func(context.Context) ([]evals.Comparison, error){
+		responseComparisons, boundaryComparisons, domainComparisons,
+		temporalComparisons, groupComparisons,
+	} {
+		cs, e := more(ctx)
+		if e != nil {
+			return nil, e
+		}
+		out = append(out, cs...)
 	}
-	return append(append(out, helper...), response...), nil
+	return append(out, helper...), nil
 }
 
 // ordinaryComparisons executes the ordinary-life consumer (family
@@ -99,7 +101,10 @@ func ordinaryComparisons(ctx context.Context) ([]evals.Comparison, error) {
 					Streams: []evals.Stream{{Domain: "ordinary",
 						Seed: assistance.Digest(fmt.Sprintf("ordinary/%s/%d", family, seed))}},
 					PolicyHash: assistance.Digest(policyReceipt(report)),
-					Scenario:   c.Scenario,
+					// What the people decided, so a comparison can report
+					// whether the assistant's output reached them at all.
+					HumanHash: assistance.Digest(humanReceipt(report)),
+					Scenario:  c.Scenario,
 				}
 				for _, person := range c.Affected {
 					o, recs := outcomeFor(person, report, m.arm)
@@ -146,7 +151,16 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 	// selected WAIT is not acting: reading it as action would bypass the
 	// broken-control detector this evaluation depends on.
 	for _, t := range r.Traces {
-		if t.Actor == person && t.Decision.Human.Candidates[t.Decision.Human.Selected].Offer.Kind != behavior.Wait {
+		if t.Actor != person {
+			continue
+		}
+		d := t.Decision.Human
+		// Having an option other than waiting is what makes a WAIT restraint
+		// rather than an absence of choice.
+		if len(d.Candidates) > 1 {
+			o.CouldAct = true
+		}
+		if d.Candidates[d.Selected].Offer.Kind != behavior.Wait {
 			o.Acted = true
 		}
 	}
@@ -302,6 +316,19 @@ func policyReceipt(r ordinaryexperiment.Report) []assistance.OrdinaryResponse {
 	out := []assistance.OrdinaryResponse{}
 	for _, o := range r.Opportunities {
 		out = append(out, o.Helper)
+	}
+	return out
+}
+
+// humanReceipt is what the PEOPLE decided: the selected offer at each frame,
+// taken from the native decisions and never from the helper's response. If two
+// arms share this receipt the assistant's output did not reach the decision,
+// which the comparison reports rather than leaves for the reader to assume.
+func humanReceipt(r ordinaryexperiment.Report) []string {
+	out := []string{}
+	for _, t := range r.Traces {
+		d := t.Decision.Human
+		out = append(out, fmt.Sprintf("%d/%s/%s/%v", t.Frame, t.Stage, t.Actor, d.Candidates[d.Selected].Offer.Kind))
 	}
 	return out
 }

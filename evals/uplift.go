@@ -244,7 +244,13 @@ type PersonOutcome struct {
 	BoundaryViolations int                `json:"boundary_violations"`
 	DelayedOutcome     string             `json:"delayed_outcome"`
 	Acted              bool               `json:"person_acted"`
-	Observations       []TierEvidence     `json:"observations"`
+	// CouldAct records whether this person had any option other than waiting.
+	// It is what separates a BROKEN control — people who cannot act — from a
+	// scenario in which everyone had a real alternative and correctly chose not
+	// to. Universal restraint is a result this evaluation must be able to
+	// represent, not a reason to reject the comparison that produced it.
+	CouldAct     bool           `json:"person_could_act"`
+	Observations []TierEvidence `json:"observations"`
 }
 
 func (p PersonOutcome) Validate() error {
@@ -318,7 +324,15 @@ type ArmRun struct {
 	// PolicyHash is the receipt of what this arm's policy actually produced. It
 	// is the one identifier that may differ between arms, and when two arms
 	// share it they did the same thing: no uplift can be read between them.
-	PolicyHash string          `json:"policy_hash"`
+	PolicyHash string `json:"policy_hash"`
+	// HumanHash is the receipt of what the PEOPLE decided in this arm. It is
+	// recorded because in several consumers the assistant's output is never an
+	// input to the human's choice, so the humans decide identically whatever
+	// the arm does. That does not invalidate a comparison — an intervention can
+	// change what someone experiences without changing what they do — but a
+	// reader must be told, or a null result looks like evidence about the
+	// policy when the policy could not have reached the decision.
+	HumanHash  string          `json:"human_hash"`
 	Scenario   core.ID         `json:"scenario"`
 	Outcomes   []PersonOutcome `json:"outcomes"`
 	HelperActs int             `json:"helper_actions"`
@@ -328,7 +342,7 @@ func (a ArmRun) Validate() error {
 	if !a.Arm.Valid() {
 		return fmt.Errorf("unknown comparison arm")
 	}
-	if a.WorldHash == "" || a.ExogenousHash == "" || a.PolicyHash == "" || a.Scenario.Validate() != nil {
+	if a.WorldHash == "" || a.ExogenousHash == "" || a.PolicyHash == "" || a.HumanHash == "" || a.Scenario.Validate() != nil {
 		return fmt.Errorf("invalid arm run identity")
 	}
 	if len(a.Streams) == 0 {
@@ -366,11 +380,19 @@ func (a ArmRun) Validate() error {
 		}
 		seen[o.Person] = true
 		acted = acted || o.Acted
+		// Acting without having had the option is a contradiction in the record.
+		if o.Acted && !o.CouldAct {
+			return fmt.Errorf("person %s acted without an available action", o.Person)
+		}
 	}
-	// A control arm in which nobody acts is a broken control, not a result.
-	if !acted {
-		return fmt.Errorf("arm makes every human wait")
-	}
+	// Whether anyone acted, or could, is NOT judged per arm. A scenario in
+	// which nobody can act — every option ineligible for reasons that apply
+	// equally to every arm — is a property of the world, and a scenario in
+	// which everyone correctly declines to act is a result this evaluation
+	// exists to be able to see. What #58 actually asks to detect is a control
+	// crippled RELATIVE to the candidates, which is an asymmetry between arms
+	// and is therefore checked in Comparison.Validate.
+	_ = acted
 	return nil
 }
 
@@ -432,6 +454,7 @@ func (c Comparison) Validate() error {
 		return fmt.Errorf("comparison must include the no-assistant control")
 	}
 	seenArm := map[Arm]bool{}
+	armCanAct := map[Arm]bool{}
 	world, exogenous, streams := "", "", ""
 	for _, r := range c.Runs {
 		if e := r.Validate(); e != nil {
@@ -444,6 +467,11 @@ func (c Comparison) Validate() error {
 		if r.Scenario != c.Scenario || r.Seed != c.Seed {
 			return fmt.Errorf("arm run does not belong to this comparison")
 		}
+		able := false
+		for _, o := range r.Outcomes {
+			able = able || o.CouldAct
+		}
+		armCanAct[r.Arm] = able
 		// Every arm accounts for every affected person, including explicitly
 		// missing outcomes. Omission is not permitted.
 		if len(r.Outcomes) != len(c.Affected) {
@@ -474,6 +502,19 @@ func (c Comparison) Validate() error {
 		// share every stream is not a matched arm.
 		if streamKey(r.Streams) != streams {
 			return fmt.Errorf("arms do not share the matched rng streams")
+		}
+	}
+	// The broken-control detector #58 asks for. A no-assistant arm in which
+	// nobody can act, while some candidate arm's people can, is a control
+	// crippled relative to the candidates, and any difference measured against
+	// it is an artefact of that. Symmetric inability is not caught here because
+	// it is not this: it is the world offering nobody a choice, in every arm
+	// alike.
+	if !armCanAct[NoAssistant] {
+		for a, able := range armCanAct {
+			if a != NoAssistant && able {
+				return fmt.Errorf("no-assistant control leaves everyone unable to act while arm %s does not", a)
+			}
 		}
 	}
 	return nil
@@ -535,6 +576,9 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	// scenario names, so a scenario run at several seeds is counted once per
 	// seed on both sides.
 	identical := []string{}
+	// sameHuman names the scenarios in which the people decided identically in
+	// both arms, i.e. the assistant's output did not reach their decision.
+	sameHuman := []string{}
 	identicalCount, compared := 0, 0
 	attributed := 0
 	for _, c := range cs {
@@ -562,6 +606,19 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		if policy[baseline] == policy[candidate] {
 			identical = append(identical, string(c.Scenario))
 			identicalCount++
+		}
+		// Whether the assistant's output could reach the people at all. This
+		// never blocks a conclusion by itself: an intervention can change what
+		// someone experiences without changing what they do. It is reported so
+		// a null result is not mistaken for evidence about the policy.
+		human := map[Arm]string{}
+		for _, r := range c.Runs {
+			if r.Arm == baseline || r.Arm == candidate {
+				human[r.Arm] = r.HumanHash
+			}
+		}
+		if human[baseline] == human[candidate] {
+			sameHuman = append(sameHuman, string(c.Scenario))
 		}
 		compared++
 		for _, r := range c.Runs {
@@ -646,6 +703,10 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	sort.Strings(identical)
 	for _, sc := range dedupe(identical) {
 		unknowns = append(unknowns, fmt.Sprintf("%s and %s produced identical policy output in %s", baseline, candidate, sc))
+	}
+	sort.Strings(sameHuman)
+	for _, sc := range dedupe(sameHuman) {
+		unknowns = append(unknowns, fmt.Sprintf("the people decided identically in both arms in %s; the assistant's output did not reach their decision there", sc))
 	}
 	sort.Strings(unknowns)
 	out.Harms = dedupe(harms)
@@ -839,7 +900,7 @@ func UpliftFixture() []Comparison {
 			for p, id := range []core.ID{"person:01", "person:02"} {
 				o := PersonOutcome{Person: id, Benefit: q(.1), Burden: UnknownIfAbsent(a, p), Appropriateness: q(.4),
 					BurdenReduction: core.UnknownGroupQuantity(),
-					DelayedOutcome:  []string{"resolved", "unresolved"}[p], Acted: true,
+					DelayedOutcome:  []string{"resolved", "unresolved"}[p], Acted: true, CouldAct: true,
 					Observations: []TierEvidence{{Person: id, Tier: BehaviouralObservation, Provenance: SyntheticProvenance,
 						Source: core.ID("event:" + string(scenario) + ":" + string(a) + ":" + string(id)), Observer: id, At: 0, Metric: "observed_choice", Value: q(.1)}}}
 				if v, ok := later[a]; ok && p == 0 {
@@ -861,6 +922,7 @@ func UpliftFixture() []Comparison {
 					{Domain: "helper", Seed: fmt.Sprintf("helper/%s/%d", scenario, seed)},
 				},
 				PolicyHash: fmt.Sprintf("policy-%s-%d", a, i),
+				HumanHash:  fmt.Sprintf("human-%s-%d", a, i),
 				Scenario:   scenario, Outcomes: people})
 		}
 		return c

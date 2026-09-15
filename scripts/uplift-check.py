@@ -37,7 +37,7 @@ def main() -> int:
     ran = {u["arm"] for u in r["executed_manifest"]}
     assert set(r["arms_executed"]) == ran, (r["arms_executed"], sorted(ran))
     # Real execution across families and seeds, not an authored record set.
-    assert r["comparisons"] >= 12, r["comparisons"]
+    assert r["comparisons"] >= 52, r["comparisons"]
 
     findings = r["findings"]
     assert len(findings) >= 4, findings
@@ -150,6 +150,15 @@ def main() -> int:
             attributed.setdefault((p["scenario"], p["seed"], p["person"]), set()).add(p["arm"])
     paired = [k for k, arms in attributed.items() if "none" in arms and arms - {"none"}]
     assert paired, "no person carries attributed later evidence in both the control and a candidate arm"
+
+    # Whether the assistant's output could reach the people at all. Several
+    # consumers never route it into the human's decision, so a null result there
+    # is not evidence about the policy and the report has to say so.
+    unreached = sum(1 for f in findings
+                    for u in f.get("uncertainty", []) if "did not reach their decision" in u)
+    if unreached:
+        print(f"NOTE: {unreached} arm-pair/scenario combination(s) where the people decided "
+              "identically in both arms; the assistant's output did not reach their decision")
 
     single = sorted({u["family"] for u in manifest if len(u["rng_streams"]) < 2})
     if single:

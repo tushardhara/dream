@@ -75,6 +75,7 @@ func helperComparisons(ctx context.Context) ([]evals.Comparison, error) {
 						{Domain: "helper", Seed: fmt.Sprint(run.Manifest.HelperSeed)},
 					},
 					PolicyHash: assistance.Digest(run.Helper),
+					HumanHash:  assistance.Digest(run.Humans),
 					Scenario:   c.Scenario,
 				}
 				for _, person := range c.Affected {
@@ -120,7 +121,13 @@ func helperOutcomeFor(person core.ID, run hws.AssistanceRun, arm evals.Arm, goal
 	}
 	recs := []evals.SourceRecord{}
 	for _, d := range run.Humans {
-		if d.Actor != person || d.Candidates[d.Selected].Offer.Kind == behavior.Wait {
+		if d.Actor != person {
+			continue
+		}
+		if len(d.Candidates) > 1 {
+			o.CouldAct = true
+		}
+		if d.Candidates[d.Selected].Offer.Kind == behavior.Wait {
 			continue
 		}
 		o.Acted = true

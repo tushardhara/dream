@@ -34,7 +34,7 @@ func armOutcome(a Arm, i int, acted bool) PersonOutcome {
 	return PersonOutcome{
 		Person: person(i), Benefit: core.ObservedGroupQuantity(.2), Burden: core.UnknownGroupQuantity(),
 		BurdenReduction: core.UnknownGroupQuantity(),
-		Appropriateness: core.ObservedGroupQuantity(.5), DelayedOutcome: "unresolved", Acted: acted,
+		Appropriateness: core.ObservedGroupQuantity(.5), DelayedOutcome: "unresolved", Acted: acted, CouldAct: true,
 		Observations: []TierEvidence{armEvidence(a, person(i), BehaviouralObservation, .1)},
 	}
 }
@@ -42,8 +42,8 @@ func armOutcome(a Arm, i int, acted bool) PersonOutcome {
 func armRun(a Arm, policy string) ArmRun {
 	return ArmRun{Arm: a, Seed: 7, WorldHash: "world-1", ExogenousHash: "exo-1",
 		Streams:    []Stream{{Domain: "human", Seed: "h-1"}, {Domain: "exogenous", Seed: "x-1"}, {Domain: "helper", Seed: "p-1"}},
-		PolicyHash: policy,
-		Scenario:   "scenario:ordinary", Outcomes: []PersonOutcome{armOutcome(a, 0, true), armOutcome(a, 1, false)}}
+		PolicyHash: policy, HumanHash: "human-" + policy,
+		Scenario: "scenario:ordinary", Outcomes: []PersonOutcome{armOutcome(a, 0, true), armOutcome(a, 1, false)}}
 }
 
 func comparison() Comparison {
@@ -114,8 +114,13 @@ func TestUpliftContractRejectionsAreAttributable(t *testing.T) {
 		name, want string
 		mutate     func(*Comparison)
 	}{
-		{"broken no-assistant control makes everyone wait", "arm makes every human wait", func(c *Comparison) {
-			c.Runs[0].Outcomes[0].Acted = false
+		{"no-assistant control is crippled relative to the candidates", "control leaves everyone unable to act", func(c *Comparison) {
+			for i := range c.Runs[0].Outcomes {
+				c.Runs[0].Outcomes[i].Acted, c.Runs[0].Outcomes[i].CouldAct = false, false
+			}
+		}},
+		{"a person acted without any action available", "acted without an available action", func(c *Comparison) {
+			c.Runs[0].Outcomes[0].CouldAct = false
 		}},
 		{"no-assistant arm acts as a helper", "no-assistant arm performed helper actions", func(c *Comparison) {
 			c.Runs[0].HelperActs = 1
@@ -150,6 +155,9 @@ func TestUpliftContractRejectionsAreAttributable(t *testing.T) {
 		}},
 		{"an arm reports no policy receipt", "invalid arm run identity", func(c *Comparison) {
 			c.Runs[3].PolicyHash = ""
+		}},
+		{"an arm reports no human receipt", "invalid arm run identity", func(c *Comparison) {
+			c.Runs[3].HumanHash = ""
 		}},
 		{"a comparison without the control is not a comparison", "must include the no-assistant control", func(c *Comparison) {
 			c.Runs = c.Runs[1:]
@@ -1244,7 +1252,7 @@ func pairedUnit(unit int, later map[Arm][]float64) *Comparison {
 		r := ArmRun{Arm: a, Seed: uint64(unit), WorldHash: "world-" + id, ExogenousHash: "exo-" + id,
 			Streams: []Stream{{Domain: "human", Seed: "h-" + id}, {Domain: "exogenous", Seed: "x-" + id},
 				{Domain: "helper", Seed: "p-" + id}},
-			PolicyHash: "policy-" + string(a), Scenario: c.Scenario}
+			PolicyHash: "policy-" + string(a), HumanHash: "human-" + string(a), Scenario: c.Scenario}
 		for i := 0; i < 2; i++ {
 			o := armOutcome(a, i, true)
 			// Harm-free: the outcome resolves and nothing adverse is observed.
@@ -1391,4 +1399,89 @@ func TestUpliftIsReachableSoRefusingItMeansSomething(t *testing.T) {
 	if f.Status == Pass {
 		t.Fatal("uplift survived a pair that does not separate")
 	}
+}
+
+// In several consumers the assistant's output is never an input to the human's
+// choice, so the people decide identically whatever the arm does. That does not
+// invalidate a comparison — an intervention can change what someone experiences
+// without changing what they do — but it must be reported, or a null result
+// reads as evidence about a policy that could not have reached the decision.
+func TestArmsThatNeverReachedThePeopleAreReported(t *testing.T) {
+	reached := func(c Comparison) []string {
+		f, e := CompareArms([]Comparison{c}, NoAssistant, MultiPerspective)
+		if e != nil {
+			t.Fatal(e)
+		}
+		out := []string{}
+		for _, u := range f.Uncertainty {
+			if strings.Contains(u, "did not reach their decision") {
+				out = append(out, u)
+			}
+		}
+		return out
+	}
+	// Positive control: distinct human receipts, so nothing is reported.
+	c := UpliftFixture()[1]
+	if got := reached(c); len(got) != 0 {
+		t.Fatalf("arms with different human decisions were reported as unreached: %v", got)
+	}
+	same := c
+	same.Runs = append([]ArmRun{}, c.Runs...)
+	for i := range same.Runs {
+		same.Runs[i].HumanHash = "everyone-decided-the-same"
+	}
+	got := reached(same)
+	if len(got) == 0 {
+		t.Fatal("the people decided identically in both arms and the finding does not say so")
+	}
+	// It qualifies the result; it does not by itself refuse one. A policy can
+	// change what someone experiences without changing what they do.
+	f, e := CompareArms([]Comparison{same}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == NotTested && strings.Contains(f.Evidence, "did not reach") {
+		t.Fatal("an unreached decision was treated as a reason to refuse rather than to qualify")
+	}
+}
+
+// Everyone correctly declining to act is a RESULT, not a broken control, and
+// this evaluation has to be able to look at exactly those scenarios. What #58
+// asks to detect is a control crippled relative to the candidates, which is an
+// asymmetry between arms — so symmetric inability must pass and asymmetric
+// inability must not.
+func TestUniversalRestraintIsAResultNotABrokenControl(t *testing.T) {
+	// Nobody acts anywhere, but everyone had the option: correct restraint.
+	restraint := comparison()
+	for i := range restraint.Runs {
+		for j := range restraint.Runs[i].Outcomes {
+			restraint.Runs[i].Outcomes[j].Acted = false
+			restraint.Runs[i].Outcomes[j].CouldAct = true
+		}
+	}
+	ledger(&restraint)
+	if e := restraint.Validate(); e != nil {
+		t.Fatalf("a scenario of universal correct restraint was rejected: %v", e)
+	}
+	// Nobody can act anywhere: the world offered no choice, in every arm alike.
+	// That is a property of the world, not a rigged control.
+	noChoice := comparison()
+	for i := range noChoice.Runs {
+		for j := range noChoice.Runs[i].Outcomes {
+			noChoice.Runs[i].Outcomes[j].Acted = false
+			noChoice.Runs[i].Outcomes[j].CouldAct = false
+		}
+	}
+	ledger(&noChoice)
+	if e := noChoice.Validate(); e != nil {
+		t.Fatalf("a world that offered nobody a choice was rejected as a broken control: %v", e)
+	}
+	// But cripple ONLY the control and it must be caught.
+	rigged := comparison()
+	for j := range rigged.Runs[0].Outcomes {
+		rigged.Runs[0].Outcomes[j].Acted = false
+		rigged.Runs[0].Outcomes[j].CouldAct = false
+	}
+	ledger(&rigged)
+	assertErr(t, rigged.Validate(), "control leaves everyone unable to act")
 }

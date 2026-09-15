@@ -64,6 +64,7 @@ func responseComparisons(ctx context.Context) ([]evals.Comparison, error) {
 						{Domain: "helper", Seed: fmt.Sprint(run.Manifest.HelperSeed)},
 					},
 					PolicyHash: assistance.Digest(run.Helper),
+					HumanHash:  assistance.Digest(run.Humans),
 					Scenario:   c.Scenario,
 				}
 				// A real, executed privacy check rather than a field nobody
@@ -113,9 +114,14 @@ func responseOutcomeFor(person core.ID, run hws.ResponsiveAssistanceRun, arm eva
 	}
 	for _, d := range run.Humans {
 		h := d.Human.Human
-		if h.Actor == person && h.Candidates[h.Selected].Offer.Kind != behavior.Wait {
+		if h.Actor != person {
+			continue
+		}
+		if len(h.Candidates) > 1 {
+			o.CouldAct = true
+		}
+		if h.Candidates[h.Selected].Offer.Kind != behavior.Wait {
 			o.Acted = true
-			break
 		}
 	}
 	// The event a later report is about is this person's own IMMEDIATE account
