@@ -126,10 +126,14 @@ func (o TierEvidence) Validate() error {
 // and burden are quantities that distinguish observed zero from unknown, so an
 // unobserved burden is never read as no burden.
 type PersonOutcome struct {
-	Person             core.ID            `json:"person"`
-	Benefit            core.GroupQuantity `json:"benefit"`
-	Burden             core.GroupQuantity `json:"burden"`
-	Appropriateness    core.GroupQuantity `json:"appropriateness"`
+	Person          core.ID            `json:"person"`
+	Benefit         core.GroupQuantity `json:"benefit"`
+	Burden          core.GroupQuantity `json:"burden"`
+	Appropriateness core.GroupQuantity `json:"appropriateness"`
+	// BurdenReduction is a reduction in burden: the opposite of Burden and on
+	// its own scale. It is kept separate so a reduction can never be recorded
+	// as a burden, or a burden inferred from its absence.
+	BurdenReduction    core.GroupQuantity `json:"burden_reduction"`
 	Unwanted           int                `json:"unwanted_interventions"`
 	BoundaryViolations int                `json:"boundary_violations"`
 	DelayedOutcome     string             `json:"delayed_outcome"`
@@ -146,7 +150,7 @@ func (p PersonOutcome) Validate() error {
 	default:
 		return fmt.Errorf("invalid delayed outcome disposition")
 	}
-	for _, q := range []core.GroupQuantity{p.Benefit, p.Burden, p.Appropriateness} {
+	for _, q := range []core.GroupQuantity{p.Benefit, p.Burden, p.Appropriateness, p.BurdenReduction} {
 		if q.Validate(-1, 1) != nil {
 			return fmt.Errorf("invalid outcome quantity")
 		}
@@ -285,13 +289,16 @@ func (c Comparison) Validate() error {
 // UpliftFinding is the honest conclusion of a comparison. It is never
 // positive by construction: absence of evidence is reported as such.
 type UpliftFinding struct {
-	Version       string   `json:"version"`
-	Scenario      core.ID  `json:"scenario"`
-	Baseline      Arm      `json:"baseline"`
-	Candidate     Arm      `json:"candidate"`
-	Status        Status   `json:"status"`
-	Evidence      string   `json:"evidence"`
-	Harms         []string `json:"harm_qualifications,omitempty"`
+	Version   string   `json:"version"`
+	Scenario  core.ID  `json:"scenario"`
+	Baseline  Arm      `json:"baseline"`
+	Candidate Arm      `json:"candidate"`
+	Status    Status   `json:"status"`
+	Evidence  string   `json:"evidence"`
+	Harms     []string `json:"harm_qualifications,omitempty"`
+	// Uncertainty names what was not measured. It qualifies every finding,
+	// including not-tested ones, so absence of evidence stays visible.
+	Uncertainty   []string `json:"uncertainty,omitempty"`
 	SyntheticOnly bool     `json:"synthetic_only"`
 	HumanValidity Status   `json:"real_human_validity"`
 }
@@ -318,7 +325,7 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	// one world into two independent units.
 	type unit struct{ base, cand []float64 }
 	units := map[string]*unit{}
-	harms := []string{}
+	harms, unknowns := []string{}, []string{}
 	basePeople, candPeople := map[core.ID]bool{}, map[core.ID]bool{}
 	attributed := 0
 	for _, c := range cs {
@@ -355,8 +362,24 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					if o.Benefit.Status == core.Observed && o.Benefit.Value != nil && *o.Benefit.Value < 0 {
 						harms = append(harms, fmt.Sprintf("%s: observed negative benefit", o.Person))
 					}
+					// Blocking: a cost that was actually observed.
 					if o.DelayedOutcome == "missing" || o.DelayedOutcome == "censored" {
 						harms = append(harms, fmt.Sprintf("%s: %s outcome", o.Person, o.DelayedOutcome))
+					}
+					if o.Burden.Status == core.Observed && o.Burden.Value != nil && *o.Burden.Value > 0 {
+						harms = append(harms, fmt.Sprintf("%s: observed burden", o.Person))
+					}
+					// Reported, not blocking: what was simply not measured. It is
+					// carried on every finding so absence is visible rather than
+					// silently absorbed, but absence alone is not a cost.
+					if o.DelayedOutcome == "unresolved" {
+						unknowns = append(unknowns, fmt.Sprintf("%s: outcome unresolved", o.Person))
+					}
+					if o.Benefit.Status != core.Observed {
+						unknowns = append(unknowns, fmt.Sprintf("%s: benefit not observed", o.Person))
+					}
+					if o.Burden.Status != core.Observed {
+						unknowns = append(unknowns, fmt.Sprintf("%s: burden not observed", o.Person))
 					}
 				}
 				for _, ob := range o.Observations {
@@ -388,6 +411,10 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 			unpaired++
 		}
 	}
+	sort.Strings(harms)
+	sort.Strings(unknowns)
+	out.Harms = harms
+	out.Uncertainty = dedupe(unknowns)
 	if attributed == 0 || paired == 0 {
 		out.Status = NotTested
 		out.Evidence = fmt.Sprintf("no world unit was observed in both arms (%d one-armed unit(s), %d attributed observation(s))", unpaired, attributed)
@@ -406,9 +433,7 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		}
 	}
 	if len(harms) > 0 {
-		sort.Strings(harms)
 		out.Status = Inconclusive
-		out.Harms = harms
 		out.Evidence = fmt.Sprintf("%s shows harm or unobservable outcomes; no uplift may be reported (%s)", candidate, strings.Join(harms, "; "))
 		return out, nil
 	}
@@ -466,13 +491,28 @@ type UpliftSummary struct {
 // PersonRecord is one person's result in one arm of one comparison.
 type PersonRecord struct {
 	Scenario           core.ID            `json:"scenario"`
+	Seed               uint64             `json:"seed"`
+	WorldHash          string             `json:"world_hash"`
 	Arm                Arm                `json:"arm"`
 	Person             core.ID            `json:"person"`
 	Benefit            core.GroupQuantity `json:"benefit"`
 	Burden             core.GroupQuantity `json:"burden"`
+	BurdenReduction    core.GroupQuantity `json:"burden_reduction"`
+	Appropriateness    core.GroupQuantity `json:"appropriateness"`
 	Unwanted           int                `json:"unwanted_interventions"`
 	BoundaryViolations int                `json:"boundary_violations"`
 	DelayedOutcome     string             `json:"delayed_outcome"`
+	Acted              bool               `json:"person_acted"`
+	Evidence           []EvidenceRef      `json:"evidence"`
+}
+
+// EvidenceRef names the tier and source record behind one measurement, so the
+// emitted report can be traced back rather than taken on trust.
+type EvidenceRef struct {
+	Tier   EvidenceTier     `json:"tier"`
+	Source core.ID          `json:"source"`
+	Metric string           `json:"metric"`
+	At     core.LogicalTime `json:"at"`
 }
 
 // ScenarioCoverage states, per required #58 scenario family, whether this
@@ -495,7 +535,8 @@ func UpliftFixture() []Comparison {
 			people := []PersonOutcome{}
 			for p, id := range []core.ID{"person:01", "person:02"} {
 				o := PersonOutcome{Person: id, Benefit: q(.1), Burden: UnknownIfAbsent(a, p), Appropriateness: q(.4),
-					DelayedOutcome: []string{"resolved", "unresolved"}[p], Acted: true,
+					BurdenReduction: core.UnknownGroupQuantity(),
+					DelayedOutcome:  []string{"resolved", "unresolved"}[p], Acted: true,
 					Observations: []TierEvidence{{Person: id, Tier: BehaviouralObservation, Provenance: SyntheticProvenance, Metric: "observed_choice", Value: q(.1)}}}
 				if v, ok := later[a]; ok && p == 0 {
 					o.Observations = append(o.Observations, TierEvidence{Person: id, Tier: AttributedLater, Provenance: SyntheticProvenance,
@@ -576,9 +617,15 @@ func SummariseUplift(cs []Comparison) (UpliftSummary, error) {
 	for _, c := range cs {
 		for _, r := range c.Runs {
 			for _, o := range r.Outcomes {
-				s.People = append(s.People, PersonRecord{Scenario: c.Scenario, Arm: r.Arm, Person: o.Person,
-					Benefit: o.Benefit, Burden: o.Burden, Unwanted: o.Unwanted,
-					BoundaryViolations: o.BoundaryViolations, DelayedOutcome: o.DelayedOutcome})
+				refs := []EvidenceRef{}
+				for _, ob := range o.Observations {
+					refs = append(refs, EvidenceRef{Tier: ob.Tier, Source: ob.Source, Metric: ob.Metric, At: ob.At})
+				}
+				s.People = append(s.People, PersonRecord{Scenario: c.Scenario, Seed: c.Seed, WorldHash: r.WorldHash,
+					Arm: r.Arm, Person: o.Person, Benefit: o.Benefit, Burden: o.Burden,
+					BurdenReduction: o.BurdenReduction, Appropriateness: o.Appropriateness,
+					Unwanted: o.Unwanted, BoundaryViolations: o.BoundaryViolations,
+					DelayedOutcome: o.DelayedOutcome, Acted: o.Acted, Evidence: refs})
 			}
 		}
 	}
@@ -608,6 +655,18 @@ func coverage(cs []Comparison) []ScenarioCoverage {
 			note = "NOT COVERED: no executed comparison for this family in this run"
 		}
 		out = append(out, ScenarioCoverage{Family: f, Covered: executed[f], Note: note})
+	}
+	return out
+}
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, v := range in {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
 	}
 	return out
 }

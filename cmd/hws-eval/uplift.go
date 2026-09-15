@@ -7,6 +7,7 @@ import (
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/evals"
 	"github.com/tushardhara/dream/examples/ordinaryexperiment"
+	"github.com/tushardhara/dream/simulator/behavior"
 )
 
 // realArms maps the arms the ordinary consumer actually implements onto the
@@ -57,10 +58,9 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 						run.HelperActs++
 					}
 				}
-				// The control arm must not be credited with helper activity.
-				if m.arm == evals.NoAssistant {
-					run.HelperActs = 0
-				}
+				// An observed violation is preserved, never zeroed: if the
+				// control arm did act, the comparison must be rejected rather
+				// than quietly corrected.
 				c.Runs = append(c.Runs, run)
 			}
 			if e := c.Validate(); e != nil {
@@ -77,10 +77,14 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 func outcomeFor(person core.ID, r ordinaryexperiment.Report) evals.PersonOutcome {
 	o := evals.PersonOutcome{
 		Person: person, Benefit: core.UnknownGroupQuantity(), Burden: core.UnknownGroupQuantity(),
-		Appropriateness: core.UnknownGroupQuantity(), DelayedOutcome: "missing",
+		Appropriateness: core.UnknownGroupQuantity(), BurdenReduction: core.UnknownGroupQuantity(),
+		DelayedOutcome: "missing",
 	}
+	// Acted means this person actually chose to act. A trace that exists but
+	// selected WAIT is not acting: reading it as action would bypass the
+	// broken-control detector this evaluation depends on.
 	for _, t := range r.Traces {
-		if t.Actor == person {
+		if t.Actor == person && t.Decision.Human.Candidates[t.Decision.Human.Selected].Offer.Kind != behavior.Wait {
 			o.Acted = true
 		}
 	}
@@ -96,9 +100,18 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report) evals.PersonOutcome
 		if e.Participant != person {
 			continue
 		}
-		o.DelayedOutcome = "resolved"
-		o.Benefit = e.Benefit
-		o.Burden = e.BurdenReduction
+		// Later reports accumulate; an earlier unknown or adverse report is not
+		// overwritten by a later one. The first resolved report sets the
+		// disposition and the remaining ones are retained as separate evidence.
+		if o.DelayedOutcome != "resolved" {
+			o.DelayedOutcome = "resolved"
+			o.Benefit = e.Benefit
+			// BurdenReduction is a REDUCTION in burden, the opposite of burden
+			// and on a different scale. It is not burden and is not recorded as
+			// such; burden itself was not observed here and stays unknown.
+			o.Burden = core.UnknownGroupQuantity()
+			o.BurdenReduction = e.BurdenReduction
+		}
 		switch e.Participation {
 		case "unwelcome":
 			o.Unwanted++

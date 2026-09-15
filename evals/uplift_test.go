@@ -20,6 +20,7 @@ func evidence(p core.ID, tier EvidenceTier, v float64) TierEvidence {
 func outcome(i int, acted bool) PersonOutcome {
 	return PersonOutcome{
 		Person: person(i), Benefit: core.ObservedGroupQuantity(.2), Burden: core.UnknownGroupQuantity(),
+		BurdenReduction: core.UnknownGroupQuantity(),
 		Appropriateness: core.ObservedGroupQuantity(.5), DelayedOutcome: "unresolved", Acted: acted,
 		Observations: []TierEvidence{evidence(person(i), BehaviouralObservation, .1)},
 	}
@@ -521,5 +522,39 @@ func TestHarmBlocksEvenAGenuinePairedSeparation(t *testing.T) {
 	}
 	if f.Status == Pass || len(f.Harms) == 0 {
 		t.Fatalf("harm must block a conclusion and be named: %+v", f)
+	}
+}
+
+// Qualifications must survive early returns: a not-tested or refused result
+// still carries what was observed and what was not measured.
+func TestQualificationsSurviveEarlyReturns(t *testing.T) {
+	a, b := twoUnits()
+	// no attributed later evidence at all -> not-tested, but harm is present
+	h := &a.Runs[3].Outcomes[1]
+	h.BoundaryViolations, h.DelayedOutcome = 4, "censored"
+	f, e := CompareArms([]Comparison{*a, *b}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status != NotTested {
+		t.Fatalf("expected not-tested without paired evidence, got %q", f.Status)
+	}
+	if len(f.Harms) == 0 {
+		t.Fatal("a not-tested finding still discarded its harm qualifications")
+	}
+	if len(f.Uncertainty) == 0 {
+		t.Fatal("a not-tested finding still discarded what was not measured")
+	}
+}
+
+// Burden reduction is never recorded as burden.
+func TestBurdenReductionIsNotBurden(t *testing.T) {
+	o := outcome(0, true)
+	o.BurdenReduction = core.ObservedGroupQuantity(.7)
+	if e := o.Validate(); e != nil {
+		t.Fatal(e)
+	}
+	if o.Burden.Status == core.Observed {
+		t.Fatal("an observed burden reduction must not make burden observed")
 	}
 }
