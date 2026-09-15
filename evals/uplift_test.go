@@ -39,15 +39,16 @@ func armOutcome(a Arm, i int, acted bool) PersonOutcome {
 	}
 }
 
-func armRun(a Arm, stream string) ArmRun {
-	return ArmRun{Arm: a, Seed: 7, WorldHash: "world-1", ExogenousHash: "exo-1", RNGStream: stream,
-		Scenario: "scenario:ordinary", Outcomes: []PersonOutcome{armOutcome(a, 0, true), armOutcome(a, 1, false)}}
+func armRun(a Arm, policy string) ArmRun {
+	return ArmRun{Arm: a, Seed: 7, WorldHash: "world-1", ExogenousHash: "exo-1", RNGStream: "stream-1",
+		PolicyHash: policy,
+		Scenario:   "scenario:ordinary", Outcomes: []PersonOutcome{armOutcome(a, 0, true), armOutcome(a, 1, false)}}
 }
 
 func comparison() Comparison {
 	c := Comparison{Version: UpliftVersion, Scenario: "scenario:ordinary", Family: "ordinary_joy", Seed: 7, Affected: []core.ID{person(0), person(1)}}
 	for i, a := range Arms {
-		c.Runs = append(c.Runs, armRun(a, string(rune('a'+i))+"-stream"))
+		c.Runs = append(c.Runs, armRun(a, string(rune('a'+i))+"-policy"))
 	}
 	ledger(&c)
 	return c
@@ -124,8 +125,11 @@ func TestUpliftContractRejectionsAreAttributable(t *testing.T) {
 		{"arms share exogenous events unequally", "arms do not share the matched initial world", func(c *Comparison) {
 			c.Runs[1].ExogenousHash = "exo-2"
 		}},
-		{"arms share an rng stream", "share an rng stream", func(c *Comparison) {
-			c.Runs[3].RNGStream = c.Runs[0].RNGStream
+		{"an arm draws its own rng stream", "do not share the matched rng stream", func(c *Comparison) {
+			c.Runs[3].RNGStream = "a-private-stream"
+		}},
+		{"an arm reports no policy receipt", "invalid arm run identity", func(c *Comparison) {
+			c.Runs[3].PolicyHash = ""
 		}},
 		{"a comparison without the control is not a comparison", "must include the no-assistant control", func(c *Comparison) {
 			c.Runs = c.Runs[1:]
@@ -239,7 +243,7 @@ func TestUpliftRemainingGuardsAreAttributable(t *testing.T) {
 	if e := outcome(0, true).Validate(); e != nil {
 		t.Fatal("positive control: clean outcome rejected:", e)
 	}
-	if e := armRun(NoAssistant, "a-stream").Validate(); e != nil {
+	if e := armRun(NoAssistant, "a-policy").Validate(); e != nil {
 		t.Fatal("positive control: clean arm run rejected:", e)
 	}
 
@@ -268,17 +272,17 @@ func TestUpliftRemainingGuardsAreAttributable(t *testing.T) {
 		assertErr(t, o.Validate(), "invalid outcome quantity")
 	})
 	t.Run("unknown arm", func(t *testing.T) {
-		a := armRun(NoAssistant, "a-stream")
+		a := armRun(NoAssistant, "a-policy")
 		a.Arm = Arm("marketing")
 		assertErr(t, a.Validate(), "unknown comparison arm")
 	})
 	t.Run("arm run identity", func(t *testing.T) {
-		a := armRun(SimpleAssistance, "a-stream")
+		a := armRun(SimpleAssistance, "a-policy")
 		a.WorldHash = ""
 		assertErr(t, a.Validate(), "invalid arm run identity")
 	})
 	t.Run("arm with no affected people", func(t *testing.T) {
-		a := armRun(SimpleAssistance, "a-stream")
+		a := armRun(SimpleAssistance, "a-policy")
 		a.Outcomes = nil
 		assertErr(t, a.Validate(), "arm reports no affected people")
 	})
@@ -919,9 +923,18 @@ func TestR1CoverageIgnoresScenarioNamesAndReadsTheExecutedManifest(t *testing.T)
 	if len(s.Executed) != len(c.Runs) {
 		t.Fatalf("manifest records %d executed arms, comparison ran %d", len(s.Executed), len(c.Runs))
 	}
+	policy := map[Arm]string{}
+	for _, r := range c.Runs {
+		policy[r.Arm] = r.PolicyHash
+	}
 	for _, u := range s.Executed {
 		if u.Family != "ordinary_joy" || u.People != len(c.Affected) {
 			t.Fatalf("manifest unit misreports its execution: %+v", u)
+		}
+		// The manifest must carry the arm's own policy receipt: it is what lets
+		// a reader recompute which arms actually did the same thing.
+		if u.PolicyHash != policy[u.Arm] {
+			t.Fatalf("manifest reports policy %q for arm %s, which ran %q", u.PolicyHash, u.Arm, policy[u.Arm])
 		}
 	}
 }
@@ -976,5 +989,52 @@ func TestR1AnArmWithNoOutcomesIsNotExecution(t *testing.T) {
 	}
 	if len(s.Executed) != 0 {
 		t.Fatalf("an arm that produced no outcomes was recorded as executed: %+v", s.Executed)
+	}
+}
+
+// Two arms that produced the same policy output are the same intervention
+// under two labels. Whatever the levels say, no uplift is attributable.
+func TestIdenticalPolicyOutputCannotBeUplift(t *testing.T) {
+	// Positive control: with distinct policy receipts the pair is evaluated on
+	// its evidence, and the identical-arm note is absent.
+	c := UpliftFixture()[1]
+	f, e := CompareArms([]Comparison{c}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal("positive control:", e)
+	}
+	for _, u := range f.Uncertainty {
+		if strings.Contains(u, "identical policy output") {
+			t.Fatalf("positive control already reports identical arms: %q", u)
+		}
+	}
+	// Now make the two arms report the same policy receipt, changing nothing
+	// else but the observed burden that would otherwise stop the comparison
+	// earlier on harm. Harm is reported before identical arms by design, so the
+	// burden is cleared here to put the identical-arm rule on the decisive path.
+	same := c
+	same.Runs = append([]ArmRun{}, c.Runs...)
+	for i := range same.Runs {
+		same.Runs[i].PolicyHash = "one-policy"
+		same.Runs[i].Outcomes = append([]PersonOutcome{}, c.Runs[i].Outcomes...)
+		for j := range same.Runs[i].Outcomes {
+			same.Runs[i].Outcomes[j].Burden = core.UnknownGroupQuantity()
+		}
+	}
+	f, e = CompareArms([]Comparison{same}, NoAssistant, MultiPerspective)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if f.Status == Pass {
+		t.Fatal("uplift was credited between two arms that ran identically")
+	}
+	if !strings.Contains(f.Evidence, "identical policy output") {
+		t.Fatalf("the identical arms are not named in the evidence: %q", f.Evidence)
+	}
+	found := false
+	for _, u := range f.Uncertainty {
+		found = found || strings.Contains(u, "identical policy output")
+	}
+	if !found {
+		t.Fatalf("identical arms absent from uncertainty: %+v", f.Uncertainty)
 	}
 }

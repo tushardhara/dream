@@ -280,21 +280,29 @@ func (p PersonOutcome) Validate() error {
 
 // ArmRun is one arm executed against a matched world with its own RNG stream.
 type ArmRun struct {
-	Arm           Arm             `json:"arm"`
-	Seed          uint64          `json:"seed"`
-	WorldHash     string          `json:"world_hash"`
-	ExogenousHash string          `json:"exogenous_hash"`
-	RNGStream     string          `json:"rng_stream"`
-	Scenario      core.ID         `json:"scenario"`
-	Outcomes      []PersonOutcome `json:"outcomes"`
-	HelperActs    int             `json:"helper_actions"`
+	Arm  Arm    `json:"arm"`
+	Seed uint64 `json:"seed"`
+	// WorldHash, ExogenousHash and RNGStream are receipts of the generation
+	// this arm actually ran on, and are shared across arms by design: a matched
+	// comparison uses the same initial world, the same exogenous events and
+	// common random numbers, so the assistant policy is the only difference.
+	WorldHash     string `json:"world_hash"`
+	ExogenousHash string `json:"exogenous_hash"`
+	RNGStream     string `json:"rng_stream"`
+	// PolicyHash is the receipt of what this arm's policy actually produced. It
+	// is the one identifier that may differ between arms, and when two arms
+	// share it they did the same thing: no uplift can be read between them.
+	PolicyHash string          `json:"policy_hash"`
+	Scenario   core.ID         `json:"scenario"`
+	Outcomes   []PersonOutcome `json:"outcomes"`
+	HelperActs int             `json:"helper_actions"`
 }
 
 func (a ArmRun) Validate() error {
 	if !a.Arm.Valid() {
 		return fmt.Errorf("unknown comparison arm")
 	}
-	if a.WorldHash == "" || a.ExogenousHash == "" || a.RNGStream == "" || a.Scenario.Validate() != nil {
+	if a.WorldHash == "" || a.ExogenousHash == "" || a.RNGStream == "" || a.PolicyHash == "" || a.Scenario.Validate() != nil {
 		return fmt.Errorf("invalid arm run identity")
 	}
 	if len(a.Outcomes) == 0 {
@@ -380,8 +388,7 @@ func (c Comparison) Validate() error {
 		return fmt.Errorf("comparison must include the no-assistant control")
 	}
 	seenArm := map[Arm]bool{}
-	streams := map[string]Arm{}
-	world, exogenous := "", ""
+	world, exogenous, stream := "", "", ""
 	for _, r := range c.Runs {
 		if e := r.Validate(); e != nil {
 			return fmt.Errorf("arm run: %w", e)
@@ -409,17 +416,21 @@ func (c Comparison) Validate() error {
 			}
 		}
 		if world == "" {
-			world, exogenous = r.WorldHash, r.ExogenousHash
+			world, exogenous, stream = r.WorldHash, r.ExogenousHash, r.RNGStream
 		}
 		// Matched design: identical initial world and exogenous events.
 		if r.WorldHash != world || r.ExogenousHash != exogenous {
 			return fmt.Errorf("arms do not share the matched initial world")
 		}
-		// Independent versioned RNG streams: a shared stream couples the arms.
-		if other, ok := streams[r.RNGStream]; ok {
-			return fmt.Errorf("arms %s and %s share an rng stream", other, r.Arm)
+		// Common random numbers. An earlier version of this contract required
+		// the opposite — a distinct stream per arm — which is wrong for a
+		// matched design and was satisfiable only by labelling the streams
+		// differently. Drawing different numbers per arm reintroduces exactly
+		// the variance the matching exists to remove, so an arm that does not
+		// share the stream is not a matched arm.
+		if r.RNGStream != stream {
+			return fmt.Errorf("arms do not share the matched rng stream")
 		}
-		streams[r.RNGStream] = r.Arm
 	}
 	return nil
 }
@@ -475,6 +486,12 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	type pair struct{ base, cand []float64 }
 	units := map[string]map[core.ID]*pair{}
 	harms, unknowns := []string{}, []string{}
+	// identical names the scenarios in which the two arms produced the same
+	// policy output; identicalCount and compared count comparisons, not
+	// scenario names, so a scenario run at several seeds is counted once per
+	// seed on both sides.
+	identical := []string{}
+	identicalCount, compared := 0, 0
 	attributed := 0
 	for _, c := range cs {
 		if e := c.Validate(); e != nil {
@@ -488,6 +505,21 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		if !present[baseline] || !present[candidate] {
 			continue
 		}
+		// Two arms that produced the same policy output did the same thing in
+		// this scenario. Whatever the levels say, the difference between them
+		// is not attributable to the assistant policy, so it is recorded as an
+		// identical-arm scenario and can never be read as uplift.
+		policy := map[Arm]string{}
+		for _, r := range c.Runs {
+			if r.Arm == baseline || r.Arm == candidate {
+				policy[r.Arm] = r.PolicyHash
+			}
+		}
+		if policy[baseline] == policy[candidate] {
+			identical = append(identical, string(c.Scenario))
+			identicalCount++
+		}
+		compared++
 		for _, r := range c.Runs {
 			if r.Arm != baseline && r.Arm != candidate {
 				continue
@@ -548,6 +580,13 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	// Qualifications are attached before any decision, so a refused or
 	// not-tested result still reports what was observed and what was not.
 	sort.Strings(harms)
+	// An arm pair that ran identically is stated as uncertainty even when the
+	// result is not-tested for some other reason, so the reader is never left
+	// to assume the two arms actually differed.
+	sort.Strings(identical)
+	for _, sc := range dedupe(identical) {
+		unknowns = append(unknowns, fmt.Sprintf("%s and %s produced identical policy output in %s", baseline, candidate, sc))
+	}
 	sort.Strings(unknowns)
 	out.Harms = dedupe(harms)
 	out.Uncertainty = dedupe(unknowns)
@@ -580,6 +619,14 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	if len(harms) > 0 {
 		out.Status = Inconclusive
 		out.Evidence = fmt.Sprintf("%s shows harm or unobservable outcomes; no uplift may be reported (%s)", candidate, strings.Join(out.Harms, "; "))
+		return out, nil
+	}
+	// Every scenario in which both arms ran produced the same policy output, so
+	// the two arms are the same intervention under two labels. Any difference
+	// in the levels is noise, and no uplift is attributable to the policy.
+	if compared > 0 && identicalCount == compared {
+		out.Status = NotTested
+		out.Evidence = fmt.Sprintf("%s and %s produced identical policy output in every scenario compared (%d); there is no policy difference to attribute an effect to", baseline, candidate, compared)
 		return out, nil
 	}
 	if oneArmed > 0 {
@@ -741,8 +788,11 @@ func UpliftFixture() []Comparison {
 				}
 				people = append(people, o)
 			}
+			// Matched design: world, exogenous events and the rng stream are
+			// shared across arms; only the policy receipt differs.
 			c.Runs = append(c.Runs, ArmRun{Arm: a, Seed: seed, WorldHash: "world-" + string(scenario), ExogenousHash: "exo-" + string(scenario),
-				RNGStream: fmt.Sprintf("%s/%s/%d", scenario, a, i), Scenario: scenario, Outcomes: people})
+				RNGStream: fmt.Sprintf("%s/%d", scenario, seed), PolicyHash: fmt.Sprintf("policy-%s-%d", a, i),
+				Scenario: scenario, Outcomes: people})
 		}
 		return c
 	}
@@ -858,6 +908,9 @@ type ExecutedUnit struct {
 	Seed     uint64  `json:"seed"`
 	Arm      Arm     `json:"arm"`
 	People   int     `json:"people_with_outcomes"`
+	// PolicyHash lets a reader recompute which arms actually did the same
+	// thing, instead of taking the findings' word for it.
+	PolicyHash string `json:"policy_hash"`
 }
 
 // ExecutedManifest is the frozen record of what this run actually executed,
@@ -870,7 +923,7 @@ func ExecutedManifest(cs []Comparison) []ExecutedUnit {
 				continue
 			}
 			out = append(out, ExecutedUnit{Family: c.Family, Scenario: c.Scenario,
-				Seed: c.Seed, Arm: r.Arm, People: len(r.Outcomes)})
+				Seed: c.Seed, Arm: r.Arm, People: len(r.Outcomes), PolicyHash: r.PolicyHash})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {

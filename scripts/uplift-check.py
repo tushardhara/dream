@@ -71,6 +71,28 @@ def main() -> int:
         else:
             assert c["family"] in backed, ("coverage not backed by the executed manifest", c)
     assert any(c["covered"] for c in coverage), "no family is actually executed"
+
+    # Arms that produced the same policy output did the same thing. Recomputed
+    # here from the manifest: no pair of arms that ran identically everywhere
+    # they were compared may carry a passing uplift finding, and the report must
+    # say so rather than leave the reader to assume the arms differed.
+    by_unit = {}
+    for u in manifest:
+        by_unit.setdefault((u["scenario"], u["seed"]), {})[u["arm"]] = u["policy_hash"]
+        assert u["policy_hash"], ("an executed arm reports no policy receipt", u)
+    for f in findings:
+        base, cand = f["baseline"], f["candidate"]
+        shared = [a for a in by_unit.values() if base in a and cand in a]
+        if not shared:
+            continue
+        same = [a for a in shared if a[base] == a[cand]]
+        if same:
+            note = " ".join(f.get("uncertainty", [])) + " " + f["evidence"]
+            assert "identical policy output" in note, (
+                "arms ran identically in some scenario but the report does not say so", base, cand)
+        if len(same) == len(shared):
+            assert f["status"] != "pass", (
+                "uplift credited between arms that ran identically everywhere", base, cand)
     print(f"NOTE: {len(uncovered)} of 8 required scenario families are NOT covered: {', '.join(uncovered)}")
 
     print("PASS: real-consumer matched-arm uplift over executed families/seeds; no uplift claimed; "

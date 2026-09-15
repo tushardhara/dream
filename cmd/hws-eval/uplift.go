@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tushardhara/dream/app/assistance"
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/evals"
 	"github.com/tushardhara/dream/examples/ordinaryexperiment"
@@ -40,16 +41,24 @@ func realComparisons(ctx context.Context) ([]evals.Comparison, error) {
 				Seed:     seed,
 				Affected: []core.ID{"a", "b"},
 			}
-			world := fmt.Sprintf("ordinary/%s/%d", family, seed)
 			for _, m := range realArms {
 				report, e := ordinaryexperiment.Run(ctx, family, m.experiment, seed)
 				if e != nil {
 					return nil, fmt.Errorf("%s/%s/%d: %w", family, m.experiment, seed, e)
 				}
+				// Receipts, not labels. The world is digested from the actor
+				// states the experiment actually built, the exogenous hash from
+				// the opportunity envelopes it actually raised, and the policy
+				// hash from the helper responses this arm actually produced.
+				// Two arms whose helper output is identical will now carry the
+				// same policy receipt and can no longer be read as different.
 				run := evals.ArmRun{
-					Arm: m.arm, Seed: seed, WorldHash: world, ExogenousHash: world,
-					RNGStream: fmt.Sprintf("%s/%s", world, m.arm),
-					Scenario:  c.Scenario,
+					Arm: m.arm, Seed: seed,
+					WorldHash:     assistance.Digest(worldReceipt(report)),
+					ExogenousHash: assistance.Digest(exogenousReceipt(report)),
+					RNGStream:     assistance.Digest(fmt.Sprintf("ordinary/%s/%d", family, seed)),
+					PolicyHash:    assistance.Digest(policyReceipt(report)),
+					Scenario:      c.Scenario,
 				}
 				for _, person := range c.Affected {
 					o, recs := outcomeFor(person, report, m.arm)
@@ -196,4 +205,46 @@ func firstActionTime(person core.ID, r ordinaryexperiment.Report) core.LogicalTi
 		}
 	}
 	return 0
+}
+
+// The three receipts below are read out of what the experiment produced. None
+// of them is constructed from the loop variables: a receipt that restates the
+// family and seed proves only that the adapter can format a string.
+
+// worldReceipt is the INITIAL world: the frame-0 daily-life traces, which the
+// native human policy produced before any helper response existed. Later
+// daily-life traces are not arm-invariant and must not be used — in
+// declined_ritual a decline appends a boundary that changes the world's
+// subsequent trajectory, which is the experiment working, not a mismatch.
+func worldReceipt(r ordinaryexperiment.Report) []ordinaryexperiment.Trace {
+	out := []ordinaryexperiment.Trace{}
+	for _, t := range r.Traces {
+		if t.Stage == "daily-life" && t.Frame == 0 {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// exogenousReceipt is the sequence of opportunities the world raised: the
+// envelope each was raised in — frame, identity, time and activity — and never
+// the helper's response to it. Verified arm-invariant across all four families
+// and both seeds before being relied on here.
+func exogenousReceipt(r ordinaryexperiment.Report) []string {
+	out := []string{}
+	for _, o := range r.Opportunities {
+		out = append(out, fmt.Sprintf("%d/%s/%d/%s", o.Frame, o.Helper.ID, o.Helper.At, o.Helper.Activity))
+	}
+	return out
+}
+
+// policyReceipt is what this arm's assistant actually produced. It is the only
+// receipt permitted to differ between arms, and when two arms produce the same
+// one they performed the same intervention whatever they are labelled.
+func policyReceipt(r ordinaryexperiment.Report) []assistance.OrdinaryResponse {
+	out := []assistance.OrdinaryResponse{}
+	for _, o := range r.Opportunities {
+		out = append(out, o.Helper)
+	}
+	return out
 }
