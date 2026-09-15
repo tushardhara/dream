@@ -607,6 +607,16 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					if o.Burden.Status != core.Observed {
 						unknowns = append(unknowns, fmt.Sprintf("%s: burden not observed", o.Person))
 					}
+					// #58 names appropriateness alongside benefit and burden.
+					// An unknown quantity says so in its own status, but a
+					// reader of the finding would never learn the measure was
+					// absent everywhere unless the finding says it.
+					if o.Appropriateness.Status != core.Observed {
+						unknowns = append(unknowns, fmt.Sprintf("%s: appropriateness not observed", o.Person))
+					}
+					if o.BurdenReduction.Status != core.Observed {
+						unknowns = append(unknowns, fmt.Sprintf("%s: burden reduction not observed", o.Person))
+					}
 				}
 				for _, ob := range o.Observations {
 					if ob.Tier != AttributedLater || ob.Value.Status != core.Observed {

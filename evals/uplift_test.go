@@ -1188,3 +1188,46 @@ func TestNoInterventionIsUncertaintyNotHarm(t *testing.T) {
 		t.Fatalf("restraint was not reported as uncertainty: %+v", f.Uncertainty)
 	}
 }
+
+// #58 names appropriateness alongside benefit and burden. An unknown quantity
+// describes itself, but a reader of a finding would never learn the measure
+// was absent everywhere unless the finding says so.
+func TestUnmeasuredAppropriatenessAndBurdenReductionAreReported(t *testing.T) {
+	c := UpliftFixture()[1]
+	report := func(v Comparison) []string {
+		f, e := CompareArms([]Comparison{v}, NoAssistant, MultiPerspective)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return f.Uncertainty
+	}
+	has := func(in []string, want string) bool {
+		for _, u := range in {
+			if strings.Contains(u, want) {
+				return true
+			}
+		}
+		return false
+	}
+	// Positive control: the fixture observes appropriateness, so it must NOT be
+	// reported absent. Burden reduction it does not observe, so it must be.
+	base := report(c)
+	if has(base, "appropriateness not observed") {
+		t.Fatalf("an observed appropriateness was reported as absent: %+v", base)
+	}
+	if !has(base, "burden reduction not observed") {
+		t.Fatalf("an unobserved burden reduction was not reported: %+v", base)
+	}
+	// Now withhold appropriateness, changing nothing else.
+	unknown := c
+	unknown.Runs = append([]ArmRun{}, c.Runs...)
+	for i := range unknown.Runs {
+		unknown.Runs[i].Outcomes = append([]PersonOutcome{}, c.Runs[i].Outcomes...)
+		for j := range unknown.Runs[i].Outcomes {
+			unknown.Runs[i].Outcomes[j].Appropriateness = core.UnknownGroupQuantity()
+		}
+	}
+	if u := report(unknown); !has(u, "appropriateness not observed") {
+		t.Fatalf("an unmeasured appropriateness was never reported: %+v", u)
+	}
+}
