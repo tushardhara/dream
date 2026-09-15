@@ -223,10 +223,16 @@ func (p PersonOutcome) Validate() error {
 	default:
 		return fmt.Errorf("invalid delayed outcome disposition")
 	}
-	for _, q := range []core.GroupQuantity{p.Benefit, p.Burden, p.Appropriateness, p.BurdenReduction} {
+	for _, q := range []core.GroupQuantity{p.Benefit, p.Burden, p.Appropriateness} {
 		if q.Validate(-1, 1) != nil {
 			return fmt.Errorf("invalid outcome quantity")
 		}
+	}
+	// BurdenReduction carries the source scale of the record it came from
+	// (core.OrdinaryExperience allows -100..100). Forcing it into the -1..1
+	// outcome range rejected values the source contract considers valid.
+	if p.BurdenReduction.Validate(MinBurdenReduction, MaxBurdenReduction) != nil {
+		return fmt.Errorf("invalid burden reduction quantity")
 	}
 	for _, o := range p.Observations {
 		if e := o.Validate(); e != nil {
@@ -397,6 +403,12 @@ type UpliftFinding struct {
 	SyntheticOnly bool      `json:"synthetic_only"`
 	HumanValidity Status    `json:"real_human_validity"`
 }
+
+// Burden reduction is reported on its source scale, not the -1..1 outcome scale.
+const (
+	MinBurdenReduction = -100
+	MaxBurdenReduction = 100
+)
 
 // MinIndependentUnits is the smallest number of independent scenario/world
 // units that may support any reported difference between arms.

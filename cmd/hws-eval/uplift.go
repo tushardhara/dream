@@ -97,6 +97,7 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 	// observation.
 	recs := []evals.SourceRecord{}
 	eventID := core.ID("")
+	firstReport := false
 	for _, t := range r.Traces {
 		if t.Actor != person {
 			continue
@@ -119,27 +120,31 @@ func outcomeFor(person core.ID, r ordinaryexperiment.Report, arm evals.Arm) (eva
 		if e.Participant != person {
 			continue
 		}
-		// Later reports accumulate; an earlier unknown or adverse report is not
-		// overwritten by a later one. The first resolved report sets the
-		// disposition and the remaining ones are retained as separate evidence.
-		if o.DelayedOutcome != "resolved" {
-			o.DelayedOutcome = "resolved"
+		// Every later report is retained. The FIRST report sets the disposition,
+		// and its participation is read before deciding it: a report whose
+		// participation is unknown leaves the outcome unresolved rather than
+		// silently resolved. A later positive report never erases an earlier
+		// unknown or adverse one.
+		if e.Participation == "unwelcome" {
+			o.Unwanted++
+		}
+		if !firstReport {
+			firstReport = true
+			if e.Participation == "unknown" {
+				o.DelayedOutcome = "unresolved"
+			} else {
+				o.DelayedOutcome = "resolved"
+			}
 			o.Benefit = e.Benefit
-			// BurdenReduction is a REDUCTION in burden, the opposite of burden
-			// and on a different scale. It is not burden and is not recorded as
-			// such; burden itself was not observed here and stays unknown.
+			// BurdenReduction is a REDUCTION in burden: opposite meaning and a
+			// different scale. Burden itself was not observed and stays unknown.
 			o.Burden = core.UnknownGroupQuantity()
 			o.BurdenReduction = e.BurdenReduction
 		}
-		switch e.Participation {
-		case "unwelcome":
-			o.Unwanted++
-		case "unknown":
-			o.DelayedOutcome = "unresolved"
-		}
-		// A later self-report is evidence only when there is an observed event
-		// for it to be later than, and only when it actually is later.
-		if e.Benefit.Status == core.Observed && eventID != "" && e.LearnedAt > core.LogicalTime(firstFrame(person, r)) {
+		// A later self-report is evidence when there is an observed event for it
+		// to be later than. An UNKNOWN benefit is still a report and is retained
+		// as its own observation: absence of a value is not absence of a report.
+		if eventID != "" && e.LearnedAt > core.LogicalTime(firstFrame(person, r)) {
 			// Records are namespaced by arm: the same experience identity recurs
 			// in each arm's run and they are distinct observations.
 			recID := core.ID(fmt.Sprintf("report:%s:%s:%d:%s", r.Family, arm, r.Seed, e.ID))

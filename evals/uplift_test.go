@@ -753,3 +753,15 @@ func TestSourceLedgerGuardsAreAttributable(t *testing.T) {
 		assertErr(t, c.Validate(), "about an unresolved event")
 	})
 }
+
+// R4(b): a burden reduction valid on its source scale must not be rejected by
+// the outcome validator. core.OrdinaryExperience allows -100..100.
+func TestR4BurdenReductionKeepsItsSourceScale(t *testing.T) {
+	o := outcome(0, true)
+	o.BurdenReduction = core.ObservedGroupQuantity(5)
+	if e := o.Validate(); e != nil {
+		t.Fatal("a source-valid burden reduction of 5 was rejected:", e)
+	}
+	o.BurdenReduction = core.ObservedGroupQuantity(500)
+	assertErr(t, o.Validate(), "invalid burden reduction quantity")
+}
