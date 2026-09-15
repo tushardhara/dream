@@ -211,3 +211,31 @@ func TestInvitationAndSummaryNeedTheirOwnCurrentConsent(t *testing.T) {
 		}
 	}
 }
+
+func TestUnchosenPublicSummaryCannotReplaceCurrentSelection(t *testing.T) {
+	l := budget(t)
+	must(t, l.PutSummary("bob", "other-public-summary", "These are different public words.", []core.ID{"alice"}, nil, 4))
+	r := request(l, "alice", "substitution", 5, "joint", true)
+	r.Summaries[1].Sources = []core.ID{"other-public-summary"}
+	must(t, l.Register("alice", r))
+	out, err := l.Host(model.Listening{Provider: model.Fake{}}).Execute(context.Background(), r)
+	if err == nil || len(out.Shared) != 0 || len(l.records) != 0 {
+		t.Fatal("generic share grant replaced this person's chosen summary", out, err)
+	}
+}
+
+func TestForeignAuthorshipCannotBecomeOwnListeningAccount(t *testing.T) {
+	l := privateFixture(t, Account("alice", "bob"))
+	for scope, entries := range l.entries {
+		if scope.Owner == "alice" {
+			entries[0].Event.Meta.Source = "bob"
+			l.entries[scope] = entries
+		}
+	}
+	r := request(l, "alice", "foreign-authorship", 3, "private", false)
+	must(t, l.Register("alice", r))
+	out, err := l.Host(model.Listening{Provider: model.Fake{}}).Execute(context.Background(), r)
+	if err == nil || out.Own != nil || len(l.records) != 0 {
+		t.Fatal("foreign authorship treated as this participant's account", out, err)
+	}
+}
