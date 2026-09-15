@@ -352,3 +352,52 @@ func TestRepairProjectionNeedsReadAndDeriveNotArbitrarySinglePermission(t *testi
 		t.Fatal("positive read+derive rejected", e)
 	}
 }
+
+func TestRepairDuplicatePromiseCannotMoveTheFulfilmentDeadline(t *testing.T) {
+	for _, tc := range []struct {
+		name                       string
+		tight, duplicate, distinct bool
+		want                       string
+	}{
+		{name: "original deadline permits help"},
+		{name: "tight original deadline rejects late help", tight: true, want: "help does not match commitment"},
+		{name: "different commitment may have its own deadline", duplicate: true, distinct: true},
+		{name: "different deadline cannot extend original commitment", tight: true, duplicate: true, distinct: true, want: "help does not match commitment"},
+		{name: "undeclared duplicate cannot rescue late help", tight: true, duplicate: true, want: "duplicate promise"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			log := repairFixture()
+			if tc.tight {
+				due := LogicalTime(3)
+				log[0].Due = &due
+			}
+			if tc.duplicate {
+				second := log[0]
+				second.Meta.ID = "second-promise"
+				second.Meta.Rights.Resource = second.Meta.ID
+				second.OccurredAt = 2
+				second.EffectAt = 3
+				second.LearnedAt = 3
+				second.Meta.Valid.Start = 2
+				second.Meta.RecordedAt = time.Unix(2, 0).UTC()
+				due := LogicalTime(50)
+				second.Due = &due
+				if tc.distinct {
+					second.Commitment = "different-commitment"
+				}
+				if e := second.Validate(); e != nil {
+					t.Fatal("otherwise valid second promise", e)
+				}
+				log = append(append([]RepairRecord{log[0], second}, log[1:]...))
+			}
+			err := ValidateRepairLog(log)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal("positive control rejected", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("ValidateRepairLog()=%v, want %q", err, tc.want)
+			}
+		})
+	}
+}
