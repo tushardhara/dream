@@ -388,7 +388,7 @@ func TestRepairDuplicatePromiseCannotMoveTheFulfilmentDeadline(t *testing.T) {
 				if e := second.Validate(); e != nil {
 					t.Fatal("otherwise valid second promise", e)
 				}
-				log = append(append([]RepairRecord{log[0], second}, log[1:]...))
+				log = append([]RepairRecord{log[0], second}, log[1:]...)
 			}
 			err := ValidateRepairLog(log)
 			if tc.want == "" {
