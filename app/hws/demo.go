@@ -50,7 +50,7 @@ func SealDemo(a DemoArtifact) (DemoArtifact, error) {
 }
 func VerifyDemo(a DemoArtifact, expected string) (demo.World, error) {
 	sealed, e := SealDemo(a)
-	if e != nil || a.Hash != expected || a.Hash != sealed.Hash || (a.Version != demo.Version && a.Version != demo.RelationalVersion) || a.RealStudy != "not-run" || a.HumanValidity != "not-tested" || a.CrossModel != "not-tested" || a.ProviderMode != "deterministic_fake" || a.ProviderCalls != 0 || a.APICostMicros != 0 || a.Elapsed < 0 {
+	if e != nil || a.Hash != expected || a.Hash != sealed.Hash || (a.Version != demo.Version && a.Version != demo.RelationalVersion && a.Version != demo.ResponsiveVersion) || a.RealStudy != "not-run" || a.HumanValidity != "not-tested" || a.CrossModel != "not-tested" || a.ProviderMode != "deterministic_fake" || a.ProviderCalls != 0 || a.APICostMicros != 0 || a.Elapsed < 0 {
 		return demo.World{}, fmt.Errorf("invalid demo artifact or scientific claim")
 	}
 	replay, e := Replay(a.Replay, RecordedReplay)
@@ -82,7 +82,7 @@ func RunDemo(ctx context.Context, store DemoStore, o DemoOptions, clock Operatio
 	if store == nil || clock == nil || o.Namespace.Validate() != nil || o.Holder.Validate() != nil || o.MaxBoundaries < 1 || o.MaxBoundaries > 64 {
 		return DemoArtifact{}, fmt.Errorf("invalid bounded demo configuration")
 	}
-	sc, e := demo.RelationalScenario(o.People, o.Months, o.Seed)
+	sc, e := demo.ResponsiveScenario(o.People, o.Months, o.Seed)
 	if e != nil {
 		return DemoArtifact{}, e
 	}
@@ -156,15 +156,18 @@ func RunDemo(ctx context.Context, store DemoStore, o DemoOptions, clock Operatio
 }
 
 type DemoActorExport struct {
-	ActionState     *behavior.ActionActor     `json:"action_state,omitempty"`
-	ActionDecisions []behavior.ActionDecision `json:"action_decisions,omitempty"`
-	ActionOutcomes  []behavior.ActionOutcome  `json:"action_outcomes,omitempty"`
-	Version         string                    `json:"version"`
-	View            scenario.ActorView        `json:"initial_own_view"`
-	State           *behavior.Actor           `json:"derived_own_state,omitempty"`
-	Decisions       []behavior.Decision       `json:"own_decisions"`
-	Deliveries      []demo.Delivery           `json:"pending_own_deliveries"`
-	HumanValidity   string                    `json:"real_human_validity"`
+	OutcomeObservations []core.OutcomeObservation    `json:"outcome_observations,omitempty"`
+	RecipientDecisions  []behavior.RecipientDecision `json:"recipient_decisions,omitempty"`
+	ScopedState         *behavior.ScopedActor        `json:"scoped_state,omitempty"`
+	ActionState         *behavior.ActionActor        `json:"action_state,omitempty"`
+	ActionDecisions     []behavior.ActionDecision    `json:"action_decisions,omitempty"`
+	ActionOutcomes      []behavior.ActionOutcome     `json:"action_outcomes,omitempty"`
+	Version             string                       `json:"version"`
+	View                scenario.ActorView           `json:"initial_own_view"`
+	State               *behavior.Actor              `json:"derived_own_state,omitempty"`
+	Decisions           []behavior.Decision          `json:"own_decisions"`
+	Deliveries          []demo.Delivery              `json:"pending_own_deliveries"`
+	HumanValidity       string                       `json:"real_human_validity"`
 }
 
 // ExportDemoActor is an offline projection over an already authorized synthetic
@@ -206,6 +209,22 @@ func ExportDemoActor(a DemoArtifact, expected string, actor core.ID) (DemoActorE
 	for _, o := range world.ActionOutcomes {
 		if o.Outcome.Observer == actor {
 			out.ActionOutcomes = append(out.ActionOutcomes, o)
+		}
+	}
+	for _, o := range world.OutcomeObservations {
+		if o.Meta.Observer == actor {
+			out.OutcomeObservations = append(out.OutcomeObservations, o)
+		}
+	}
+	for _, d := range world.RecipientDecisions {
+		if d.Observation.Meta.Observer == actor {
+			out.RecipientDecisions = append(out.RecipientDecisions, d)
+		}
+	}
+	for _, a := range world.ScopedActors {
+		if a.Human.Drives.Actor == actor {
+			owned := a
+			out.ScopedState = &owned
 		}
 	}
 	if !found {

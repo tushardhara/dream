@@ -79,7 +79,7 @@ type Command struct {
 }
 
 func Capabilities() scenario.Engine {
-	return scenario.Engine{ScenarioVersion: 1, Capabilities: []core.ID{"genesis.v1", "resources.v1", "memory.v1", "relationships.v1", "relationships.v2", "latent.v1", "schedule.v1"}}
+	return scenario.Engine{ScenarioVersion: 1, Capabilities: []core.ID{"genesis.v1", "resources.v1", "memory.v1", "relationships.v1", "relationships.v2", "relationships.v3", "latent.v1", "schedule.v1"}}
 }
 
 // New validates the genesis event. The repository must persist it before this
