@@ -22,7 +22,8 @@ No vacuous generation/migration success is presented as validation.
 
 CI uses pull_request (not pull_request_target), read-only contents permission,
 no persisted checkout credentials, no secrets or paid calls, 15-minute timeout.
-The same make verify runs on PRs and pushes to backend-integration and main.
+The same make verify runs on PRs into and pushes to main (and to
+post-merge-integration while epic #76 is open).
 CI now starts a disposable PostgreSQL 18.6 container through make migration-check
 (#4): 2 CPUs, 512 MiB, 128 PIDs, tmpfs data, loopback-only random port, 120-second
 Go test timeout and bounded subprocess timeouts. No provider or soak is started.
