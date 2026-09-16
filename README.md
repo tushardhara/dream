@@ -206,7 +206,7 @@ The other offline consumers, with the `make verify` gate that exercises each:
 - `hws-ordinary` (#57, `make ordinary-check`): ordinary-enjoyment arms (none, generic, permitted context) over four families.
 - `hws-eval -uplift` (#58, `make uplift-check`): matched-arm comparison across all eight scenario families; every comparison is reported and no uplift is claimed.
 - `response-report` (#53) and `temporal-report` (#48) regenerate the committed
-  `docs/evaluation/recipient-response-v1.json` and `docs/evaluation/temporal-v1.json`; they are not yet under `make build` (#78).
+  `docs/evaluation/recipient-response-v1.json` and `docs/evaluation/temporal-v1.json`. `make report-check` rebuilds both and requires the committed JSON to reproduce byte-for-byte, so a consumer change that alters a report cannot merge while the document still quotes the old numbers.
 
 See [backend demo](docs/backend-demo.md) and [Contributing](CONTRIBUTING.md) for the
 full command table. None of these runs a live provider, real-person data, a UI or a
