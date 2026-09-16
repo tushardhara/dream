@@ -285,3 +285,54 @@ func TestFixtureFamiliesHaveDifferentTemplates(t *testing.T) {
 		seen[h] = true
 	}
 }
+
+// Before #84 the frozen_split_integrity row was a constant inside the Falsifiers
+// literal. It read "pass" whatever the run computed, so a reader of
+// bin/evaluation-report.json saw a measured-looking verdict that was a string,
+// and #16's "deliberately broken implementations fail corresponding engineering
+// checks" did not hold for this row.
+//
+// The row is now recomputed from the supplied dataset. This test drives that
+// computation directly, because the surrounding behaviour hides it: Run refuses
+// a leaking dataset before generation, and cmd/hws-eval prints nothing when Run
+// returns an error, so no emitted report can ever carry a failing row. That is
+// correct fail-closed behaviour and it is also why the row could stay a literal
+// unnoticed.
+func TestFrozenSplitIntegrityIsComputedNotAsserted(t *testing.T) {
+	d, c := fixture(t)
+	if f := splitIntegrity(d, c); f.Status != Pass {
+		t.Fatal("clean fixture reported", f.Status, f.Evidence)
+	}
+
+	for name, mutate := range map[string]func(*Dataset){
+		"family": func(d *Dataset) { d.Cases[4].Family = d.Cases[0].Family },
+		"person": func(d *Dataset) { d.Cases[4].People = append(d.Cases[4].People, d.Cases[0].People[0]) },
+		"group":  func(d *Dataset) { d.Cases[4].Groups = d.Cases[0].Groups },
+	} {
+		t.Run(name+"_crosses_split", func(t *testing.T) {
+			leaky, cfg := fixture(t)
+			mutate(&leaky)
+			leaky, _ = SealDataset(leaky)
+			cfg.DatasetHash = leaky.Hash
+			f := splitIntegrity(leaky, cfg)
+			if f.Status != Fail {
+				t.Fatal("a dataset whose", name, "crosses splits reported", f.Status)
+			}
+			if !strings.Contains(f.Evidence, "splits") {
+				t.Fatal("failure does not name the crossing:", f.Evidence)
+			}
+			// Run must also refuse it, so the command still fails.
+			if _, e := Run(context.Background(), leaky, cfg, experiment.Generator{}, fixtureNow); e == nil {
+				t.Fatal("Run accepted a dataset whose splits leak")
+			}
+		})
+	}
+
+	t.Run("configured hash must match the supplied dataset", func(t *testing.T) {
+		other, cfg := fixture(t)
+		cfg.DatasetHash = "0000000000000000000000000000000000000000000000000000000000000000"
+		if f := splitIntegrity(other, cfg); f.Status != Fail {
+			t.Fatal("a mismatched dataset hash reported", f.Status)
+		}
+	})
+}
