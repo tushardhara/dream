@@ -1,9 +1,9 @@
 name: Verify
 on:
   pull_request:
-    branches: [backend-integration, main]
+    branches: [backend-integration, human-context-integration, main]
   push:
-    branches: [backend-integration, main]
+    branches: [backend-integration, human-context-integration, main]
 permissions:
   contents: read
 concurrency:

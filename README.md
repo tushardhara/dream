@@ -186,3 +186,14 @@ See [backend demo](docs/backend-demo.md), [separately gated 30-real-day study
 protocol](docs/study-protocol.md) and [backend console handoff](docs/research-console-contract.md).
 No real 30-day study, live/paid provider, deployment, UI or human-validity result is
 claimed by this command.
+
+### Offline helper experiment (epic #49, ticket #50)
+
+`go run ./cmd/hws-assistance -seed 11` runs a bounded two-person/eight-turn synthetic
+example with no-assistant, explicit-preference, single-perspective and
+multi-perspective arms. Humans continue choosing actions in every arm. Helper
+delivery counts are mechanical diagnostics, **not benefit or relationship metrics**.
+The helper uses separately permitted evidence and fixed deterministic templates;
+this does not demonstrate language understanding or real-human validity.
+See [ADR0021](docs/adr/0021-helper-contracts.md) for scope, replay, privacy and the
+independent non-simulator host. Local builds/tests use the existing disk guard.

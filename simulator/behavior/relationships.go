@@ -12,7 +12,7 @@ import (
 // invented. For a focused interaction, it also supplies appraisal history and
 // relationship cues. Multi-recipient callers select focus explicitly.
 func ApplyRelationship(s ActionSituation, r core.RelationshipContext, actor core.ID, at core.LogicalTime, focus bool) (ActionSituation, error) {
-	if r.Validate(actor, r.Other) != nil || at < r.Valid.Start || r.Valid.End != nil && at >= *r.Valid.End {
+	if r.Version != 1 || r.Validate(actor, r.Other) != nil || at < r.Valid.Start || r.Valid.End != nil && at >= *r.Valid.End {
 		return ActionSituation{}, fmt.Errorf("invalid or stale relationship perspective")
 	}
 	sources := map[core.ID]bool{}

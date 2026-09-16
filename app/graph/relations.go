@@ -13,18 +13,22 @@ import (
 
 const relationPrefix = "relation.v1:"
 const relationV2Prefix = "relation.v2:"
+const relationV3Prefix = "relation.v3:"
 
 func relationCodec(v RelationState) string {
+	if v.Version == 3 {
+		return relationV3Prefix
+	}
 	if v.Version == 2 {
 		return relationV2Prefix
 	}
 	return relationPrefix
 }
 func isRelation(text string) bool {
-	return strings.HasPrefix(text, relationPrefix) || strings.HasPrefix(text, relationV2Prefix)
+	return strings.HasPrefix(text, relationPrefix) || strings.HasPrefix(text, relationV2Prefix) || strings.HasPrefix(text, relationV3Prefix)
 }
 func relationJSON(text string) string {
-	return strings.TrimPrefix(strings.TrimPrefix(text, relationPrefix), relationV2Prefix)
+	return strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(text, relationPrefix), relationV2Prefix), relationV3Prefix)
 }
 
 type RelationshipDimension struct {
@@ -75,10 +79,13 @@ func relationIDs(ids []core.ID, max int) bool {
 	return true
 }
 func (v RelationState) Validate(observer core.ID) error {
-	if (v.Version != 1 && v.Version != 2) || v.Version == 1 && v.Context != nil || v.Version == 2 && v.Context == nil || v.ID.Validate() != nil || observer.Validate() != nil || !relationIDs(v.Types, 8) || len(v.Types) == 0 {
+	if (v.Version != 1 && v.Version != 2 && v.Version != 3) || v.Version == 1 && v.Context != nil || v.Version >= 2 && v.Context == nil || v.ID.Validate() != nil || observer.Validate() != nil || !relationIDs(v.Types, 8) || len(v.Types) == 0 {
 		return fmt.Errorf("invalid relation version/id/types")
 	}
 	if v.Context != nil {
+		if v.Version == 2 && v.Context.Version != 1 || v.Version == 3 && v.Context.Version != 2 {
+			return fmt.Errorf("relationship context version mismatch")
+		}
 		if v.Kind != "edge" || v.From == nil || v.To == nil || v.From.Principal != observer || v.Context.Validate(observer, v.To.Principal) != nil {
 			return fmt.Errorf("invalid directional relation context")
 		}
@@ -237,6 +244,9 @@ func DecodeRelation(r MemoryRecord) (RelationState, error) {
 	if text != r.Content.Text {
 		return v, fmt.Errorf("noncanonical relation")
 	}
+	if v.Version == 3 && v.Context.Account != r.Event.Meta.ID {
+		return v, fmt.Errorf("domain account envelope mismatch")
+	}
 	if !sameSubject(relationSubject(v), r.Event.Subject) || v.Context != nil && !sameRelationInterval(v.Context.Valid, r.Event.Meta.Valid) {
 		return v, fmt.Errorf("relation envelope subject mismatch")
 	}
@@ -303,6 +313,9 @@ func (s RelationService) Put(ctx context.Context, scope MemoryScope, key core.ID
 		prior, err := DecodeRelation(e.record())
 		if err != nil {
 			return AppendResult{}, err
+		}
+		if prior.Version != v.Version && (prior.Version == 3 || v.Version == 3) || v.Version == 3 && (prior.Context.Domain != v.Context.Domain || prior.Context.RoleContext != v.Context.RoleContext) {
+			return AppendResult{}, fmt.Errorf("correction changes domain identity")
 		}
 		if prior.ID != v.ID || prior.Kind != v.Kind || (v.Kind == "edge" && (!sameSubject(*prior.From, *v.From) || !sameSubject(*prior.To, *v.To))) {
 			return AppendResult{}, fmt.Errorf("relation correction changes identity")
@@ -382,6 +395,11 @@ func CompareRelation(before, after RelationProjection) (RelationDelta, error) {
 	if before.Observer != after.Observer || a.ID != b.ID || a.Kind != b.Kind || before.Observer != before.Record.Event.Meta.Observer || after.Observer != after.Record.Event.Meta.Observer {
 		return RelationDelta{}, fmt.Errorf("cannot compare different perspectives")
 	}
+	if a.Version == 3 || b.Version == 3 {
+		if a.Version != 3 || b.Version != 3 || a.Context == nil || b.Context == nil || a.Context.Domain != b.Context.Domain || a.Context.RoleContext != b.Context.RoleContext {
+			return RelationDelta{}, fmt.Errorf("cannot compare different relationship domains")
+		}
+	}
 	av, err := DecodeRelation(before.Record)
 	if err != nil {
 		return RelationDelta{}, err
@@ -430,6 +448,9 @@ func (s SafeContext) Relations() ([]SafeRelation, error) {
 		d.DisallowUnknownFields()
 		if err := d.Decode(&state); err != nil {
 			return nil, err
+		}
+		if state.Version == 3 && (state.Context == nil || state.Context.Account != item.Source) {
+			return nil, fmt.Errorf("safe domain account mismatch")
 		}
 		encoded, err := EncodeRelation(state, item.Observer)
 		if err != nil || encoded != item.Text || !sameSubject(relationSubject(state), item.Subject) || state.Context != nil && !sameRelationInterval(state.Context.Valid, item.Valid) {
