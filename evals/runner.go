@@ -302,6 +302,44 @@ func splitIntegrity(d Dataset, c Config) Finding {
 			}
 		}
 	}
+	// The chronological boundary, recomputed on the same terms as the identity
+	// crossings above. The evidence string has always said "time", so a row that
+	// measured only the identity axes was claiming more than it had checked.
+	sources := map[core.ID]Source{}
+	for _, s := range d.Sources {
+		sources[s.ID] = s
+	}
+	present := map[Split]bool{}
+	first := map[Split]core.LogicalTime{}
+	last := map[Split]core.LogicalTime{}
+	for _, row := range d.Cases {
+		if !present[row.Split] || row.Input.Initial.State.At < first[row.Split] {
+			first[row.Split] = row.Input.Initial.State.At
+		}
+		present[row.Split] = true
+		if row.Input.AsOf > last[row.Split] {
+			last[row.Split] = row.Input.AsOf
+		}
+		for _, l := range row.Labels {
+			// A label's horizon extends the split past its own AsOf, and an
+			// observed label is not known until its source was learned. Both
+			// widen the window a later split must start after.
+			if row.Input.AsOf+l.Horizon > last[row.Split] {
+				last[row.Split] = row.Input.AsOf + l.Horizon
+			}
+			if l.Status == Observed {
+				if src, ok := sources[l.Source]; ok && src.LearnedAt > last[row.Split] {
+					last[row.Split] = src.LearnedAt
+				}
+			}
+		}
+	}
+	for _, ordered := range [][2]Split{{Train, Calibration}, {Calibration, Holdout}, {Train, Holdout}} {
+		earlier, later := ordered[0], ordered[1]
+		if present[earlier] && present[later] && last[earlier] >= first[later] {
+			return Finding{"frozen_split_integrity", Fail, fmt.Sprintf("the %s split runs to %d, at or past the start of the %s split at %d", earlier, last[earlier], later, first[later])}
+		}
+	}
 	return Finding{"frozen_split_integrity", Pass, "dataset hash and family/person/group/time validation before generation"}
 }
 

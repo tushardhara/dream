@@ -3,6 +3,7 @@ package evals
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -327,6 +328,57 @@ func TestFrozenSplitIntegrityIsComputedNotAsserted(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("time_crosses_split", func(t *testing.T) {
+		// The chronological axis, which the identity mutations above cannot
+		// reach: every family, person and group stays in exactly one split, and
+		// only the calibration split's clock is moved back behind the end of
+		// train. Before this case splitIntegrity measured no time at all while
+		// its Pass evidence claimed it did, so a regression in Dataset.Validate's
+		// separate time-leakage check would have left the row reading "pass".
+		leaky, cfg := fixture(t)
+		for i := range leaky.Cases {
+			if leaky.Cases[i].Split == Calibration {
+				leaky.Cases[i].Input.Initial.State.At = leaky.Cases[0].Input.Initial.State.At
+				break
+			}
+		}
+		leaky, _ = SealDataset(leaky)
+		cfg.DatasetHash = leaky.Hash
+
+		f := splitIntegrity(leaky, cfg)
+		if f.Status != Fail {
+			t.Fatal("a dataset whose calibration split starts before train ends reported", f.Status, f.Evidence)
+		}
+		if !strings.Contains(f.Evidence, "at or past the start of") {
+			t.Fatal("failure does not name the chronological boundary:", f.Evidence)
+		}
+		if _, e := Run(context.Background(), leaky, cfg, experiment.Generator{}, fixtureNow); e == nil {
+			t.Fatal("Run accepted a dataset whose splits overlap in time")
+		}
+
+		// The identity axes are untouched, so this case would pass every check
+		// splitIntegrity made before it gained the chronological boundary.
+		clean, _ := fixture(t)
+		for i := range clean.Cases {
+			if clean.Cases[i].Split == Calibration {
+				clean.Cases[i].Input.Initial.State.At = clean.Cases[0].Input.Initial.State.At
+				break
+			}
+		}
+		identities := map[string]Split{}
+		for _, row := range clean.Cases {
+			for axis, keys := range [][]core.ID{{row.Family}, row.People, row.Groups} {
+				for _, id := range keys {
+					key := fmt.Sprintf("%d/%s", axis, id)
+					if previous, ok := identities[key]; ok && previous != row.Split {
+						t.Fatal("the time mutation also crossed an identity split at", key, "; this case no longer isolates the chronological axis")
+					}
+					identities[key] = row.Split
+				}
+			}
+		}
+	})
 
 	t.Run("configured hash must match the supplied dataset", func(t *testing.T) {
 		other, cfg := fixture(t)
