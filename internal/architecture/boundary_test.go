@@ -22,8 +22,26 @@ func TestIllegalTaggedImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(violations) != 1 || !strings.Contains(violations[0], "simulator") {
-		t.Fatalf("expected tagged illegal import, got %v", violations)
+	// One fixture per protected package. Each is named so a regression says which
+	// rule stopped being enforced rather than only that the count moved.
+	want := map[string]string{
+		"testdata/illegal/core/bad.go":                 "simulator",
+		"testdata/illegal/examples/coreclient/bad.go":  "simulator",
+		"testdata/illegal/examples/agentclient/bad.go": "app/hws",
+	}
+	if len(violations) != len(want) {
+		t.Fatalf("expected %d tagged illegal imports, got %v", len(want), violations)
+	}
+	for file, target := range want {
+		found := false
+		for _, v := range violations {
+			if strings.Contains(v, file) && strings.Contains(v, target) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s importing %s was not reported; got %v", file, target, violations)
+		}
 	}
 }
 
@@ -69,6 +87,23 @@ func TestRules(t *testing.T) {
 		{"examples/graphclient", "github.com/tushardhara/dream/app/graph", false},
 		{"examples/graphclient", "github.com/tushardhara/dream/core", false},
 		{"adapters", "github.com/tushardhara/dream/core", false},
+		// #82: both example clients held their contract by accident until now,
+		// falling through to the default case which permits anything.
+		{"examples/coreclient", "github.com/tushardhara/dream/core", false},
+		{"examples/coreclient", "fmt", false},
+		{"examples/coreclient", "github.com/tushardhara/dream/simulator", true},
+		{"examples/coreclient", "github.com/tushardhara/dream/app/graph", true},
+		{"examples/coreclient", "github.com/tushardhara/dream/app/hws", true},
+		{"examples/coreclient", "github.com/tushardhara/dream/adapters/postgres", true},
+		{"examples/coreclient", "google.golang.org/grpc", true},
+		{"examples/agentclient", "github.com/tushardhara/dream/adapters/transport/gen/dream/v1", false},
+		{"examples/agentclient", "google.golang.org/grpc", false},
+		{"examples/agentclient", "google.golang.org/protobuf/proto", false},
+		{"examples/agentclient", "context", false},
+		{"examples/agentclient", "github.com/tushardhara/dream/core", true},
+		{"examples/agentclient", "github.com/tushardhara/dream/simulator", true},
+		{"examples/agentclient", "github.com/tushardhara/dream/app/hws", true},
+		{"examples/agentclient", "github.com/provider/sdk", true},
 	} {
 		t.Run(tc.from+"/"+tc.target, func(t *testing.T) {
 			if got := forbidden(tc.from, tc.target); got != tc.want {

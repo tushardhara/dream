@@ -146,3 +146,58 @@ func TestOutcomeMissingAndCorrectionIdentity(t *testing.T) {
 		t.Fatal("future version")
 	}
 }
+
+// #81, part 3: core/outcome_observation.go carries 24 guard messages and none is
+// quoted by any test. These decide whether a later account is treated as
+// somebody's own report, somebody else's report about them, or an absence — the
+// distinction the whole delayed-outcome evaluation rests on, since #58's
+// comparisons are only as honest as the refusal to invent an observation.
+//
+// The existing tests here assert Validate() != nil, so a mutation tripping a
+// neighbouring guard passes them unchanged. The positive control runs first.
+func TestOutcomeObservationGuardReachability(t *testing.T) {
+	base := outcomeObservation("o1", "alice", "bob", 5, "supportive")
+	if e := base.Validate(); e != nil {
+		t.Fatal("positive control rejected; every case below would be unattributable", e)
+	}
+	for _, c := range []struct {
+		name, want string
+		change     func(*OutcomeObservation)
+	}{
+		{"learned_before_it_happened", "invalid outcome observation", func(o *OutcomeObservation) { o.LearnedAt = 1 }},
+		{"participant_is_also_the_other", "invalid outcome observation", func(o *OutcomeObservation) { o.Other = o.Participant }},
+		{"reply_is_the_action_it_replies_to", "invalid outcome links", func(o *OutcomeObservation) { o.Reply = o.Action }},
+		{"supersedes_itself", "invalid outcome links", func(o *OutcomeObservation) { o.Supersedes = o.Meta.ID }},
+		{"unknown_position", "invalid outcome position", func(o *OutcomeObservation) { o.Position = "bystander" }},
+		{"unknown_phase", "invalid outcome kind/phase", func(o *OutcomeObservation) { o.Phase = "eventually" }},
+		{"unknown_kind", "invalid outcome kind/phase", func(o *OutcomeObservation) { o.Kind = "predicted" }},
+		// The product-thesis guards: one person's account cannot be authored by
+		// another, and a report about someone must name who it came from.
+		{"self_report_authored_by_another", "foreign self-report", func(o *OutcomeObservation) { o.Participant = "carol" }},
+		{"reported_without_a_reply_to_attribute_it", "unattributed reported outcome", func(o *OutcomeObservation) {
+			o.Basis = "reported"
+			o.Meta.Observer = o.Other
+			o.Meta.Source = o.Participant
+			o.Reply = ""
+		}},
+		{"unknown_basis", "invalid outcome basis", func(o *OutcomeObservation) { o.Basis = "inferred" }},
+		{"unobserved_claiming_observation", "missing report asserts observation", func(o *OutcomeObservation) { o.Basis = "unobserved" }},
+		// An absence must stay an absence.
+		{"observed_without_evidence", "observed outcome needs evidence", func(o *OutcomeObservation) { o.Meta.Supporting = nil }},
+		{"observed_without_dimensions", "observed dimensions missing", func(o *OutcomeObservation) { o.Benefit = nil; o.Burden = nil }},
+		{"unresolved_still_asserting_benefit", "unresolved outcome asserts benefit", func(o *OutcomeObservation) { o.Appraisal = "unresolved" }},
+		{"unknown_appraisal", "invalid appraisal", func(o *OutcomeObservation) { o.Appraisal = "lovely" }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			o := outcomeObservation("o1", "alice", "bob", 5, "supportive")
+			c.change(&o)
+			e := o.Validate()
+			if e == nil {
+				t.Fatal("mutated outcome accepted")
+			}
+			if e.Error() != c.want {
+				t.Fatal("wrong guard reached: want "+c.want+", got", e)
+			}
+		})
+	}
+}

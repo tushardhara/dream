@@ -349,3 +349,93 @@ func TestWaitHasNoAvailabilityOrContactEffect(t *testing.T) {
 		}
 	}
 }
+
+// Nine disclosure modes are defined, but the 27-action registry pins only six:
+// Reveal/full, PartiallyReveal/partial, Hide/silence, Lie/lie, Joke/joke and
+// ChangeTopic/topic_change. Softened, deflection and omission carry no action of
+// their own; they reach the action layer only as a free mode on Say, Answer or
+// Support (actions.go). TestEveryActionValidationEligibilityAndChoiceContract
+// therefore never exercises deflection or omission, and ADR 0018's claim of
+// "nine-mode tests" overstates action-layer coverage (#80).
+//
+// This pins the three free modes on each host action: the offer validates, it
+// needs a matching grant to be eligible, the grant's sources are the only
+// provenance carried, and the mode cannot widen who may receive the disclosure.
+func TestFreeDisclosureModesReachTheActionLayer(t *testing.T) {
+	for _, mode := range []DisclosureMode{Softened, Deflection, Omission} {
+		for _, kind := range []Kind{Say, Answer, Support} {
+			t.Run(string(mode)+"/"+string(kind), func(t *testing.T) {
+				a, s := actionFixture(t)
+				o := ActionOffer{Kind: kind, Recipient: "b", Duration: 1, Evidence: []core.ID{"e"}, Mode: mode}
+				if e := o.Validate(); e != nil {
+					t.Fatal("free mode rejected on its host action:", e)
+				}
+				s.Offers = []ActionOffer{o}
+
+				// Without a grant the moded offer is not eligible: the only
+				// candidate is WAIT, so a mode cannot disclose by itself.
+				if _, d, e := ChooseAction(a, s, 1, math.MaxUint64); e != nil {
+					t.Fatal(e)
+				} else {
+					for _, c := range d.Candidates {
+						if c.Offer.Mode != "" {
+							t.Fatal("moded candidate offered with no grant:", c.Offer.Kind, c.Offer.Mode)
+						}
+					}
+				}
+
+				// A grant for another recipient must not license this one.
+				s.Disclosure = &DisclosureGrant{Recipient: "c", Mode: mode, Sources: []core.ID{"e"}}
+				if _, d, e := ChooseAction(a, s, 1, math.MaxUint64); e != nil {
+					t.Fatal(e)
+				} else {
+					for _, c := range d.Candidates {
+						if c.Offer.Mode != "" {
+							t.Fatal("grant for another recipient widened disclosure to:", c.Offer.Recipient)
+						}
+					}
+				}
+
+				// A grant naming a different mode must not license this one.
+				other := Full
+				if mode == Full {
+					other = Partial
+				}
+				s.Disclosure = &DisclosureGrant{Recipient: "b", Mode: other, Sources: []core.ID{"e"}}
+				if _, d, e := ChooseAction(a, s, 1, math.MaxUint64); e != nil {
+					t.Fatal(e)
+				} else {
+					for _, c := range d.Candidates {
+						if c.Offer.Mode == mode {
+							t.Fatal("grant for mode", other, "licensed mode", mode)
+						}
+					}
+				}
+
+				// With a matching grant the offer becomes a candidate and carries
+				// the grant's sources as its provenance, nothing wider.
+				s.Disclosure = &DisclosureGrant{Recipient: "b", Mode: mode, Sources: []core.ID{"e"}}
+				_, d, e := ChooseAction(a, s, 1, math.MaxUint64)
+				if e != nil {
+					t.Fatal(e)
+				}
+				found := false
+				for _, c := range d.Candidates {
+					if c.Offer.Mode != mode {
+						continue
+					}
+					found = true
+					if c.Offer.Recipient != "b" {
+						t.Fatal("moded candidate addressed to", c.Offer.Recipient)
+					}
+					if !reflect.DeepEqual(c.Offer.Evidence, []core.ID{"e"}) {
+						t.Fatal("provenance not retained:", c.Offer.Evidence)
+					}
+				}
+				if !found {
+					t.Fatal("matching grant did not make the moded offer eligible")
+				}
+			})
+		}
+	}
+}

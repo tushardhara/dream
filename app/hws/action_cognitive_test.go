@@ -373,3 +373,93 @@ func TestOptionalActionsWithoutRecipient(t *testing.T) {
 		})
 	}
 }
+
+// A moded disclosure offer must never be delivered without policy-validated
+// fictional output. Two different mechanisms enforce that, and #80 conflated
+// them: it expected `Actions.Disclosure = nil` beside a moded offer to produce
+// "missing policy-validated fictional output". It does not. Without a matching
+// grant the offer is dropped before candidates are formed, so the only
+// candidate is WAIT and the transition succeeds having delivered nothing.
+//
+// The named guard in action_cognitive.go is reached only when the grant is
+// present and matches but the typed output is empty. Both paths fail closed;
+// this pins each to the mechanism that actually enforces it, so neither can be
+// removed while the other keeps the suite green.
+func TestModedDisclosureIsNeverDeliveredWithoutValidatedOutput(t *testing.T) {
+	grant := func(f *CognitiveFrame, source core.ID) {
+		f.Actions.Disclosure = &behavior.DisclosureGrant{Recipient: "b", Mode: behavior.Full, Sources: []core.ID{source}}
+		f.Disclosure = "TYPED_OWN_FICTION"
+		v := behavior.ContextValue{Value: .8, Confidence: 1, Evidence: source}
+		f.Actions.Contexts = []behavior.DisclosureContext{{Observer: "a", Recipient: "b", Trust: v, ExpectedReaction: v}}
+	}
+	run := func(t *testing.T, mutate func(*CognitiveFrame)) (rt.Output, error) {
+		t.Helper()
+		s := cognitiveWorld(t)
+		i := s.Queue[0]
+		f := actionFrame(i)
+		grant(&f, i.ID)
+		mutate(&f)
+		f.Actions.Offers = []behavior.ActionOffer{{Kind: behavior.Reveal, Recipient: "b", Duration: 2, Mode: behavior.Full, Evidence: []core.ID{i.ID}}}
+		h := CognitiveHandler{Policy: behavior.ActionPolicy, Source: cognitiveFunc(func(rt.Input) (CognitiveFrame, error) { return f, nil })}
+		return h.Transition(s, i, rt.Clock{At: i.At}, selectingRandom(t, i.Actor))
+	}
+
+	// Mechanism one: no matching grant, so the moded offer never becomes a
+	// candidate. The person waits rather than disclosing.
+	for _, c := range []struct {
+		name   string
+		mutate func(*CognitiveFrame)
+	}{
+		{"absent_grant", func(f *CognitiveFrame) { f.Actions.Disclosure = nil }},
+		{"grant_names_another_mode", func(f *CognitiveFrame) { f.Actions.Disclosure.Mode = behavior.Partial }},
+		{"grant_names_another_recipient", func(f *CognitiveFrame) { f.Actions.Disclosure.Recipient = "c" }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out, e := run(t, c.mutate)
+			if e != nil {
+				t.Fatal("expected a WAIT, not a rejection", e)
+			}
+			cp, e := DecodeActionCheckpoint(out.Data)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if got := cp.Last.Candidates[cp.Last.Selected].Offer; got.Kind != behavior.Wait {
+				t.Fatal("moded offer survived without a matching grant:", got.Kind, got.Mode)
+			}
+			for _, cand := range cp.Last.Candidates {
+				if cand.Offer.Mode != "" {
+					t.Fatal("a moded candidate was offered without a matching grant:", cand.Offer.Kind, cand.Offer.Mode)
+				}
+			}
+		})
+	}
+
+	// Mechanism two: the grant matches, so the offer is eligible, but the policy
+	// produced no fictional output. This is the guard the ticket names, and the
+	// only configuration that reaches it.
+	t.Run("validated_grant_without_fictional_output", func(t *testing.T) {
+		const want = "missing policy-validated fictional output"
+		_, e := run(t, func(f *CognitiveFrame) { f.Disclosure = "" })
+		if e == nil {
+			t.Fatal("moded disclosure delivered with no fictional output")
+		}
+		if e.Error() != want {
+			t.Fatal("wrong guard reached: want "+want+", got", e)
+		}
+	})
+
+	// Positive control on the same construction: fully validated, it is delivered.
+	t.Run("validated_output_is_delivered", func(t *testing.T) {
+		out, e := run(t, func(*CognitiveFrame) {})
+		if e != nil {
+			t.Fatal("validated moded disclosure refused", e)
+		}
+		cp, e := DecodeActionCheckpoint(out.Data)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if got := cp.Last.Candidates[cp.Last.Selected].Offer; got.Kind != behavior.Reveal || got.Mode != behavior.Full {
+			t.Fatal("validated moded disclosure was not the selected action:", got.Kind, got.Mode)
+		}
+	})
+}

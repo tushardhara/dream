@@ -275,9 +275,96 @@ func interval(values map[int][]float64, c Config) *Interval {
 	sort.Float64s(samples)
 	return &Interval{Low: samples[int(.025*float64(len(samples)-1))], High: samples[int(.975*float64(len(samples)-1))], Units: len(keys), Method: "paired-connected-component-bootstrap-95.v1"}
 }
+
+// splitIntegrity recomputes the frozen-split property from the dataset actually
+// supplied, independently of Dataset.Validate. Before #84 this row was a
+// constant inside the Falsifiers literal: it read "pass" whatever the run
+// computed, so removing the family/person/group crossing check would not have
+// changed it, and a reader of bin/evaluation-report.json saw a measured-looking
+// verdict that was a string. Recomputing here rather than trusting the preflight
+// means the row stays derived even if that preflight stops being sound.
+//
+// The Pass evidence string is unchanged, so an unmodified run still produces a
+// byte-identical report.
+func splitIntegrity(d Dataset, c Config) Finding {
+	// Recomputed from the content, not read off the envelope. Comparing
+	// c.DatasetHash to d.Hash alone compares two claims to each other: content
+	// mutated in place with both fields left untouched satisfies it. That is the
+	// same shape of vacuous pass this function exists to remove, one field over.
+	unsealed := d
+	unsealed.Hash = ""
+	actual, err := Digest(unsealed)
+	if err != nil {
+		return Finding{"frozen_split_integrity", Fail, "the supplied dataset could not be digested: " + err.Error()}
+	}
+	if d.Hash != actual {
+		return Finding{"frozen_split_integrity", Fail, "the supplied dataset does not hash to the hash it carries"}
+	}
+	if c.DatasetHash != d.Hash {
+		return Finding{"frozen_split_integrity", Fail, "configured dataset hash does not match the supplied dataset"}
+	}
+	assigned := map[string]Split{}
+	for _, row := range d.Cases {
+		for i, keys := range [][]core.ID{{row.Family}, row.People, row.Groups} {
+			for _, id := range keys {
+				key := fmt.Sprintf("%d/%s", i, id)
+				if previous, ok := assigned[key]; ok && previous != row.Split {
+					return Finding{"frozen_split_integrity", Fail, fmt.Sprintf("%s appears in both the %s and %s splits", id, previous, row.Split)}
+				}
+				assigned[key] = row.Split
+			}
+		}
+	}
+	// The chronological boundary, recomputed on the same terms as the identity
+	// crossings above. The evidence string has always said "time", so a row that
+	// measured only the identity axes was claiming more than it had checked.
+	sources := map[core.ID]Source{}
+	for _, s := range d.Sources {
+		sources[s.ID] = s
+	}
+	present := map[Split]bool{}
+	first := map[Split]core.LogicalTime{}
+	last := map[Split]core.LogicalTime{}
+	for _, row := range d.Cases {
+		if !present[row.Split] || row.Input.Initial.State.At < first[row.Split] {
+			first[row.Split] = row.Input.Initial.State.At
+		}
+		present[row.Split] = true
+		if row.Input.AsOf > last[row.Split] {
+			last[row.Split] = row.Input.AsOf
+		}
+		for _, l := range row.Labels {
+			// A label's horizon extends the split past its own AsOf, and an
+			// observed label is not known until its source was learned. Both
+			// widen the window a later split must start after.
+			if row.Input.AsOf+l.Horizon > last[row.Split] {
+				last[row.Split] = row.Input.AsOf + l.Horizon
+			}
+			if l.Status == Observed {
+				if src, ok := sources[l.Source]; ok && src.LearnedAt > last[row.Split] {
+					last[row.Split] = src.LearnedAt
+				}
+			}
+		}
+	}
+	for _, ordered := range [][2]Split{{Train, Calibration}, {Calibration, Holdout}, {Train, Holdout}} {
+		earlier, later := ordered[0], ordered[1]
+		if present[earlier] && present[later] && last[earlier] >= first[later] {
+			return Finding{"frozen_split_integrity", Fail, fmt.Sprintf("the %s split runs to %d, at or past the start of the %s split at %d", earlier, last[earlier], later, first[later])}
+		}
+	}
+	return Finding{"frozen_split_integrity", Pass, "dataset hash and family/person/group/time validation before generation"}
+}
+
 func Run(ctx context.Context, d Dataset, c Config, g BatchGenerator, now time.Time) (Report, error) {
 	if d.Validate(now) != nil || c.Validate() != nil || c.DatasetHash != d.Hash || g == nil {
 		return Report{}, fmt.Errorf("evaluation preflight failed")
+	}
+	// Recomputed rather than asserted, and checked before any generation runs, so
+	// a dataset whose splits leak cannot produce a report claiming they do not.
+	split := splitIntegrity(d, c)
+	if split.Status != Pass {
+		return Report{}, fmt.Errorf("frozen split integrity failed: %s", split.Evidence)
 	}
 	// Detach all input memory before giving it to the generator, including fakes.
 	requests := []experiment.Request{}
@@ -436,7 +523,7 @@ func Run(ctx context.Context, d Dataset, c Config, g BatchGenerator, now time.Ti
 			}
 		}
 	}
-	r.Falsifiers = []Finding{{"frozen_split_integrity", Pass, "dataset hash and family/person/group/time validation before generation"}, {"calibration_readiness", Inconclusive, "per-dimension/horizon synthetic scores; no owner-approved adequacy threshold"}, {"behavioral_ablations", Inconclusive, "five preregistered variants; differences are descriptive, not a friendliness/conflict objective"}, {"partial_observation_roll_forward", Inconclusive, "conditional on no unseen events and fixed affordances; abstentions counted"}, {"complete_hws_source_falsifiers", NotTested, "legacy evaluation-report.v1 has seven format-scoped findings; the complete supplied source registry is reported separately by hws-alignment-report.v1"}, {"cross_model_transfer", NotTested, "only offline reference generator; no independent model data"}, {"real_human_validity", NotTested, "synthetic formats only; no authorized human dataset"}}
+	r.Falsifiers = []Finding{split, {"calibration_readiness", Inconclusive, "per-dimension/horizon synthetic scores; no owner-approved adequacy threshold"}, {"behavioral_ablations", Inconclusive, "five preregistered variants; differences are descriptive, not a friendliness/conflict objective"}, {"partial_observation_roll_forward", Inconclusive, "conditional on no unseen events and fixed affordances; abstentions counted"}, {"complete_hws_source_falsifiers", NotTested, "legacy evaluation-report.v1 has seven format-scoped findings; the complete supplied source registry is reported separately by hws-alignment-report.v1"}, {"cross_model_transfer", NotTested, "only offline reference generator; no independent model data"}, {"real_human_validity", NotTested, "synthetic formats only; no authorized human dataset"}}
 	r.Limitations = []string{"Synthetic action annotations are engineering fixtures, not human or latent truth.", "Confidence intervals resample connected family/person/group components, not seeds; tiny fixtures do not establish adequacy.", "No production policy is changed; owner-approved promotion is a separate signed event.", "No paid provider, private dataset or live study was run."}
 	return SealReport(r)
 }

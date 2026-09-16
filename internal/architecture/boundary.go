@@ -32,6 +32,10 @@ func forbidden(from, target string) bool {
 		return strings.Contains(strings.Split(target, "/")[0], ".") || within(target, "net") || within(target, "os") || within(target, "syscall") || within(target, "database") || within(target, "plugin")
 	}
 	allowed := []string(nil)
+	// Third-party modules stay excluded for every package named below unless they
+	// are listed here, which records that the dependency was reviewed for that
+	// package rather than admitted by omission.
+	external := []string(nil)
 	switch {
 	case within(from, "app/assistance"):
 		allowed = []string{"core", "app/graph", "app/assistance"}
@@ -43,6 +47,17 @@ func forbidden(from, target string) bool {
 		allowed = []string{"core", "app/graph", "examples/graphclient"}
 	case within(from, "simulator"):
 		allowed = []string{"core", "simulator"}
+	case within(from, "examples/coreclient"):
+		// #3: a core-only client must compile without simulation types. Held by
+		// accident before #82: the package fell through to the default and could
+		// import anything.
+		allowed = []string{"core"}
+	case within(from, "examples/agentclient"):
+		// The restricted external-agent port reaches the generated transport
+		// contract and nothing else in this module. Its grpc/protobuf dependencies
+		// are the transport stack's own and are admitted explicitly.
+		allowed = []string{"adapters/transport/gen"}
+		external = []string{"google.golang.org/grpc", "google.golang.org/protobuf"}
 	case within(from, "app/hws"):
 		allowed = []string{"core", "simulator", "app/graph", "app/assistance", "app/hws"}
 	default:
@@ -50,6 +65,11 @@ func forbidden(from, target string) bool {
 	}
 	if !strings.HasPrefix(target, module) {
 		// Consumer packages stay standard-library-only until a dependency is reviewed.
+		for _, e := range external {
+			if within(target, e) {
+				return false
+			}
+		}
 		return strings.Contains(strings.Split(target, "/")[0], ".") || within(target, "net") || within(target, "os") || within(target, "syscall") || within(target, "database") || within(target, "plugin")
 	}
 	for _, p := range allowed {

@@ -27,7 +27,7 @@ These labels E1–E12 refer to epic correctness rules, not invented IHG source I
 | Observer/evidence/uncertainty/time | Claim, memory, relationship codecs and approved-context appraisal | Synthetic behavior is not human validity |
 | Independent evaluation | Import boundaries, isolated label-blind child, split/consent tests | Complete supplied source report is ADR0020; adequacy mostly unresolved |
 | Clean verification and operations | `make verify`, pinned generation, race/Postgres/restore/container/demo checks | Exact SHA-bound results and failures are in PR checkpoints |
-| Durable review and owner-only main | AGENTS.md, workflow, PR #38 | Engineering integration is not a released product |
+| Durable review and owner-only main | AGENTS.md, workflow; merged aggregate PRs #38 and #70 | Engineering integration is not a released product |
 | 24 people / eight groups / relationships | Bounded demo: 104 directional reports; five-person contrast fixture | Operational smoke, not production capacity |
 | 12 model months versus 30 real days | 360 virtual days, 24 sparse observation periods; study clock gates | Real 30-day study NOT_RUN |
 | 200 families / 10,000 cases | Small bounded synthetic harness and split/holdout mechanisms | Research scale target NOT_RUN |
@@ -350,10 +350,11 @@ is engineering coverage, not 23 scientific passes. Real-data calibration readine
 is unmet; human/model transfer remain NOT_TESTED and the real study NOT_RUN. Only
 bounded independent reproduction can earn the declared engineering PASS.
 
-The aggregate #44 milestone still requires exact final-base/head verification,
-criterion-by-criterion original ticket reconciliation and an independent fresh
-recommendation on owner-only PR #38. These extracts do not establish full private
-PRD traceability or a completed IHG end-user product.
+The aggregate #44 milestone was verified at exact base/head, reconciled criterion by
+criterion and merged by the owner as PR #38 (`7b42a380ac0c2ff6dc70182322b44433d6c0f06f`);
+epic #49 followed as PR #70 (`0d1e59cf9042b80d4be491ecea0635be27ffe3a9`). Residual
+gaps found on the merged tree are tracked by epic #76. These extracts do not
+establish full private PRD traceability or a completed IHG end-user product.
 
 ## #56 group history and unequal burdens
 

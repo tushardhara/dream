@@ -401,3 +401,76 @@ func TestRepairDuplicatePromiseCannotMoveTheFulfilmentDeadline(t *testing.T) {
 		})
 	}
 }
+
+// #81: 153 of the 176 guard messages across the epic #49 core files are never
+// quoted by any test. The repair guards are the load-bearing ones — they are
+// what stops an apology being read as forgiveness — and
+// TestRepairLogRequiresLaterMatchingPracticalEvidence above reaches several of
+// them while asserting only that *some* error occurred. A mutation that trips a
+// neighbouring guard, or a guard replaced by its neighbour, passes that test.
+//
+// This pins the exact message for each reachable ledger guard. The positive
+// control runs first, so the table cannot pass by the fixture being invalid for
+// an unrelated reason.
+//
+// Recorded from probing the existing cases: "foreign topic" and "missing
+// provenance" both trip `missing or foreign repair provenance`, and "promise is
+// not fulfilment" and "past deadline is not fulfilled" both trip `fulfilment
+// needs timely practical help`. The twelve mutations there reach eight distinct
+// guards, not twelve.
+func TestRepairLedgerGuardReachability(t *testing.T) {
+	if e := ValidateRepairLog(repairFixture()); e != nil {
+		t.Fatal("positive control rejected; every case below would be unattributable", e)
+	}
+	for _, c := range []struct {
+		name, want string
+		change     func([]RepairRecord)
+	}{
+		{"observation_without_matching_action", "observation/action mismatch", func(l []RepairRecord) {
+			l[1].Action = "apologize"
+			l[1].Resource = ""
+			l[1].Units = 0
+			l[1].Commitment = ""
+		}},
+		{"effect_not_later_than_reference", "completion needs later evidence", func(l []RepairRecord) {
+			l[2].OccurredAt = 4
+			l[2].EffectAt = 4
+			l[2].LearnedAt = 4
+			l[2].Meta.Valid.Start = 4
+		}},
+		{"fulfilled_after_the_deadline", "fulfilment needs timely practical help", func(l []RepairRecord) {
+			due := LogicalTime(4)
+			l[0].Due = &due
+		}},
+		{"fulfilled_by_a_promise_not_help", "fulfilment needs timely practical help", func(l []RepairRecord) {
+			l[2].Reference = "promise"
+			l[2].Meta.Supporting = []ID{"promise"}
+		}},
+		{"breach_asserted_from_the_clock_alone", "breach needs independent later observation", func(l []RepairRecord) {
+			l[2].Finding = "breached"
+			l[2].Reference = "promise"
+			l[2].Meta.Supporting = []ID{"promise"}
+		}},
+		{"reference_not_listed_as_supporting", "reference is not supporting evidence", func(l []RepairRecord) {
+			l[2].Meta.Supporting = []ID{"promise"}
+		}},
+		{"help_resource_does_not_match", "help does not match commitment", func(l []RepairRecord) { l[1].Resource = "money" }},
+		{"help_units_do_not_match", "help does not match commitment", func(l []RepairRecord) { l[1].Units = 2 }},
+		{"observation_names_another_commitment", "foreign or missing commitment", func(l []RepairRecord) { l[2].Commitment = "different" }},
+		{"provenance_names_an_absent_parent", "missing or foreign repair provenance", func(l []RepairRecord) { l[2].Meta.Parents = []ID{"missing"} }},
+		{"provenance_crosses_domains", "missing or foreign repair provenance", func(l []RepairRecord) { l[2].Focus.Domain = EmotionalSupport }},
+		{"same_record_twice", "duplicate repair record", func(l []RepairRecord) { l[3] = l[2] }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			l := repairFixture()
+			c.change(l)
+			e := ValidateRepairLog(l)
+			if e == nil {
+				t.Fatal("mutated ledger accepted")
+			}
+			if e.Error() != c.want {
+				t.Fatal("wrong guard reached: want "+c.want+", got", e)
+			}
+		})
+	}
+}

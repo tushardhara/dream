@@ -150,7 +150,7 @@ Production relationship advice, real-user interventions, matching, and autonomou
 
 **Backend research implementation.** Durable graph services, bounded simulation, authenticated management APIs, replay/revocation/export, an independent evaluator and a synthetic demo are implemented. The alignment work adds the supplied 22-drive and 27-action registries, observer-owned relationship contexts, and complete 13-exit/10-falsifier reporting.
 
-This is not the full Intelligent Human Graph product or a validated human model. The [live integration epic](https://github.com/tushardhara/dream/issues/39) and [aggregate PR #38](https://github.com/tushardhara/dream/pull/38) carry exact review/CI status; final main integration remains owner-only.
+This is not the full Intelligent Human Graph product or a validated human model. Both integration programs are merged into `main`: [aggregate PR #38](https://github.com/tushardhara/dream/pull/38) (epics [#1](https://github.com/tushardhara/dream/issues/1) and [#39](https://github.com/tushardhara/dream/issues/39)) and [aggregate PR #70](https://github.com/tushardhara/dream/pull/70) (epic [#49](https://github.com/tushardhara/dream/issues/49)). Post-merge hardening is tracked by [epic #76](https://github.com/tushardhara/dream/issues/76). Merging `main` remains owner-only.
 
 ### Getting started and verification
 
@@ -160,12 +160,12 @@ Install Git, Make, Python 3, Go 1.27.1, a C compiler and Docker, then run `make 
 
 See [Contributing](CONTRIBUTING.md), [architecture](docs/adr/0001-backend-boundaries.md), [requirements and gaps](docs/requirements.md), [pinned tools](docs/toolchain.md), and [agent workflow](docs/agent-workflow.md).
 
-Current development follows the [revision-3 workflow](https://github.com/tushardhara/dream/issues/1):
+Current development follows the single-branch [agent workflow](docs/agent-workflow.md):
 
-- Ticket branches and PRs target `backend-integration`.
-- Codex implements; Claude independently reviews and may integrate passing ticket PRs under the epic's gates.
-- Tests and review evidence are tied to exact revisions.
-- The owner approves the final merge into `main`.
+- `main` is the only long-lived branch. Ticket branches come from `main` and PRs target `main`, unless a live epic names a temporary integration branch (epic #76 uses `post-merge-integration`).
+- One agent implements; an independent agent reviews at exact SHAs; neither approves or merges its own work.
+- Tests and review evidence are tied to exact revisions and recorded on the ticket and PR.
+- The owner alone merges `main`.
 - Spending, deployment, real-person data, and material scope changes require separate authorization.
 
 Private source documents, personal data, credentials, and unapproved provider transcripts must not be published in this repository.
@@ -187,13 +187,27 @@ protocol](docs/study-protocol.md) and [backend console handoff](docs/research-co
 No real 30-day study, live/paid provider, deployment, UI or human-validity result is
 claimed by this command.
 
-### Offline helper experiment (epic #49, ticket #50)
+### Offline helper experiments (epic #49)
 
 `go run ./cmd/hws-assistance -seed 11` runs a bounded two-person/eight-turn synthetic
 example with no-assistant, explicit-preference, single-perspective and
-multi-perspective arms. Humans continue choosing actions in every arm. Helper
+multi-perspective arms (#50). Humans continue choosing actions in every arm. Helper
 delivery counts are mechanical diagnostics, **not benefit or relationship metrics**.
 The helper uses separately permitted evidence and fixed deterministic templates;
 this does not demonstrate language understanding or real-human validity.
 See [ADR0021](docs/adr/0021-helper-contracts.md) for scope, replay, privacy and the
 independent non-simulator host. Local builds/tests use the existing disk guard.
+
+The other offline consumers, with the `make verify` gate that exercises each:
+
+- `hws-listening` (#54, `make listening-check`): goal-aware listening; each person receives their own account and only separately permitted words from the other.
+- `hws-repair` (#55, `make repair-check`): two multi-period sequences from one breach, contrasting repeated apology with observed practical follow-through.
+- `hws-group` (#56, `make group-check`): five- or 24-person group history, care agreements and unequal burdens.
+- `hws-ordinary` (#57, `make ordinary-check`): ordinary-enjoyment arms (none, generic, permitted context) over four families.
+- `hws-eval -uplift` (#58, `make uplift-check`): matched-arm comparison across all eight scenario families; every comparison is reported and no uplift is claimed.
+- `response-report` (#53) and `temporal-report` (#48) regenerate the committed
+  `docs/evaluation/recipient-response-v1.json` and `docs/evaluation/temporal-v1.json`. `make report-check` rebuilds both and requires the committed JSON to reproduce byte-for-byte, so a consumer change that alters a report cannot merge while the document still quotes the old numbers.
+
+See [backend demo](docs/backend-demo.md) and [Contributing](CONTRIBUTING.md) for the
+full command table. None of these runs a live provider, real-person data, a UI or a
+real study.
