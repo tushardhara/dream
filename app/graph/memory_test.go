@@ -486,10 +486,43 @@ func TestNonparticipantPlaceholdersAreNeverPooledIntoADossier(t *testing.T) {
 	})
 
 	t.Run("a caller with no grant sees none", func(t *testing.T) {
-		svc := MemoryService{&memoryFake{scope: MemoryScope{"frank", "memory-test"}, entries: []MemoryEntry{entryFor("alice")}}}
-		out, _, _, err := svc.RetrieveCached(context.Background(), query("frank", "frank", "frank"), MemoryCache{})
-		if err == nil && len(out) != 0 {
+		// Structurally valid throughout: alice's note, in alice's own scope, named
+		// by alice's own placeholder. Only the actor differs, so an empty result
+		// can only have come from the grant check in selection.
+		//
+		// The earlier shape of this case put an alice-owned entry in a frank-owned
+		// scope and accepted "an error or an empty result". That never reached the
+		// grant check at all: RebuildMemory refuses the entry outright because its
+		// observer is not the scope owner, which the pooled-store case above
+		// already covers. It asserted a malformed-scope check twice and the
+		// permission check never.
+		//
+		// Frank is also placed in the note's Learned set. Without that he is
+		// excluded one gate earlier, by learnedAt returning !known in
+		// retrieval.go's eligible(), and the grant check is never consulted
+		// either. Ablating the grant check proved that: it left this case green.
+		// Frank having learned of the note but holding no grant to read it is
+		// the honest shape of "knowing is not permission to reveal".
+		note := entryFor("alice")
+		note.Content.Learned = append(note.Content.Learned, Learned{"frank", 2})
+		svc := MemoryService{&memoryFake{scope: MemoryScope{"alice", "memory-test"}, entries: []MemoryEntry{note}}}
+		q := query("alice", "frank", "alice")
+		if err := q.Validate(); err != nil {
+			t.Fatal("the ungranted query is malformed, so the grant check is never reached:", err)
+		}
+		out, _, _, err := svc.RetrieveCached(context.Background(), q, MemoryCache{})
+		if err != nil {
+			t.Fatal("the store was refused rather than filtered, so this no longer tests the grant:", err)
+		}
+		if len(out) != 0 {
 			t.Fatal("ungranted principal received", len(out), "records about a nonparticipant")
+		}
+		// Positive control on the same store: alice, who holds the grant, does see
+		// the note. Without it the empty result above could come from any unrelated
+		// refusal and the case would be vacuous again in the other direction.
+		granted, _, _, err := svc.RetrieveCached(context.Background(), query("alice", "alice", "alice"), MemoryCache{})
+		if err != nil || len(granted) != 1 {
+			t.Fatal("the granted owner saw", len(granted), "records, err:", err, "- the ungranted case above is vacuous")
 		}
 	})
 
