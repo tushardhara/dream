@@ -256,16 +256,24 @@ func TestModelIntegration(t *testing.T) {
 		bounded, cancel := context.WithCancel(ctx)
 		defer cancel()
 		var wg sync.WaitGroup
+		// Retain each goroutine's error. When admission does not happen these are
+		// the only evidence of why, and discarding them left the failure below
+		// unable to say anything beyond the fact that it failed (#73). Each
+		// goroutine writes its own element, and the slice is read only after
+		// wg.Wait(), so there is no aliasing and no race.
+		failures := make([]error, 8)
 		for i := range 8 {
-			wg.Go(func() { _, _ = gateways[i].Execute(bounded, requests[i]) })
+			wg.Go(func() { _, failures[i] = gateways[i].Execute(bounded, requests[i]) })
 		}
+		admitted := 0
 		for range 8 {
 			select {
 			case <-entered:
+				admitted++
 			case <-time.After(5 * time.Second):
 				unblock()
 				wg.Wait()
-				t.Fatal("provider admission missing")
+				t.Fatal("provider admission missing: admitted", admitted, "of 8; per-gateway Execute errors:", failures)
 			}
 		}
 		if _, e := gateways[8].Execute(ctx, requests[8]); !errors.Is(e, hws.ErrModelBusy) {
