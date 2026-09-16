@@ -2,11 +2,13 @@ package demo
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/tushardhara/dream/core"
 	"github.com/tushardhara/dream/simulator/behavior"
 	"github.com/tushardhara/dream/simulator/drives"
 	rt "github.com/tushardhara/dream/simulator/runtime"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -299,4 +301,131 @@ func TestRelationalRepliesAreCausalAndYearBounded(t *testing.T) {
 		t.Fatal("help failed actual finite resource accounting")
 	}
 	t.Logf("24 actors, 576 decisions, %d observed replies, shared-time remaining=%d", observed, w.Resources["shared-time"])
+}
+
+// The 24-person relational demo's shape is stated as fact in six documents
+// (README, backend-demo, requirements, ADR 0016, ADR 0019): 52 undirected edges
+// emitted in both directions as 104 directional reports. Nothing pinned it —
+// scenario_test.go only asserts edges >= 30 — so a change to the friend offset
+// or the sibling modulus would silently leave every one of those documents
+// wrong (#79). The per-type counts are asserted separately so a regression
+// names which family broke rather than only that the total moved.
+//
+// Kinds are counted from Relationship.Kind, not RelationshipContext.Types[0]:
+// Scenario canonicalisation sorts every slice by its JSON bytes, so a context
+// carrying more than one type (the five-person sibling_in_law edge, which also
+// carries acquaintance) does not keep its declared kind first. Each context is
+// still cross-checked to contain its relationship's declared kind.
+func TestTwentyFourPersonTopologyHasFiftyTwoEdgesAnd104DirectionalReports(t *testing.T) {
+	for _, c := range []struct {
+		people, edges, directional int
+		perType                    map[core.ID]int
+		wantEdges                  map[[2]int]core.ID
+	}{
+		{24, 52, 104, map[core.ID]int{"spouse": 12, "sibling": 16, "friend": 24}, documentedTwentyFourEdges()},
+		// Positive control on the same helper: if the counting below were wrong,
+		// this five-person fixture would not land on its own documented shape.
+		{5, 6, 12, map[core.ID]int{"spouse": 1, "sibling": 1, "friend": 2, "acquaintance": 1, "sibling_in_law": 1},
+			map[[2]int]core.ID{{0, 1}: "spouse", {0, 2}: "sibling", {0, 3}: "friend", {0, 4}: "friend", {1, 3}: "acquaintance", {1, 2}: "sibling_in_law"}},
+	} {
+		t.Run(fmt.Sprintf("people=%d", c.people), func(t *testing.T) {
+			sc, e := RelationalScenario(c.people, 1, 11)
+			if e != nil {
+				t.Fatal(e)
+			}
+			index := map[core.ID]int{}
+			for i, a := range sc.Actors {
+				index[a.ID] = i
+			}
+			undirected := map[[2]int]core.ID{}
+			directional := 0
+			for _, a := range sc.Actors {
+				v, e := sc.View(a.ID)
+				if e != nil {
+					t.Fatal(e)
+				}
+				if len(v.Contexts) != len(a.Relationships) {
+					t.Fatal("unattributed edge for", a.ID)
+				}
+				kinds := map[core.ID]core.ID{}
+				for _, rel := range a.Relationships {
+					kinds[rel.Other] = rel.Kind
+					from, ok := index[a.ID]
+					to, ok2 := index[rel.Other]
+					if !ok || !ok2 {
+						t.Fatal("relationship names a person outside the roster", a.ID, rel.Other)
+					}
+					pair := [2]int{min(from, to), max(from, to)}
+					if seen, dup := undirected[pair]; dup && seen != rel.Kind {
+						t.Fatal("same pair carries two kinds", seen, rel.Kind)
+					}
+					undirected[pair] = rel.Kind
+				}
+				for _, r := range v.Contexts {
+					directional++
+					if r.Observer != a.ID || r.Validate(a.ID, r.Other) != nil {
+						t.Fatal("context is not observer-owned", a.ID, r.Other)
+					}
+					if !slices.Contains(r.Types, kinds[r.Other]) {
+						t.Fatal("context dropped its declared kind", kinds[r.Other], r.Types)
+					}
+				}
+			}
+			perType := map[core.ID]int{}
+			for _, kind := range undirected {
+				perType[kind]++
+			}
+			if len(undirected) != c.edges {
+				t.Fatal("distinct undirected edges: want", c.edges, "got", len(undirected))
+			}
+			if directional != c.directional {
+				t.Fatal("directional reports: want", c.directional, "got", directional)
+			}
+			if !reflect.DeepEqual(perType, c.perType) {
+				t.Fatal("per-type edge counts: want", c.perType, "got", perType)
+			}
+			// Counts alone do not pin the topology: changing the friend offset from
+			// 7 to any other value coprime with 24 keeps 52 edges and 12/16/24 per
+			// type, so the documents would still be wrong and every count above
+			// would still pass. Pin the adjacency too.
+			if !reflect.DeepEqual(undirected, c.wantEdges) {
+				for pair, kind := range c.wantEdges {
+					if got, ok := undirected[pair]; !ok {
+						t.Error("missing documented edge", pair, kind)
+					} else if got != kind {
+						t.Error("edge", pair, "want kind", kind, "got", got)
+					}
+				}
+				for pair, kind := range undirected {
+					if _, ok := c.wantEdges[pair]; !ok {
+						t.Error("undocumented edge", pair, kind)
+					}
+				}
+				t.Fatal("relational topology no longer matches the documented fixture")
+			}
+		})
+	}
+}
+
+// documentedTwentyFourEdges restates the topology the six documents describe:
+// spouses pair off, siblings join i to i+2 while i%6 < 4, and every person has a
+// friend seven places along. It is deliberately written from the documentation
+// rather than read from the scenario, so that changing the generator without
+// changing the documents fails here.
+func documentedTwentyFourEdges() map[[2]int]core.ID {
+	const people = 24
+	out := map[[2]int]core.ID{}
+	add := func(a, b int, kind core.ID) { out[[2]int{min(a, b), max(a, b)}] = kind }
+	for i := 0; i < people; i += 2 {
+		add(i, i+1, "spouse")
+	}
+	for i := range people {
+		if i%6 < 4 && i+2 < people {
+			add(i, i+2, "sibling")
+		}
+	}
+	for i := range people {
+		add(i, (i+7)%people, "friend")
+	}
+	return out
 }
