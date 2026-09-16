@@ -138,3 +138,63 @@ func TestDemoInitialDerivationAndUnseenGroup(t *testing.T) {
 		t.Fatal("read permission silently broadened to derive")
 	}
 }
+
+// demoStateWithVersion builds a schema-valid five-person relational state whose
+// every future period declares the given demo version. The version is set before
+// Genesis is computed, because the genesis envelope is hash-bound: a payload
+// edited after the fact fails Genesis.Validate long before Projection's guard.
+func demoStateWithVersion(t *testing.T, version string) rt.State {
+	t.Helper()
+	sc, e := RelationalScenario(5, 1, 11)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for i := range sc.Future {
+		var p Period
+		if json.Unmarshal([]byte(sc.Future[i].Text), &p) != nil {
+			t.Fatal("unreadable period fixture")
+		}
+		p.Version = version
+		raw, e := json.Marshal(p)
+		if e != nil {
+			t.Fatal(e)
+		}
+		sc.Future[i].Text = string(raw)
+	}
+	if e = sc.Validate(); e != nil {
+		t.Fatal("fixture stopped being schema-valid", e)
+	}
+	g, e := sc.Genesis(rt.Capabilities())
+	if e != nil {
+		t.Fatal(e)
+	}
+	state, e := rt.New(g, rt.Budgets{Steps: 100, Events: 100, Horizon: sc.World.Horizon})
+	if e != nil {
+		t.Fatal(e)
+	}
+	return state
+}
+
+// A scenario carrying a demo version this build does not know must be refused by
+// Projection rather than reconstructed on a guessed pipeline. The guard was
+// removable with the whole suite green (#74), so this asserts the exact message:
+// an any-error assertion would stay green when the guard is ablated, because an
+// unknown version also fails later for unrelated reasons.
+func TestUnsupportedDemoVersionIsRejected(t *testing.T) {
+	const want = "unsupported demo version"
+	supported := demoStateWithVersion(t, RelationalVersion)
+	if _, e := Projection(supported); e != nil {
+		t.Fatal("supported demo version rejected", e)
+	}
+	for _, version := range []string{"backend-demo.v99", "backend-demo.v0", GroupVersion, ""} {
+		t.Run(version, func(t *testing.T) {
+			_, e := Projection(demoStateWithVersion(t, version))
+			if e == nil {
+				t.Fatal("unsupported demo version accepted")
+			}
+			if e.Error() != want {
+				t.Fatal("wrong guard reached: want "+want+", got", e)
+			}
+		})
+	}
+}
