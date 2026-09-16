@@ -38,9 +38,13 @@ frozen policy, codec or replay pin, and adds no capability to existing reports.
 
 ## Consequences and limits
 
-The shipped fixture deliberately demonstrates **no uplift**: two arms are
-`not-tested` and the multi-perspective arm is `inconclusive`. `make uplift-check`
-asserts this against the compiled binary and is wired into `verify`.
+The evaluation deliberately demonstrates **no uplift**. The original shipped
+fixture had two arms `not-tested` and only the multi-perspective arm executed and
+`inconclusive`; since R1 closed (see the addendum) all four arms execute through
+real consumers across all eight families, the assistance consumer runs the
+multi-perspective arm, and every comparison is `inconclusive` on observed harm.
+`make uplift-check` asserts this against the compiled binary and is wired into
+`verify`.
 
 This is engineering measurement, not science. Real-human validity, live-provider
 semantic quality, cross-model transfer and a real 30-day study are all
@@ -210,10 +214,14 @@ absent measurement.
 **All eight families are covered**, and `uplift-check` asserts it rather than
 printing it, so losing one fails the gate.
 
-What is still NOT established, and is printed on every run: seven families draw
-from a single undifferentiated RNG stream because their consumers do not
-separate human, exogenous and helper draws; five of the eight carry no
-delayed-outcome instrument at all, so their comparisons are behavioural only;
+What is still NOT established: seven families draw from a single
+undifferentiated RNG stream because their consumers do not separate human,
+exogenous and helper draws (`uplift-check` prints the family list on every run);
+six of the eight (`conflict_goals`, `group_burden`, `life_changes`, `repair`,
+`role_domain_trust`, `selective_boundaries`) carry no delayed-outcome instrument
+at all, so their comparisons are behavioural only (recorded per person as
+`not_instrumented` in the report JSON; the gate does not yet print it — #83);
 and in 103 arm-pair/scenario combinations the assistant's output never reached
-the human decision. Every comparison is `inconclusive` on observed harm. No arm
-is credited with uplift, and none of this establishes human validity.
+the human decision (printed on every run). Every comparison is `inconclusive` on
+observed harm. No arm is credited with uplift, and none of this establishes human
+validity. #75 tracks the instruments, streams and decision routing.

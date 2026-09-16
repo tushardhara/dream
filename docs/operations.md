@@ -132,3 +132,13 @@ recorded trajectory and linked typed model/policy context, not fresh stochastic
 reproduction or real-human validity. It reports no private packet content. Source
 snapshots and replay frames already carry the canonical engine/RNG/decision records;
 missing or truncated evidence is a failure, never an inferred pass.
+
+### Threat model
+
+The audit packet is tamper-evident, not tamper-proof. An administrator able to
+rewrite both the logs and the trusted checkpoints can forge a consistent history;
+no append-only grant or hash chain defeats that administrator, and no independent
+timestamp/signing service or external immutable log is claimed. Retain the expected
+packet hash outside the database and outside the operator's control. The full
+statement, limits and what earlier records without linkage can and cannot claim are
+in [ADR 0014](adr/0014-operations-recovery.md#audit-window-and-reproducibility).
