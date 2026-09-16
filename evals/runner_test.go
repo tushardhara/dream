@@ -380,6 +380,32 @@ func TestFrozenSplitIntegrityIsComputedNotAsserted(t *testing.T) {
 		}
 	})
 
+	t.Run("content_mutated_under_an_unchanged_hash", func(t *testing.T) {
+		// Deliberately not resealed. Both d.Hash and c.DatasetHash keep the values
+		// the clean fixture had, so every claim in the envelope still agrees with
+		// every other claim; only the content underneath them has moved. Comparing
+		// c.DatasetHash to d.Hash cannot see this, because neither is derived from
+		// what it describes. The digest is recomputed instead.
+		tampered, cfg := fixture(t)
+		claimed, configured := tampered.Hash, cfg.DatasetHash
+		tampered.Cases[0].Labels[0].Annotation = "EVIDENCE_REWRITTEN_UNDER_A_FROZEN_HASH"
+
+		if tampered.Hash != claimed || cfg.DatasetHash != configured || cfg.DatasetHash != tampered.Hash {
+			t.Fatal("the mutation disturbed a hash field; this case no longer isolates content tampering")
+		}
+
+		f := splitIntegrity(tampered, cfg)
+		if f.Status != Fail {
+			t.Fatal("a dataset whose content no longer matches its own hash reported", f.Status, f.Evidence)
+		}
+		if !strings.Contains(f.Evidence, "does not hash to the hash it carries") {
+			t.Fatal("failure does not name the content mismatch:", f.Evidence)
+		}
+		if _, e := Run(context.Background(), tampered, cfg, experiment.Generator{}, fixtureNow); e == nil {
+			t.Fatal("Run accepted a dataset whose content was mutated under a frozen hash")
+		}
+	})
+
 	t.Run("configured hash must match the supplied dataset", func(t *testing.T) {
 		other, cfg := fixture(t)
 		cfg.DatasetHash = "0000000000000000000000000000000000000000000000000000000000000000"

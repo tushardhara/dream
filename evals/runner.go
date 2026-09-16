@@ -287,6 +287,19 @@ func interval(values map[int][]float64, c Config) *Interval {
 // The Pass evidence string is unchanged, so an unmodified run still produces a
 // byte-identical report.
 func splitIntegrity(d Dataset, c Config) Finding {
+	// Recomputed from the content, not read off the envelope. Comparing
+	// c.DatasetHash to d.Hash alone compares two claims to each other: content
+	// mutated in place with both fields left untouched satisfies it. That is the
+	// same shape of vacuous pass this function exists to remove, one field over.
+	unsealed := d
+	unsealed.Hash = ""
+	actual, err := Digest(unsealed)
+	if err != nil {
+		return Finding{"frozen_split_integrity", Fail, "the supplied dataset could not be digested: " + err.Error()}
+	}
+	if d.Hash != actual {
+		return Finding{"frozen_split_integrity", Fail, "the supplied dataset does not hash to the hash it carries"}
+	}
 	if c.DatasetHash != d.Hash {
 		return Finding{"frozen_split_integrity", Fail, "configured dataset hash does not match the supplied dataset"}
 	}
