@@ -268,3 +268,91 @@ func TestBoundaryBlanketWillingnessCannotBroadenScope(t *testing.T) {
 		t.Fatal("blanket refusal was ignored", d, e)
 	}
 }
+
+// #81, part 2: core/boundary.go carries 22 guard messages and none was pinned by
+// any test. These are the consent invariants — what makes "no contact" mean no
+// contact, and what stops a third party's inference standing in for a person's
+// own report. The existing boundary tests assert Validate() != nil, so a
+// mutation tripping a neighbouring guard, or a guard replaced by its neighbour,
+// passes them unchanged.
+//
+// The positive control runs first so the table cannot pass by the fixture being
+// invalid for an unrelated reason.
+func TestBoundaryCoreGuardReachability(t *testing.T) {
+	base := boundaryFixture("b1", "alice", "bob", Willing)
+	if e := base.Validate(); e != nil {
+		t.Fatal("positive control rejected; every case below would be unattributable", e)
+	}
+	for _, c := range []struct {
+		name, want string
+		change     func(*Boundary)
+	}{
+		{"self_report_asserted_by_another_observer", "another observer cannot assert self-report", func(b *Boundary) {
+			b.Meta.Observer = "carol"
+			b.Meta.Source = "carol"
+			b.Meta.Rights.Grants[0].Actor = "carol"
+			b.Meta.Rights.Grants[0].Recipient = "carol"
+		}},
+		{"unknown_basis", "unknown boundary basis", func(b *Boundary) { b.Basis = "guessed" }},
+		{"unknown_willingness", "unknown willingness", func(b *Boundary) { b.Decision = "maybe" }},
+		{"pressure_without_observed_signal", "unknown pressure evidence", func(b *Boundary) { b.Decision = PressureSignal; b.Basis = "observed_signal"; b.Signal = "vibes" }},
+		{"signal_without_pressure_decision", "unexpected pressure signal", func(b *Boundary) { b.Signal = "disagreement" }},
+		{"revocation_without_the_revoked_flag", "unexpected revocation", func(b *Boundary) { b.RevokedBy = "alice"; b.RevokedAt = 5 }},
+		{"revoked_by_a_third_party", "invalid revocation provenance", func(b *Boundary) { b.Revoked = true; b.RevokedBy = "carol"; b.RevokedAt = 5 }},
+		{"revoked_before_it_was_learned", "invalid revocation provenance", func(b *Boundary) { b.Revoked = true; b.RevokedBy = "alice"; b.RevokedAt = 0; b.LearnedAt = 3 }},
+		{"provenance_not_retained", "invalid boundary evidence", func(b *Boundary) { b.Meta.Supporting = nil }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b := boundaryFixture("b1", "alice", "bob", Willing)
+			c.change(&b)
+			e := b.Validate()
+			if e == nil {
+				t.Fatal("mutated boundary accepted")
+			}
+			if e.Error() != c.want {
+				t.Fatal("wrong guard reached: want "+c.want+", got", e)
+			}
+		})
+	}
+
+	// The three the ticket names by line, all reached through the log validator.
+	t.Run("duplicate_boundary_id", func(t *testing.T) {
+		l := []Boundary{boundaryFixture("b1", "alice", "bob", Willing), boundaryFixture("b1", "alice", "bob", Declined)}
+		if e := ValidateBoundaryLog(l); e == nil || e.Error() != "duplicate boundary id" {
+			t.Fatal("wrong guard reached:", e)
+		}
+	})
+	t.Run("correction_supersedes_another_observers_record", func(t *testing.T) {
+		first := boundaryFixture("b1", "alice", "bob", Willing)
+		second := boundaryFixture("b2", "alice", "bob", Declined)
+		second.Principal = "alice"
+		second.Topic = "holidays" // a different scope may not be superseded
+		second.Supersedes = []ID{"b1"}
+		if e := ValidateBoundaryLog([]Boundary{first, second}); e == nil || e.Error() != "invalid boundary correction" {
+			t.Fatal("wrong guard reached:", e)
+		}
+	})
+	t.Run("correction_naming_an_absent_record", func(t *testing.T) {
+		b := boundaryFixture("b2", "alice", "bob", Declined)
+		b.Supersedes = []ID{"never-recorded"}
+		if e := ValidateBoundaryLog([]Boundary{b}); e == nil || e.Error() != "invalid boundary correction" {
+			t.Fatal("wrong guard reached:", e)
+		}
+	})
+	t.Run("log_bound", func(t *testing.T) {
+		l := make([]Boundary, 65)
+		for i := range l {
+			l[i] = boundaryFixture(ID("b"+string(rune('a'+i%26))+string(rune('a'+i/26))), "alice", "bob", Willing)
+		}
+		if e := ValidateBoundaryLog(l); e == nil || e.Error() != "boundary log bound" {
+			t.Fatal("wrong guard reached:", e)
+		}
+	})
+	t.Run("record_invalid_inside_the_log", func(t *testing.T) {
+		b := boundaryFixture("b1", "alice", "bob", Willing)
+		b.Basis = "guessed"
+		if e := ValidateBoundaryLog([]Boundary{b}); e == nil || e.Error() != "invalid boundary log" {
+			t.Fatal("wrong guard reached:", e)
+		}
+	})
+}
