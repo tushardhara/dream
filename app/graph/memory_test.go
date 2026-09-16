@@ -23,12 +23,19 @@ func memoryQuery() MemoryQuery {
 }
 
 type memoryFake struct {
+	// scope defaults to testScope so existing fixtures are unaffected; the
+	// nonparticipant test needs one store per observer.
+	scope   MemoryScope
 	entries []MemoryEntry
 	err     error
 }
 
 func (f *memoryFake) ReadMemory(_ context.Context, s MemoryScope) ([]MemoryEntry, error) {
-	if s != testScope {
+	want := f.scope
+	if want == (MemoryScope{}) {
+		want = testScope
+	}
+	if s != want {
 		return []MemoryEntry{}, nil
 	}
 	return f.entries, f.err
@@ -386,6 +393,112 @@ func FuzzMemoryTemporalBoundary(f *testing.F) {
 		out, _, _, err = svc.RetrieveCached(context.Background(), q, cache)
 		if err != nil || len(out) != 0 {
 			t.Fatal("revocation bypass", out, err)
+		}
+	})
+}
+
+// #8 requires that observer-owned placeholders are never pooled into a
+// nonparticipant dossier. `grep -rni dossier --include=*.go` returns nothing, so
+// the property was stated in the ticket and nowhere in the code (#82).
+//
+// The mechanism turns out to be stronger than a filter: a nonparticipant is
+// nameable only as a core.NonparticipantReference carrying its observer, each
+// observer has its own MemoryScope, and Subject.ValidateFor rejects a reference
+// whose observer is not the scope owner ("foreign observer reference"). So there
+// is no query that even expresses "everything known about Z"; pooling is
+// unrepresentable rather than merely denied. This pins both halves: the rejection
+// at the type boundary, and the retrieval isolation behind it.
+func TestNonparticipantPlaceholdersAreNeverPooledIntoADossier(t *testing.T) {
+	const local core.ID = "the-same-neighbour"
+	observers := []core.ID{"alice", "dana", "erin"}
+
+	// Each observer separately writes about the same real-world nonparticipant,
+	// naming them with that observer's own local placeholder.
+	entryFor := func(observer core.ID) MemoryEntry {
+		ref, err := core.NewReference(observer, local)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := core.ID(string(observer) + "-note")
+		return MemoryEntry{Sequence: 1, Event: core.Event{Version: 1, Type: MemoryEventType, Stream: "memories",
+			Subject:    core.Subject{Reference: &ref},
+			OccurredAt: 1,
+			Meta: core.Metadata{ID: id, Observer: observer, Source: observer, Sensitivity: core.Restricted, Confidence: .6,
+				Valid: core.Interval{Start: 0}, RecordedAt: time.Unix(1, 0).UTC(),
+				Rights: core.Rights{Resource: id, Grants: []core.Grant{{Actor: observer, Recipient: observer, Purpose: "test", Operation: core.Read}}}}},
+			Content: &MemoryContent{Version: 1, Kind: EpisodicMemory, Text: "PRIVATE_" + string(observer) + "_VIEW_OF_NEIGHBOUR",
+				Salience: .8, HalfLife: 10, Learned: []Learned{{observer, 2}}}}
+	}
+
+	query := func(scopeOwner, actor, refObserver core.ID) MemoryQuery {
+		ref, err := core.NewReference(refObserver, local)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return MemoryQuery{Scope: MemoryScope{scopeOwner, "memory-test"}, Actor: actor, Purpose: "test",
+			Subject: core.Subject{Reference: &ref}, ValidAt: 5, KnownAt: 10, RecordedAsOf: time.Unix(10000, 0), Limit: 50}
+	}
+
+	// Every observer's note sits in one store, which is the only way a pooling
+	// bug could ever surface.
+	all := []MemoryEntry{}
+	for _, o := range observers {
+		all = append(all, entryFor(o))
+	}
+
+	t.Run("each observer sees only their own placeholder", func(t *testing.T) {
+		for _, o := range observers {
+			// Each observer's memories live in that observer's own scope.
+			svc := MemoryService{&memoryFake{scope: MemoryScope{o, "memory-test"}, entries: []MemoryEntry{entryFor(o)}}}
+			out, _, _, err := svc.RetrieveCached(context.Background(), query(o, o, o), MemoryCache{})
+			if err != nil {
+				t.Fatal(o, err)
+			}
+			if len(out) != 1 {
+				t.Fatal(o, "expected exactly their own note, got", len(out))
+			}
+			for _, e := range out {
+				if e.Record.Event.Meta.Observer != o {
+					t.Fatal(o, "received", e.Record.Event.Meta.Observer, "placeholder: observers pooled")
+				}
+			}
+			raw, _ := json.Marshal(out)
+			for _, other := range observers {
+				if other != o && strings.Contains(string(raw), "PRIVATE_"+string(other)+"_VIEW") {
+					t.Fatal(o, "result carried", other, "private text")
+				}
+			}
+		}
+	})
+
+	t.Run("a store pooling three observers' placeholders is refused", func(t *testing.T) {
+		// The strongest half. Merging observers' notes about one nonparticipant
+		// into a single scope does not yield a filtered read; the read refuses
+		// the store, because a placeholder is only valid under its own observer.
+		svc := MemoryService{&memoryFake{scope: testScope, entries: all}}
+		out, _, _, err := svc.RetrieveCached(context.Background(), query("alice", "alice", "alice"), MemoryCache{})
+		if err == nil {
+			t.Fatal("a pooled nonparticipant dossier was read, returning", len(out), "records")
+		}
+		if !strings.Contains(err.Error(), "invalid scoped memory entry") {
+			t.Fatal("pooled store rejected for an unrelated reason:", err)
+		}
+	})
+
+	t.Run("a caller with no grant sees none", func(t *testing.T) {
+		svc := MemoryService{&memoryFake{scope: MemoryScope{"frank", "memory-test"}, entries: []MemoryEntry{entryFor("alice")}}}
+		out, _, _, err := svc.RetrieveCached(context.Background(), query("frank", "frank", "frank"), MemoryCache{})
+		if err == nil && len(out) != 0 {
+			t.Fatal("ungranted principal received", len(out), "records about a nonparticipant")
+		}
+	})
+
+	t.Run("one observer cannot name another observer's placeholder", func(t *testing.T) {
+		// This is the structural half: the query is rejected before retrieval,
+		// so "everything known about Z" cannot be asked at all.
+		q := query("alice", "alice", "dana")
+		if err := q.Validate(); err == nil {
+			t.Fatal("alice named dana's placeholder; a pooled dossier is expressible")
 		}
 	})
 }
