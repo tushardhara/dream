@@ -3,6 +3,7 @@ package listeningclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/tushardhara/dream/adapters/model"
@@ -115,6 +116,72 @@ func Run(ctx context.Context) (map[core.ID]assistance.ListeningResponse, error) 
 	out := map[core.ID]assistance.ListeningResponse{}
 	for _, actor := range []core.ID{"alice", "bob"} {
 		r := l.Request(actor, core.ID(string(actor)+"-listen"), "joint", Account(actor, l.other(actor)).Focus, 4, true, false)
+		if err := l.Register(actor, r); err != nil {
+			return nil, err
+		}
+		interpreter, err := RecordedFor(ctx, l, r, "supported")
+		if err != nil {
+			return nil, err
+		}
+		response, err := l.Host(interpreter).Execute(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		out[actor] = response
+	}
+	return out, nil
+}
+
+// ListeningArms maps the evaluation arms onto what this consumer already
+// varies. Nothing here is invented: mode decides whose accounts the helper may
+// read, and share decides whether separately authored summaries are passed on.
+//
+//	none               the helper reads nothing and says nothing
+//	single_perspective the speaker's own account only
+//	multi_perspective  both speakers' accounts, with shared summaries
+//
+// explicit-preference/simple assistance has NO faithful realisation here and is
+// deliberately absent. In the main assistance contract that arm is defined by
+// carrying no context at all, and this flow requires at least one account
+// proposal by contract, so the nearest configuration is identical to single
+// perspective. Listing it anyway would be two labels for one policy — which the
+// evaluation's own policy-receipt rule would catch and name. It is reported as
+// not executed for this family instead.
+//
+// A private request may not share summaries: disclosure is permitted only in
+// joint mode, which is a privacy rule of the flow, not an oversight.
+var ListeningArms = []struct {
+	Arm   assistance.Arm
+	Mode  string
+	Share bool
+}{
+	{assistance.None, "private", false},
+	{assistance.Single, "private", false},
+	{assistance.Multi, "joint", true},
+}
+
+// RunArm executes the listening consumer under one matched arm. Both speakers
+// still author accounts and still decide in every arm; the arm varies only what
+// the helper is permitted to look at.
+func RunArm(ctx context.Context, arm assistance.Arm) (map[core.ID]assistance.ListeningResponse, error) {
+	var chosen = ListeningArms[len(ListeningArms)-1]
+	found := false
+	for _, a := range ListeningArms {
+		if a.Arm == arm {
+			chosen, found = a, true
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("unknown assistant arm")
+	}
+	l, err := Budget()
+	if err != nil {
+		return nil, err
+	}
+	out := map[core.ID]assistance.ListeningResponse{}
+	for _, actor := range []core.ID{"alice", "bob"} {
+		r := l.ArmedRequest(actor, core.ID(string(actor)+"-listen"), chosen.Mode,
+			Account(actor, l.other(actor)).Focus, 4, chosen.Share, false, arm)
 		if err := l.Register(actor, r); err != nil {
 			return nil, err
 		}

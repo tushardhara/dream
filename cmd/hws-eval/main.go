@@ -83,10 +83,12 @@ func run(args []string, out io.Writer) error {
 		if e != nil {
 			return e
 		}
-		summary, e := evals.SummariseUplift(comparisons)
+		summary, e := evals.SummariseUplift(comparisons, upliftBlockers...)
 		if e != nil {
 			return e
 		}
+		// Named so a zero in a harm column is readable as a measured zero.
+		summary.Checks = upliftChecks
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(summary)

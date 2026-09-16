@@ -22,16 +22,19 @@ const Version = "domain-experiment.v1"
 type Trace struct {
 	Version string
 	Focus   core.RelationshipFocus
-	Helper  assistance.Interaction
-	Human   behavior.DomainDecision
-	Final   behavior.DomainActor
+	// Arm is the assistant policy this run was executed under; see the boundary
+	// experiment's Trace for why it is part of the trace identity.
+	Arm    assistance.Arm
+	Helper assistance.Interaction
+	Human  behavior.DomainDecision
+	Final  behavior.DomainActor
 }
 
 // Run holds words and identities constant across family/business frames. Numeric
 // differences are explicitly authored observations. A maximal draw is a control
 // for candidate eligibility, not an estimate of human behavior or helper benefit.
-func Run(ctx context.Context, focus core.RelationshipFocus, recorded *Trace) (Trace, error) {
-	if focus.Validate() != nil || recorded != nil && (recorded.Version != Version || assistance.Digest(recorded.Focus) != assistance.Digest(focus)) {
+func Run(ctx context.Context, focus core.RelationshipFocus, arm assistance.Arm, recorded *Trace) (Trace, error) {
+	if focus.Validate() != nil || !arm.Valid() || recorded != nil && (recorded.Version != Version || recorded.Arm != arm || assistance.Digest(recorded.Focus) != assistance.Digest(focus)) {
 		return Trace{}, fmt.Errorf("invalid domain experiment/replay")
 	}
 	profiles := []core.RelationshipContext{}
@@ -42,7 +45,7 @@ func Run(ctx context.Context, focus core.RelationshipFocus, recorded *Trace) (Tr
 		}
 		profiles = append(profiles, assistanceclient.DomainProfile(owner, other, core.ID(string(owner)+"-family"), core.Childcare, "family", .8, .6), assistanceclient.DomainProfile(owner, other, core.ID(string(owner)+"-business"), core.Childcare, "business", -.7, -.6))
 	}
-	local, r, e := assistanceclient.DomainFixture(assistance.Multi, focus, profiles)
+	local, r, e := assistanceclient.DomainFixture(arm, focus, profiles)
 	if e != nil {
 		return Trace{}, e
 	}
@@ -69,9 +72,23 @@ func Run(ctx context.Context, focus core.RelationshipFocus, recorded *Trace) (Tr
 	}
 	// The human receives only records retrieved for Alice, with original rights,
 	// observer, time and confidence. Bob's helper-visible accounts never enter it.
-	query := r.Contexts[0].Query
-	query.Actor = "alice"
-	query.Purpose = "simulation"
+	//
+	// This query is built from the request rather than borrowed from
+	// r.Contexts[0]. Alice reads her OWN memory whether or not a helper proposed
+	// anything, so making the human's retrieval depend on a helper context
+	// proposal was both wrong and a panic on any arm that proposes none — which
+	// is every no-assistant and simple-assistance run. The shape is unchanged
+	// from the proposal it used to borrow; only its origin is.
+	query := graph.MemoryQuery{
+		Scope:        graph.MemoryScope{Owner: "alice", Namespace: "domain-synthetic"},
+		Actor:        "alice",
+		Purpose:      "simulation",
+		Subject:      core.Subject{Principal: "alice"},
+		ValidAt:      r.At,
+		KnownAt:      r.At,
+		RecordedAsOf: time.Unix(10, 0).UTC(),
+		Limit:        16,
+	}
 	selected, e := (graph.MemoryService{Journal: local}).Retrieve(ctx, query)
 	if e != nil {
 		return Trace{}, e
@@ -104,7 +121,7 @@ func Run(ctx context.Context, focus core.RelationshipFocus, recorded *Trace) (Tr
 	if e != nil {
 		return Trace{}, e
 	}
-	out := Trace{Version, focus, helper, human, final}
+	out := Trace{Version: Version, Focus: focus, Arm: arm, Helper: helper, Human: human, Final: final}
 	if recorded != nil && assistance.Digest(out) != assistance.Digest(*recorded) {
 		return Trace{}, fmt.Errorf("domain replay changed")
 	}

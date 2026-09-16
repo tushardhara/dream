@@ -199,9 +199,19 @@ func (l *Local) Request(actor, id core.ID, at core.LogicalTime) (assistance.Repa
 	return l.RequestForFocus(actor, id, at, Focus())
 }
 func (l *Local) RequestForFocus(actor, id core.ID, at core.LogicalTime, focus core.RelationshipFocus) (assistance.RepairRequest, error) {
+	return l.requestFor(actor, id, at, focus, assistance.RepairFlowVersion, "")
+}
+
+// ArmedRequest builds the opt-in v2 request carrying a matched-arm label,
+// leaving the v1 path byte-identical for every existing caller.
+func (l *Local) ArmedRequest(actor, id core.ID, at core.LogicalTime, arm assistance.Arm) (assistance.RepairRequest, error) {
+	return l.requestFor(actor, id, at, Focus(), assistance.RepairArmVersion, arm)
+}
+
+func (l *Local) requestFor(actor, id core.ID, at core.LogicalTime, focus core.RelationshipFocus, version string, arm assistance.Arm) (assistance.RepairRequest, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	r := assistance.RepairRequest{Version: assistance.RepairFlowVersion, ID: id, Session: l.session, Helper: "helper", User: actor, Actor: "alice", Recipient: "bob", Purpose: "help", Focus: focus, At: at}
+	r := assistance.RepairRequest{Version: version, ID: id, Session: l.session, Helper: "helper", User: actor, Actor: "alice", Recipient: "bob", Purpose: "help", Focus: focus, At: at, Arm: arm}
 	if r.Validate() != nil {
 		return r, assistance.ErrDenied
 	}

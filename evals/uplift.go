@@ -244,7 +244,13 @@ type PersonOutcome struct {
 	BoundaryViolations int                `json:"boundary_violations"`
 	DelayedOutcome     string             `json:"delayed_outcome"`
 	Acted              bool               `json:"person_acted"`
-	Observations       []TierEvidence     `json:"observations"`
+	// CouldAct records whether this person had any option other than waiting.
+	// It is what separates a BROKEN control — people who cannot act — from a
+	// scenario in which everyone had a real alternative and correctly chose not
+	// to. Universal restraint is a result this evaluation must be able to
+	// represent, not a reason to reject the comparison that produced it.
+	CouldAct     bool           `json:"person_could_act"`
+	Observations []TierEvidence `json:"observations"`
 }
 
 func (p PersonOutcome) Validate() error {
@@ -252,7 +258,17 @@ func (p PersonOutcome) Validate() error {
 		return fmt.Errorf("invalid person outcome")
 	}
 	switch p.DelayedOutcome {
-	case "unresolved", "missing", "censored", "resolved":
+	// "missing" and "censored" mean an instrument existed, an intervention
+	// happened, and its outcome did not arrive. Both are adverse.
+	//
+	// The other two are NOT adverse and must never be collapsed into them.
+	// "not_instrumented" means this consumer has no delayed-outcome instrument
+	// at all, and "no_intervention" means the instrument exists and nothing
+	// triggered it because the helper correctly did nothing. A policy that
+	// rightly stays silent produces no outcome to measure, and scoring that as
+	// a missing outcome would penalise exactly the restraint this evaluation
+	// exists to leave room for.
+	case "unresolved", "missing", "censored", "resolved", "not_instrumented", "no_intervention":
 	default:
 		return fmt.Errorf("invalid delayed outcome disposition")
 	}
@@ -278,24 +294,74 @@ func (p PersonOutcome) Validate() error {
 	return nil
 }
 
-// ArmRun is one arm executed against a matched world with its own RNG stream.
+// Stream is one versioned RNG stream a run drew from, named by the domain it
+// serves. See ArmRun.Streams for why independence is per domain, not per arm.
+type Stream struct {
+	Domain string `json:"domain"`
+	Seed   string `json:"seed"`
+}
+
 type ArmRun struct {
-	Arm           Arm             `json:"arm"`
-	Seed          uint64          `json:"seed"`
-	WorldHash     string          `json:"world_hash"`
-	ExogenousHash string          `json:"exogenous_hash"`
-	RNGStream     string          `json:"rng_stream"`
-	Scenario      core.ID         `json:"scenario"`
-	Outcomes      []PersonOutcome `json:"outcomes"`
-	HelperActs    int             `json:"helper_actions"`
+	Arm  Arm    `json:"arm"`
+	Seed uint64 `json:"seed"`
+	// WorldHash and ExogenousHash are receipts of the generation this arm
+	// actually ran on, and are shared across arms by design: a matched
+	// comparison uses the same initial world and the same exogenous events, so
+	// the assistant policy is the only difference.
+	WorldHash     string `json:"world_hash"`
+	ExogenousHash string `json:"exogenous_hash"`
+	// Streams are the versioned RNG streams this arm drew from. #58 requires
+	// them to be independent AND the worlds and exogenous events to be matched,
+	// which are only compatible under one reading: independence is across
+	// DOMAINS — human decisions, exogenous events and the helper draw from
+	// separate versioned streams so one cannot perturb another — while the
+	// streams themselves are identical across arms. Splitting them per arm
+	// would give each arm different exogenous events, contradicting the
+	// matching in the same sentence. The repository's own generator settles it:
+	// NewAssistanceManifest derives its human, exogenous and helper seeds
+	// without reference to the arm.
+	Streams []Stream `json:"rng_streams"`
+	// PolicyHash is the receipt of what this arm's policy actually produced. It
+	// is the one identifier that may differ between arms, and when two arms
+	// share it they did the same thing: no uplift can be read between them.
+	PolicyHash string `json:"policy_hash"`
+	// HumanHash is the receipt of what the PEOPLE decided in this arm. It is
+	// recorded because in several consumers the assistant's output is never an
+	// input to the human's choice, so the humans decide identically whatever
+	// the arm does. That does not invalidate a comparison — an intervention can
+	// change what someone experiences without changing what they do — but a
+	// reader must be told, or a null result looks like evidence about the
+	// policy when the policy could not have reached the decision.
+	HumanHash  string          `json:"human_hash"`
+	Scenario   core.ID         `json:"scenario"`
+	Outcomes   []PersonOutcome `json:"outcomes"`
+	HelperActs int             `json:"helper_actions"`
 }
 
 func (a ArmRun) Validate() error {
 	if !a.Arm.Valid() {
 		return fmt.Errorf("unknown comparison arm")
 	}
-	if a.WorldHash == "" || a.ExogenousHash == "" || a.RNGStream == "" || a.Scenario.Validate() != nil {
+	if a.WorldHash == "" || a.ExogenousHash == "" || a.PolicyHash == "" || a.HumanHash == "" || a.Scenario.Validate() != nil {
 		return fmt.Errorf("invalid arm run identity")
+	}
+	if len(a.Streams) == 0 {
+		return fmt.Errorf("arm records no rng stream")
+	}
+	domains, seeds := map[string]bool{}, map[string]bool{}
+	for _, st := range a.Streams {
+		if st.Domain == "" || st.Seed == "" {
+			return fmt.Errorf("invalid rng stream receipt")
+		}
+		if domains[st.Domain] {
+			return fmt.Errorf("duplicate rng stream domain %q", st.Domain)
+		}
+		// Two domains drawing the identical seed are one stream under two
+		// names, which is the coupling the independence requirement forbids.
+		if seeds[st.Seed] {
+			return fmt.Errorf("rng stream domain %q is not independent of another", st.Domain)
+		}
+		domains[st.Domain], seeds[st.Seed] = true, true
 	}
 	if len(a.Outcomes) == 0 {
 		return fmt.Errorf("arm reports no affected people")
@@ -314,11 +380,19 @@ func (a ArmRun) Validate() error {
 		}
 		seen[o.Person] = true
 		acted = acted || o.Acted
+		// Acting without having had the option is a contradiction in the record.
+		if o.Acted && !o.CouldAct {
+			return fmt.Errorf("person %s acted without an available action", o.Person)
+		}
 	}
-	// A control arm in which nobody acts is a broken control, not a result.
-	if !acted {
-		return fmt.Errorf("arm makes every human wait")
-	}
+	// Whether anyone acted, or could, is NOT judged per arm. A scenario in
+	// which nobody can act — every option ineligible for reasons that apply
+	// equally to every arm — is a property of the world, and a scenario in
+	// which everyone correctly declines to act is a result this evaluation
+	// exists to be able to see. What #58 actually asks to detect is a control
+	// crippled RELATIVE to the candidates, which is an asymmetry between arms
+	// and is therefore checked in Comparison.Validate.
+	_ = acted
 	return nil
 }
 
@@ -326,7 +400,12 @@ func (a ArmRun) Validate() error {
 type Comparison struct {
 	Version  string  `json:"version"`
 	Scenario core.ID `json:"scenario"`
-	Seed     uint64  `json:"seed"`
+	// Family is the required #58 scenario family this comparison executes. It
+	// is declared explicitly and checked against RequiredFamilies, never
+	// inferred from the scenario name: a scenario whose name happens to
+	// contain a family string is not evidence that the family was executed.
+	Family string `json:"family"`
+	Seed   uint64 `json:"seed"`
 	// Affected is defined independently of any arm. Every arm must report an
 	// outcome for exactly these people, so a third party's cost cannot be
 	// dropped from one arm and vanish from the comparison.
@@ -340,6 +419,9 @@ type Comparison struct {
 func (c Comparison) Validate() error {
 	if c.Version != UpliftVersion || c.Scenario.Validate() != nil || len(c.Affected) < 2 {
 		return fmt.Errorf("invalid comparison envelope")
+	}
+	if !RequiredFamily(c.Family) {
+		return fmt.Errorf("comparison does not declare a required scenario family")
 	}
 	sources := map[core.ID]SourceRecord{}
 	for _, rec := range c.Sources {
@@ -372,8 +454,8 @@ func (c Comparison) Validate() error {
 		return fmt.Errorf("comparison must include the no-assistant control")
 	}
 	seenArm := map[Arm]bool{}
-	streams := map[string]Arm{}
-	world, exogenous := "", ""
+	armCanAct := map[Arm]bool{}
+	world, exogenous, streams := "", "", ""
 	for _, r := range c.Runs {
 		if e := r.Validate(); e != nil {
 			return fmt.Errorf("arm run: %w", e)
@@ -385,6 +467,11 @@ func (c Comparison) Validate() error {
 		if r.Scenario != c.Scenario || r.Seed != c.Seed {
 			return fmt.Errorf("arm run does not belong to this comparison")
 		}
+		able := false
+		for _, o := range r.Outcomes {
+			able = able || o.CouldAct
+		}
+		armCanAct[r.Arm] = able
 		// Every arm accounts for every affected person, including explicitly
 		// missing outcomes. Omission is not permitted.
 		if len(r.Outcomes) != len(c.Affected) {
@@ -401,17 +488,34 @@ func (c Comparison) Validate() error {
 			}
 		}
 		if world == "" {
-			world, exogenous = r.WorldHash, r.ExogenousHash
+			world, exogenous, streams = r.WorldHash, r.ExogenousHash, streamKey(r.Streams)
 		}
 		// Matched design: identical initial world and exogenous events.
 		if r.WorldHash != world || r.ExogenousHash != exogenous {
 			return fmt.Errorf("arms do not share the matched initial world")
 		}
-		// Independent versioned RNG streams: a shared stream couples the arms.
-		if other, ok := streams[r.RNGStream]; ok {
-			return fmt.Errorf("arms %s and %s share an rng stream", other, r.Arm)
+		// Common random numbers. An earlier version of this contract required
+		// the opposite — a distinct stream per arm — which is wrong for a
+		// matched design and was satisfiable only by labelling the streams
+		// differently. Drawing different numbers per arm reintroduces exactly
+		// the variance the matching exists to remove, so an arm that does not
+		// share every stream is not a matched arm.
+		if streamKey(r.Streams) != streams {
+			return fmt.Errorf("arms do not share the matched rng streams")
 		}
-		streams[r.RNGStream] = r.Arm
+	}
+	// The broken-control detector #58 asks for. A no-assistant arm in which
+	// nobody can act, while some candidate arm's people can, is a control
+	// crippled relative to the candidates, and any difference measured against
+	// it is an artefact of that. Symmetric inability is not caught here because
+	// it is not this: it is the world offering nobody a choice, in every arm
+	// alike.
+	if !armCanAct[NoAssistant] {
+		for a, able := range armCanAct {
+			if a != NoAssistant && able {
+				return fmt.Errorf("no-assistant control leaves everyone unable to act while arm %s does not", a)
+			}
+		}
 	}
 	return nil
 }
@@ -467,6 +571,15 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	type pair struct{ base, cand []float64 }
 	units := map[string]map[core.ID]*pair{}
 	harms, unknowns := []string{}, []string{}
+	// identical names the scenarios in which the two arms produced the same
+	// policy output; identicalCount and compared count comparisons, not
+	// scenario names, so a scenario run at several seeds is counted once per
+	// seed on both sides.
+	identical := []string{}
+	// sameHuman names the scenarios in which the people decided identically in
+	// both arms, i.e. the assistant's output did not reach their decision.
+	sameHuman := []string{}
+	identicalCount, compared := 0, 0
 	attributed := 0
 	for _, c := range cs {
 		if e := c.Validate(); e != nil {
@@ -480,6 +593,34 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 		if !present[baseline] || !present[candidate] {
 			continue
 		}
+		// Two arms that produced the same policy output did the same thing in
+		// this scenario. Whatever the levels say, the difference between them
+		// is not attributable to the assistant policy, so it is recorded as an
+		// identical-arm scenario and can never be read as uplift.
+		policy := map[Arm]string{}
+		for _, r := range c.Runs {
+			if r.Arm == baseline || r.Arm == candidate {
+				policy[r.Arm] = r.PolicyHash
+			}
+		}
+		if policy[baseline] == policy[candidate] {
+			identical = append(identical, string(c.Scenario))
+			identicalCount++
+		}
+		// Whether the assistant's output could reach the people at all. This
+		// never blocks a conclusion by itself: an intervention can change what
+		// someone experiences without changing what they do. It is reported so
+		// a null result is not mistaken for evidence about the policy.
+		human := map[Arm]string{}
+		for _, r := range c.Runs {
+			if r.Arm == baseline || r.Arm == candidate {
+				human[r.Arm] = r.HumanHash
+			}
+		}
+		if human[baseline] == human[candidate] {
+			sameHuman = append(sameHuman, string(c.Scenario))
+		}
+		compared++
 		for _, r := range c.Runs {
 			if r.Arm != baseline && r.Arm != candidate {
 				continue
@@ -511,11 +652,27 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 					if o.DelayedOutcome == "unresolved" {
 						unknowns = append(unknowns, fmt.Sprintf("%s: outcome unresolved", o.Person))
 					}
+					if o.DelayedOutcome == "not_instrumented" {
+						unknowns = append(unknowns, fmt.Sprintf("%s: this consumer has no delayed-outcome instrument", o.Person))
+					}
+					if o.DelayedOutcome == "no_intervention" {
+						unknowns = append(unknowns, fmt.Sprintf("%s: no intervention occurred, so there is no outcome to measure", o.Person))
+					}
 					if o.Benefit.Status != core.Observed {
 						unknowns = append(unknowns, fmt.Sprintf("%s: benefit not observed", o.Person))
 					}
 					if o.Burden.Status != core.Observed {
 						unknowns = append(unknowns, fmt.Sprintf("%s: burden not observed", o.Person))
+					}
+					// #58 names appropriateness alongside benefit and burden.
+					// An unknown quantity says so in its own status, but a
+					// reader of the finding would never learn the measure was
+					// absent everywhere unless the finding says it.
+					if o.Appropriateness.Status != core.Observed {
+						unknowns = append(unknowns, fmt.Sprintf("%s: appropriateness not observed", o.Person))
+					}
+					if o.BurdenReduction.Status != core.Observed {
+						unknowns = append(unknowns, fmt.Sprintf("%s: burden reduction not observed", o.Person))
 					}
 				}
 				for _, ob := range o.Observations {
@@ -540,6 +697,17 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	// Qualifications are attached before any decision, so a refused or
 	// not-tested result still reports what was observed and what was not.
 	sort.Strings(harms)
+	// An arm pair that ran identically is stated as uncertainty even when the
+	// result is not-tested for some other reason, so the reader is never left
+	// to assume the two arms actually differed.
+	sort.Strings(identical)
+	for _, sc := range dedupe(identical) {
+		unknowns = append(unknowns, fmt.Sprintf("%s and %s produced identical policy output in %s", baseline, candidate, sc))
+	}
+	sort.Strings(sameHuman)
+	for _, sc := range dedupe(sameHuman) {
+		unknowns = append(unknowns, fmt.Sprintf("the people decided identically in both arms in %s; the assistant's output did not reach their decision there", sc))
+	}
 	sort.Strings(unknowns)
 	out.Harms = dedupe(harms)
 	out.Uncertainty = dedupe(unknowns)
@@ -572,6 +740,14 @@ func CompareArms(cs []Comparison, baseline, candidate Arm) (UpliftFinding, error
 	if len(harms) > 0 {
 		out.Status = Inconclusive
 		out.Evidence = fmt.Sprintf("%s shows harm or unobservable outcomes; no uplift may be reported (%s)", candidate, strings.Join(out.Harms, "; "))
+		return out, nil
+	}
+	// Every scenario in which both arms ran produced the same policy output, so
+	// the two arms are the same intervention under two labels. Any difference
+	// in the levels is noise, and no uplift is attributable to the policy.
+	if compared > 0 && identicalCount == compared {
+		out.Status = NotTested
+		out.Evidence = fmt.Sprintf("%s and %s produced identical policy output in every scenario compared (%d); there is no policy difference to attribute an effect to", baseline, candidate, compared)
 		return out, nil
 	}
 	if oneArmed > 0 {
@@ -653,7 +829,14 @@ type UpliftSummary struct {
 	// outcomes survive into the emitted result instead of being summarised away.
 	People           []PersonRecord     `json:"per_person"`
 	ScenarioCoverage []ScenarioCoverage `json:"scenario_coverage"`
-	Limitations      []string           `json:"limitations"`
+	// Executed is the frozen manifest of arms that actually ran. Coverage is
+	// derived from it, so a reader can audit the claim rather than trust it.
+	Executed []ExecutedUnit `json:"executed_manifest"`
+	// Checks names the adversarial probes that were actually executed during
+	// this run. It exists so a zero in a harm column can be read as a measured
+	// zero rather than as a column nothing ever writes to.
+	Checks      []string `json:"executed_checks"`
+	Limitations []string `json:"limitations"`
 }
 
 // PersonRecord is one person's result in one arm of one comparison.
@@ -702,8 +885,8 @@ type ScenarioCoverage struct {
 // real people.
 func UpliftFixture() []Comparison {
 	q := func(v float64) core.GroupQuantity { return core.ObservedGroupQuantity(v) }
-	mk := func(scenario core.ID, seed uint64, later map[Arm]float64) Comparison {
-		c := Comparison{Version: UpliftVersion, Scenario: scenario, Seed: seed, Affected: []core.ID{"person:01", "person:02"}}
+	mk := func(scenario core.ID, family string, seed uint64, later map[Arm]float64) Comparison {
+		c := Comparison{Version: UpliftVersion, Scenario: scenario, Family: family, Seed: seed, Affected: []core.ID{"person:01", "person:02"}}
 		for _, a := range Arms {
 			for _, id := range []core.ID{"person:01", "person:02"} {
 				c.Sources = append(c.Sources, SourceRecord{ID: core.ID("event:" + string(scenario) + ":" + string(a) + ":" + string(id)),
@@ -717,7 +900,7 @@ func UpliftFixture() []Comparison {
 			for p, id := range []core.ID{"person:01", "person:02"} {
 				o := PersonOutcome{Person: id, Benefit: q(.1), Burden: UnknownIfAbsent(a, p), Appropriateness: q(.4),
 					BurdenReduction: core.UnknownGroupQuantity(),
-					DelayedOutcome:  []string{"resolved", "unresolved"}[p], Acted: true,
+					DelayedOutcome:  []string{"resolved", "unresolved"}[p], Acted: true, CouldAct: true,
 					Observations: []TierEvidence{{Person: id, Tier: BehaviouralObservation, Provenance: SyntheticProvenance,
 						Source: core.ID("event:" + string(scenario) + ":" + string(a) + ":" + string(id)), Observer: id, At: 0, Metric: "observed_choice", Value: q(.1)}}}
 				if v, ok := later[a]; ok && p == 0 {
@@ -730,16 +913,25 @@ func UpliftFixture() []Comparison {
 				}
 				people = append(people, o)
 			}
+			// Matched design: world, exogenous events and every rng stream are
+			// shared across arms; only the policy receipt differs.
 			c.Runs = append(c.Runs, ArmRun{Arm: a, Seed: seed, WorldHash: "world-" + string(scenario), ExogenousHash: "exo-" + string(scenario),
-				RNGStream: fmt.Sprintf("%s/%s/%d", scenario, a, i), Scenario: scenario, Outcomes: people})
+				Streams: []Stream{
+					{Domain: "human", Seed: fmt.Sprintf("human/%s/%d", scenario, seed)},
+					{Domain: "exogenous", Seed: fmt.Sprintf("exogenous/%s/%d", scenario, seed)},
+					{Domain: "helper", Seed: fmt.Sprintf("helper/%s/%d", scenario, seed)},
+				},
+				PolicyHash: fmt.Sprintf("policy-%s-%d", a, i),
+				HumanHash:  fmt.Sprintf("human-%s-%d", a, i),
+				Scenario:   scenario, Outcomes: people})
 		}
 		return c
 	}
 	return []Comparison{
 		// No independently attributed later evidence at all: NOT_TESTED.
-		mk("scenario:ordinary_joy", 11, nil),
+		mk("scenario:ordinary_joy", "ordinary_joy", 11, nil),
 		// Attributed later evidence that does NOT favour the assisted arm.
-		mk("scenario:repair", 23, map[Arm]float64{NoAssistant: .6, MultiPerspective: .2}),
+		mk("scenario:repair", "repair", 23, map[Arm]float64{NoAssistant: .6, MultiPerspective: .2}),
 	}
 }
 
@@ -751,9 +943,22 @@ func UnknownIfAbsent(a Arm, person int) core.GroupQuantity {
 	return core.ObservedGroupQuantity(.3)
 }
 
+// FamilyNote records why a required family is not executed. A bare "not
+// covered" tells a reader nothing about whether the family is merely unwired or
+// has no consumer capable of a matched comparison at all.
+type FamilyNote struct {
+	Family string `json:"family"`
+	Reason string `json:"reason"`
+}
+
+// ExecutedCheck records an adversarial probe the run actually performed.
+type ExecutedCheck struct{ Description string }
+
 // SummariseUplift evaluates every candidate arm against the no-assistant
 // control and reports the result honestly, including when there is none.
-func SummariseUplift(cs []Comparison) (UpliftSummary, error) {
+// Optional notes explain why an uncovered family is uncovered; a note for a
+// family that IS covered is ignored, so a stale note cannot mask real coverage.
+func SummariseUplift(cs []Comparison, notes ...FamilyNote) (UpliftSummary, error) {
 	s := UpliftSummary{Version: UpliftVersion, SyntheticOnly: true, HumanValidity: NotTested,
 		LiveProviderSemanticQuality: NotTested, CrossModelTransfer: NotTested, RealThirtyDayStudy: NotTested,
 		Comparisons: len(cs), Arms: Arms,
@@ -816,7 +1021,20 @@ func SummariseUplift(cs []Comparison) (UpliftSummary, error) {
 			}
 		}
 	}
+	s.Executed = ExecutedManifest(cs)
 	s.ScenarioCoverage = coverage(cs)
+	reasons := map[string]string{}
+	for _, n := range notes {
+		reasons[n.Family] = n.Reason
+	}
+	for i, sc := range s.ScenarioCoverage {
+		if sc.Covered {
+			continue
+		}
+		if r, ok := reasons[sc.Family]; ok && r != "" {
+			s.ScenarioCoverage[i].Note = sc.Note + "; " + r
+		}
+	}
 	return s, nil
 }
 
@@ -826,24 +1044,119 @@ var RequiredFamilies = []string{
 	"conflict_goals", "role_domain_trust", "life_changes", "repair", "group_burden",
 }
 
-func coverage(cs []Comparison) []ScenarioCoverage {
-	executed := map[string]bool{}
-	for _, c := range cs {
-		for _, f := range RequiredFamilies {
-			if strings.Contains(string(c.Scenario), f) {
-				executed[f] = true
-			}
+// RequiredFamily reports whether name is one of the required #58 families.
+// Matching is exact: substring containment is not membership.
+func RequiredFamily(name string) bool {
+	for _, f := range RequiredFamilies {
+		if f == name {
+			return true
 		}
+	}
+	return false
+}
+
+// ExecutedUnit is one arm of one comparison that actually ran and produced
+// outcomes for real people in the roster. The manifest is assembled from these
+// units alone, so nothing enters coverage by being named.
+type ExecutedUnit struct {
+	Family   string  `json:"family"`
+	Scenario core.ID `json:"scenario"`
+	Seed     uint64  `json:"seed"`
+	Arm      Arm     `json:"arm"`
+	People   int     `json:"people_with_outcomes"`
+	// PolicyHash lets a reader recompute which arms actually did the same
+	// thing, instead of taking the findings' word for it, and Streams lets
+	// them recheck that the arms were matched and the domains independent.
+	PolicyHash string   `json:"policy_hash"`
+	Streams    []Stream `json:"rng_streams"`
+}
+
+// ExecutedManifest is the frozen record of what this run actually executed,
+// in a stable order. It is the only thing coverage is computed from.
+func ExecutedManifest(cs []Comparison) []ExecutedUnit {
+	out := []ExecutedUnit{}
+	for _, c := range cs {
+		for _, r := range c.Runs {
+			if len(r.Outcomes) == 0 {
+				continue
+			}
+			out = append(out, ExecutedUnit{Family: c.Family, Scenario: c.Scenario,
+				Seed: c.Seed, Arm: r.Arm, People: len(r.Outcomes), PolicyHash: r.PolicyHash,
+				Streams: r.Streams})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Family != out[j].Family {
+			return out[i].Family < out[j].Family
+		}
+		if out[i].Scenario != out[j].Scenario {
+			return out[i].Scenario < out[j].Scenario
+		}
+		if out[i].Seed != out[j].Seed {
+			return out[i].Seed < out[j].Seed
+		}
+		return out[i].Arm < out[j].Arm
+	})
+	return out
+}
+
+// coverage credits a family only when the executed manifest contains a real
+// comparison for it: the no-assistant control AND at least one candidate arm,
+// both with outcomes, within a single scenario and seed. A lone arm is not a
+// comparison, and a family named by a scenario string that executed nothing is
+// reported NOT COVERED.
+func coverage(cs []Comparison) []ScenarioCoverage {
+	type unit struct {
+		scenario core.ID
+		seed     uint64
+	}
+	control := map[string]map[unit]bool{}
+	candidate := map[string]map[unit]bool{}
+	// Families outside RequiredFamilies need no filter here: the report loop
+	// below iterates RequiredFamilies, so an unrecognised family is never read.
+	for _, u := range ExecutedManifest(cs) {
+		side := candidate
+		if u.Arm == NoAssistant {
+			side = control
+		}
+		if side[u.Family] == nil {
+			side[u.Family] = map[unit]bool{}
+		}
+		side[u.Family][unit{u.Scenario, u.Seed}] = true
 	}
 	out := []ScenarioCoverage{}
 	for _, f := range RequiredFamilies {
-		note := "executed through the real consumer path"
-		if !executed[f] {
+		covered, arms := false, 0
+		for k := range control[f] {
+			if candidate[f][k] {
+				covered = true
+			}
+		}
+		for range candidate[f] {
+			arms++
+		}
+		note := "executed through the real consumer path: control and at least one candidate arm produced outcomes"
+		switch {
+		case covered:
+		case arms > 0:
+			note = "NOT COVERED: candidate arms executed but no matched no-assistant control in the same scenario and seed"
+		default:
 			note = "NOT COVERED: no executed comparison for this family in this run"
 		}
-		out = append(out, ScenarioCoverage{Family: f, Covered: executed[f], Note: note})
+		out = append(out, ScenarioCoverage{Family: f, Covered: covered, Note: note})
 	}
 	return out
+}
+
+// streamKey is the order-independent identity of a run's stream set, so two
+// arms that drew the same streams in a different order still match.
+func streamKey(in []Stream) string {
+	parts := []string{}
+	for _, s := range in {
+		parts = append(parts, s.Domain+"="+s.Seed)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }
 
 func dedupe(in []string) []string {

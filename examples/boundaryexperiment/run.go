@@ -20,6 +20,11 @@ const Version = "boundary-experiment.v1"
 type Trace struct {
 	Version string
 	Signal  string
+	// Arm is the assistant policy this run was executed under. It is part of
+	// the trace identity: a replay recorded under one arm is not a replay of
+	// another, and the no-assistant arm is a real control — the helper contract
+	// forbids it from selecting any action but WAIT.
+	Arm     assistance.Arm
 	Helpers []assistance.Interaction
 	Human   []behavior.ScopedDecision
 	Final   behavior.ScopedActor
@@ -32,11 +37,14 @@ func fact(id, owner, with core.ID, decision core.Willingness) core.Boundary {
 // Run uses the same underlying v2 human engine with scoped eligibility added.
 // The maximal draw makes each sole eligible non-WAIT offer observable; it is a
 // deterministic control, not a behavioral estimate. Replay still rechecks policy.
-func Run(ctx context.Context, signal string, recorded *Trace) (Trace, error) {
+func Run(ctx context.Context, signal string, arm assistance.Arm, recorded *Trace) (Trace, error) {
 	if signal != "disagreement" && signal != "credible_pressure" {
 		return Trace{}, fmt.Errorf("unsupported synthetic scenario")
 	}
-	if recorded != nil && (recorded.Version != Version || recorded.Signal != signal || len(recorded.Helpers) != 2) {
+	if !arm.Valid() {
+		return Trace{}, fmt.Errorf("unknown assistant arm")
+	}
+	if recorded != nil && (recorded.Version != Version || recorded.Signal != signal || recorded.Arm != arm || len(recorded.Helpers) != 2) {
 		return Trace{}, fmt.Errorf("replay scenario mismatch")
 	}
 	l := assistanceclient.New("helper", "alice", assistance.Coordinate)
@@ -57,12 +65,12 @@ func Run(ctx context.Context, signal string, recorded *Trace) (Trace, error) {
 	if e != nil {
 		return Trace{}, e
 	}
-	out := Trace{Version: Version, Signal: signal}
+	out := Trace{Version: Version, Signal: signal, Arm: arm}
 	frames := helperexperiment.World().Frames
 	for i, target := range []core.ID{"bob", "charlie"} {
 		scope := core.InteractionScope{Version: core.InteractionScopeVersion, Initiator: "alice", Target: target, Topic: "money", Class: core.Discussion}
 		frame := frames[i*2]
-		r := assistance.Request{Version: assistance.ScopedVersion, ID: core.ID(fmt.Sprintf("scoped-%d", i)), Helper: "helper", User: "alice", Purpose: "help", Participants: []core.ID{"alice", target}, Scope: &scope, Arm: assistance.Single, Goal: assistance.Coordinate, At: frame.At, Seed: 7}
+		r := assistance.Request{Version: assistance.ScopedVersion, ID: core.ID(fmt.Sprintf("scoped-%d", i)), Helper: "helper", User: "alice", Purpose: "help", Participants: []core.ID{"alice", target}, Scope: &scope, Arm: arm, Goal: assistance.Coordinate, At: frame.At, Seed: 7}
 		if e := l.Register(r); e != nil {
 			return Trace{}, e
 		}
