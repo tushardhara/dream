@@ -177,9 +177,11 @@ func demoStateWithVersion(t *testing.T, version string) rt.State {
 
 // A scenario carrying a demo version this build does not know must be refused by
 // Projection rather than reconstructed on a guessed pipeline. The guard was
-// removable with the whole suite green (#74), so this asserts the exact message:
-// an any-error assertion would stay green when the guard is ablated, because an
-// unknown version also fails later for unrelated reasons.
+// removable with the whole suite green (#74). Ablating it shows why: Projection
+// then returns a nil error and reconstructs the unknown version on the legacy
+// pipeline, so this guard is the only thing refusing it. The assertion pins the
+// exact message rather than merely "an error" so that the guard cannot later rot
+// behind an unrelated failure that happens to reject the same fixture.
 func TestUnsupportedDemoVersionIsRejected(t *testing.T) {
 	const want = "unsupported demo version"
 	supported := demoStateWithVersion(t, RelationalVersion)
