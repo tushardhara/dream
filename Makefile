@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 export GOTOOLCHAIN := go1.27.1
-.PHONY: demo-check evaluation-check container-check container-build generate generated-check migration-check fmt fmt-check lint test test-race build help-check verify live-provider soak
+.PHONY: report-check demo-check evaluation-check container-check container-build generate generated-check migration-check fmt fmt-check lint test test-race build help-check verify live-provider soak
 
 generate:
 	@python3 scripts/artifact-check.py generated
@@ -33,6 +33,8 @@ build:
 	go build -trimpath -o bin/hws-repair ./cmd/hws-repair
 	go build -trimpath -o bin/hws-group ./cmd/hws-group
 	go build -trimpath -o bin/hws-ordinary ./cmd/hws-ordinary
+	go build -trimpath -o bin/response-report ./cmd/response-report
+	go build -trimpath -o bin/temporal-report ./cmd/temporal-report
 help-check: build
 	./bin/hws --help
 	./bin/hws-api --help
@@ -46,7 +48,9 @@ help-check: build
 	./bin/hws-repair --help
 	./bin/hws-group --help
 	./bin/hws-ordinary --help
-verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check demo-check listening-check repair-check group-check ordinary-check uplift-check
+	./bin/response-report --help
+	./bin/temporal-report --help
+verify: fmt-check lint test test-race generated-check migration-check help-check container-check evaluation-check demo-check listening-check repair-check group-check ordinary-check uplift-check report-check
 live-provider soak:
 	@echo "BLOCKED: requires explicit owner authorization, provider/budget/infrastructure configuration and a later implemented runner."; exit 1
 
@@ -86,3 +90,7 @@ group-check: build
 .PHONY: ordinary-check
 ordinary-check: build
 	python3 scripts/ordinary-check.py
+
+.PHONY: report-check
+report-check: build
+	python3 scripts/report-check.py
