@@ -7,7 +7,7 @@ uses disposable synthetic database credentials, no live provider or personal dat
 
 `make fmt` formats; `make fmt-check` rejects formatting drift; `make lint` uses
 Go's pinned vet analyzer; `make test` and `make test-race` run uncached tests;
-`make build` builds the twelve commands listed below; `make help-check` exercises each help path.
+`make build` builds the fourteen commands listed below; `make help-check` exercises each help path.
 `make generate` checks pinned protobuf, gRPC, HTTP gateway and OpenAPI regeneration. `make migration-check` starts its own bounded,
 disposable PostgreSQL 18.6 container and runs the real integration/race and
 pg_dump/restore checks. It fails if Docker or Postgres is unavailable. It accepts
@@ -16,10 +16,9 @@ See docs/toolchain.md and docs/adr/0003-event-storage.md.
 
 ## Commands
 
-`cmd/` holds fourteen programs. `make build` compiles the twelve commands into
-`bin/` and `make help-check` runs each `--help`; the last column names the other
-gates that exercise the binary. The two report generators are not yet under
-`make build` (tracked by #78).
+`cmd/` holds fourteen programs. `make build` compiles all fourteen into `bin/`
+and `make help-check` runs each `--help`; the last column names the other gates
+that exercise the binary.
 
 | Command | Purpose | Gates |
 | --- | --- | --- |
@@ -35,8 +34,8 @@ gates that exercise the binary. The two report generators are not yet under
 | `hws-repair` | two authored multi-period repair sequences with later observations | help-check, repair-check |
 | `hws-group` | five- or 24-person group history and unequal-burden fixture | help-check, group-check |
 | `hws-ordinary` | ordinary-enjoyment arms (none, generic, permitted context) over four families | help-check, ordinary-check |
-| `response-report` | regenerates `docs/evaluation/recipient-response-v1.json` | none (see #78) |
-| `temporal-report` | regenerates `docs/evaluation/temporal-v1.json` | none (see #78) |
+| `response-report` | regenerates `docs/evaluation/recipient-response-v1.json` | help-check, report-check |
+| `temporal-report` | regenerates `docs/evaluation/temporal-v1.json` | help-check, report-check |
 
 Use each `--help` path for supported operations. The API CLI composes authenticated
 management operations; execution requires an embedding host with a configured
